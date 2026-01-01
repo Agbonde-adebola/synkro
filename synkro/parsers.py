@@ -288,8 +288,8 @@ def parse_single_response(response: Any) -> SingleResponse | None:
                 break
                 
             try:
-                parsed = json.loads(json_str)
-                
+            parsed = json.loads(json_str)
+
                 # Validate it has the expected structure
                 if isinstance(parsed.get("messages"), list) and len(parsed["messages"]) >= 1:
                     messages = []
@@ -309,7 +309,7 @@ def parse_single_response(response: Any) -> SingleResponse | None:
                         messages.append(ChatMessage(role=m["role"], content=msg_content))
                     
                     if valid and len(messages) >= 1:
-                        return SingleResponse(messages=messages)
+                return SingleResponse(messages=messages)
                         
             except json.JSONDecodeError:
                 pass

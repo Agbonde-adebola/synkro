@@ -1,7 +1,5 @@
 # Synkro
 
-**Generate training datasets from any document.**
-
 Turn policies, handbooks, and documentation into high-quality training data for fine-tuning LLMs.
 
 ## Features
@@ -119,85 +117,7 @@ high_quality = dataset.filter(passed=True)
 high_quality.save("training.jsonl")
 ```
 
-### Custom Graders
-
-```python
-from synkro.models.anthropic import Anthropic
-from synkro.models.google import Google
-
-# Use Claude for grading
-pipeline = create_pipeline(grading_model=Anthropic.CLAUDE_35_SONNET)
-
-# Or use Gemini Pro
-pipeline = create_pipeline(grading_model=Google.GEMINI_25_PRO)
-```
-
-## Models & Providers
-
-### OpenAI
-
-```python
-from synkro.models.openai import OpenAI
-
-pipeline = create_pipeline(model=OpenAI.GPT_5_MINI)
-```
-
-| Model | Use Case |
-|-------|----------|
-| `OpenAI.GPT_52_INSTANT` | Flagship: High-speed, agentic tool-calling |
-| `OpenAI.GPT_5_MINI` | Workhorse: Balanced cost & intelligence |
-| `OpenAI.GPT_5_NANO` | Edge: Low latency, high-volume tasks |
-| `OpenAI.O3` | Reasoning tasks |
-
-**Env:** `OPENAI_API_KEY`
-
-### Anthropic
-
-```python
-from synkro.models.anthropic import Anthropic
-
-pipeline = create_pipeline(model=Anthropic.CLAUDE_45_HAIKU)
-```
-
-| Model | Use Case |
-|-------|----------|
-| `Anthropic.CLAUDE_45_OPUS` | Premium: Best for coding & agents |
-| `Anthropic.CLAUDE_45_SONNET` | Standard: Default for most users |
-| `Anthropic.CLAUDE_45_HAIKU` | Light: Fast & cost-effective |
-
-**Env:** `ANTHROPIC_API_KEY`
-
-### Google
-
-```python
-from synkro.models.google import Google
-
-pipeline = create_pipeline(model=Google.GEMINI_25_FLASH)
-```
-
-| Model | Use Case |
-|-------|----------|
-| `Google.GEMINI_3_PRO` | Most intelligent |
-| `Google.GEMINI_25_FLASH` | Best price-performance |
-| `Google.GEMINI_2_FLASH_LITE` | Cheapest |
-
-**Env:** `GEMINI_API_KEY`
-
-### Model Selection Tips
-
-**For Generation (fast, cheap):**
-- `OpenAI.GPT_5_MINI` - Balanced workhorse
-- `Google.GEMINI_25_FLASH` - Great price-performance
-- `Anthropic.CLAUDE_45_HAIKU` - Fast & capable
-
-**For Grading (high quality):**
-- `OpenAI.GPT_52_INSTANT` - Flagship quality
-- `Anthropic.CLAUDE_45_SONNET` - Standard choice
-- `Google.GEMINI_25_PRO` - Most intelligent
-
 ## CLI
-
-### Generate
 
 ```bash
 # From file
@@ -215,19 +135,3 @@ synkro generate https://example.com/policy -o training.jsonl
 - `--format, -f` - Output format: sft or qa (default: sft)
 - `--output, -o` - Output file path
 - `--model, -m` - Model for generation
-
-### Demo
-
-```bash
-synkro demo  # Quick demo with example policy
-```
-
-### Version
-
-```bash
-synkro version
-```
-
-## License
-
-MIT
