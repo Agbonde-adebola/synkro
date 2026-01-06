@@ -10,7 +10,7 @@ from pydantic import BaseModel
 litellm.suppress_debug_info = True
 litellm.enable_json_schema_validation=True
 
-from synkro.models import OpenAI, Model, get_model_string
+from synkro.models import OpenAI, Model, get_model_string, LocalModel
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -22,10 +22,10 @@ class LLM:
 
     Supports structured outputs via native JSON mode for reliable responses.
 
-    Supported providers: OpenAI, Anthropic, Google (Gemini)
+    Supported providers: OpenAI, Anthropic, Google (Gemini), Local (Ollama, vLLM)
 
     Examples:
-        >>> from synkro import LLM, OpenAI, Anthropic, Google
+        >>> from synkro import LLM, OpenAI, Anthropic, Google, Local
 
         # Use OpenAI
         >>> llm = LLM(model=OpenAI.GPT_4O_MINI)
@@ -36,6 +36,12 @@ class LLM:
 
         # Use Google Gemini
         >>> llm = LLM(model=Google.GEMINI_25_FLASH)
+
+        # Use local Ollama
+        >>> llm = LLM(model=Local.OLLAMA("llama3.1"))
+
+        # Use local vLLM
+        >>> llm = LLM(model=Local.VLLM("mistral"))
 
         # Structured output
         >>> class Output(BaseModel):
@@ -52,17 +58,26 @@ class LLM:
         temperature: float = 0.7,
         max_tokens: int | None = None,
         api_key: str | None = None,
+        base_url: str | None = None,
     ):
         """
         Initialize the LLM client.
 
         Args:
-            model: Model to use (enum or string)
+            model: Model to use (enum, LocalModel, or string)
             temperature: Sampling temperature (0.0-2.0)
             max_tokens: Maximum tokens to generate (default: None = model's max)
             api_key: Optional API key override
+            base_url: Optional API base URL (auto-set when using Local models)
         """
-        self.model = get_model_string(model)
+        # Handle LocalModel - extract endpoint automatically
+        if isinstance(model, LocalModel):
+            self.model = f"{model.provider}/{model.model}"
+            self._base_url = model.endpoint
+        else:
+            self.model = get_model_string(model)
+            self._base_url = base_url
+
         self.temperature = temperature
         self.max_tokens = max_tokens
         self._api_key = api_key
@@ -91,6 +106,8 @@ class LLM:
         }
         if self.max_tokens is not None:
             kwargs["max_tokens"] = self.max_tokens
+        if self._base_url:
+            kwargs["api_base"] = self._base_url
 
         response = await acompletion(**kwargs)
         return response.choices[0].message.content
@@ -182,6 +199,8 @@ class LLM:
         }
         if self.max_tokens is not None:
             kwargs["max_tokens"] = self.max_tokens
+        if self._base_url:
+            kwargs["api_base"] = self._base_url
 
         response = await acompletion(**kwargs)
         return response_model.model_validate_json(response.choices[0].message.content)
@@ -217,6 +236,8 @@ class LLM:
             }
             if self.max_tokens is not None:
                 kwargs["max_tokens"] = self.max_tokens
+            if self._base_url:
+                kwargs["api_base"] = self._base_url
 
             response = await acompletion(**kwargs)
             return response_model.model_validate_json(response.choices[0].message.content)
@@ -229,6 +250,8 @@ class LLM:
         }
         if self.max_tokens is not None:
             kwargs["max_tokens"] = self.max_tokens
+        if self._base_url:
+            kwargs["api_base"] = self._base_url
 
         response = await acompletion(**kwargs)
         return response.choices[0].message.content

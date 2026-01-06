@@ -62,4 +62,40 @@ Provide a brief changes_summary explaining what was done.
 Provide reasoning explaining how you interpreted the user's feedback."""
 
 
-__all__ = ["LOGIC_MAP_REFINEMENT_PROMPT"]
+HITL_INTENT_CLASSIFIER_PROMPT = """You are classifying user feedback in an interactive SFT data generation session.
+
+CURRENT STATE:
+- Conversation turns: {current_turns} ({complexity_level} complexity)
+- Logic Map has {rule_count} rules
+
+USER FEEDBACK: "{user_input}"
+
+CLASSIFY THE INTENT:
+
+1. "turns" - User wants to adjust conversation length/turns
+   Examples: "shorter", "more thorough", "I want 5 turns", "make them brief", "longer conversations"
+   → Set intent_type="turns", target_turns (1-6), and turns_reasoning
+   Guidelines for target_turns:
+   - "shorter" / "brief" / "quick" / "simple" → 1-2 turns
+   - "normal" / "moderate" / "standard" → 3-4 turns
+   - "longer" / "deeper" / "thorough" / "more detail" → 5-6 turns
+   - Specific numbers like "3 turns" or "I want 4" → use that exact number
+
+2. "rules" - User wants to modify the Logic Map rules
+   Examples: "remove R005", "add a rule for...", "merge R002 and R003", "change R001 to..."
+   → Set intent_type="rules" and rule_feedback to the original user input
+
+3. "command" - User typed a built-in command (done, undo, reset, help, show Rxxx)
+   → Set intent_type="command", leave other fields null
+   Note: Commands are handled separately, but classify them if they appear
+
+4. "unclear" - Cannot determine intent
+   → Set intent_type="unclear"
+
+IMPORTANT:
+- Set confidence based on how clear the intent is (0.0 to 1.0)
+- If the user mentions both turns and rules, prioritize the more prominent intent
+- Default to "rules" if slightly ambiguous between rules and unclear"""
+
+
+__all__ = ["LOGIC_MAP_REFINEMENT_PROMPT", "HITL_INTENT_CLASSIFIER_PROMPT"]

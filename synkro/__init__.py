@@ -42,14 +42,15 @@ try:
     from importlib.metadata import version as _get_version
     __version__ = _get_version("synkro")
 except Exception:
-    __version__ = "0.4.6"  # Fallback
+    __version__ = "0.4.14"  # Fallback
 
 # =============================================================================
 # PRIMARY API - What most developers need
 # =============================================================================
 
 from synkro.pipelines import create_pipeline
-from synkro.models import OpenAI, Anthropic, Google
+from synkro.models import OpenAI, Anthropic, Google, Local, LocalModel
+from synkro.llm import LLM
 from synkro.types import DatasetType
 from synkro.core.policy import Policy
 from synkro.core.dataset import Dataset
@@ -86,6 +87,9 @@ __all__ = [
     "OpenAI",
     "Anthropic",
     "Google",
+    "Local",
+    "LocalModel",
+    "LLM",
     # Result types
     "GenerationResult",
     # Data types (less common)
@@ -110,13 +114,14 @@ def generate(
     traces: int = 20,
     turns: int | str = "auto",
     dataset_type: DatasetType = DatasetType.SFT,
-    generation_model: OpenAI | Anthropic | Google | str = OpenAI.GPT_5_MINI,
-    grading_model: OpenAI | Anthropic | Google | str = OpenAI.GPT_52,
+    generation_model: OpenAI | Anthropic | Google | LocalModel | str = OpenAI.GPT_5_MINI,
+    grading_model: OpenAI | Anthropic | Google | LocalModel | str = OpenAI.GPT_52,
     max_iterations: int = 3,
     skip_grading: bool = False,
     reporter: ProgressReporter | None = None,
     return_logic_map: bool = False,
     enable_hitl: bool = True,
+    base_url: str | None = None,
 ) -> Dataset | GenerationResult:
     """
     Generate training traces from a policy document.
@@ -136,6 +141,7 @@ def generate(
         reporter: Progress reporter (default: RichReporter for console output)
         return_logic_map: If True, return GenerationResult with Logic Map access
         enable_hitl: Enable Human-in-the-Loop Logic Map editing (default: False)
+        base_url: Optional API base URL for local LLM providers (Ollama, vLLM, etc.)
 
     Returns:
         Dataset (default) or GenerationResult if return_logic_map=True
@@ -174,6 +180,7 @@ def generate(
         reporter=reporter,
         turns=turns,
         enable_hitl=enable_hitl,
+        base_url=base_url,
     )
 
     return generator.generate(policy, traces=traces, return_logic_map=return_logic_map)

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from synkro.types.logic_map import LogicMap
+    from synkro.types.core import Plan
 
 
 class LogicMapDisplay:
@@ -161,6 +162,39 @@ class LogicMapDisplay:
         """Display a success message."""
         self.console.print(f"[green]✓[/green] {message}")
 
+    def display_session_state(
+        self,
+        plan: "Plan",
+        logic_map: "LogicMap",
+        current_turns: int,
+    ) -> None:
+        """Display both conversation settings and logic map together."""
+        from rich.panel import Panel
+        from rich.table import Table
+
+        # Conversation settings panel
+        turns_table = Table(show_header=False, box=None)
+        turns_table.add_row(
+            "[dim]Complexity:[/dim]",
+            f"[cyan]{plan.complexity_level.title()}[/cyan]",
+        )
+        turns_table.add_row(
+            "[dim]Turns:[/dim]",
+            f"[green]{current_turns}[/green]",
+        )
+
+        self.console.print()
+        self.console.print(
+            Panel(
+                turns_table,
+                title="[cyan]Conversation Settings[/cyan]",
+                border_style="cyan",
+            )
+        )
+
+        # Then display logic map (existing method)
+        self.display_full(logic_map)
+
 
 class InteractivePrompt:
     """Handles user input for HITL sessions."""
@@ -187,6 +221,32 @@ class InteractivePrompt:
             Panel(
                 instructions,
                 title="[bold cyan]Interactive Logic Map Editor[/bold cyan]",
+                border_style="cyan",
+            )
+        )
+
+    def show_unified_instructions(self) -> None:
+        """Display instructions for the unified HITL session (turns + rules)."""
+        from rich.panel import Panel
+
+        instructions = """[bold]Commands:[/bold]
+  • [cyan]done[/cyan] - Continue with current settings
+  • [cyan]undo[/cyan] - Revert last change
+  • [cyan]reset[/cyan] - Restore original state
+  • [cyan]show R001[/cyan] - Show details of a specific rule
+  • [cyan]help[/cyan] - Show this message
+
+[bold]Feedback examples:[/bold]
+  • [yellow]"shorter conversations"[/yellow] - Adjust conversation turns
+  • [yellow]"I want 5 turns"[/yellow] - Set specific turn count
+  • [yellow]"remove R005"[/yellow] - Delete a rule
+  • [yellow]"add rule for late submissions"[/yellow] - Add a new rule"""
+
+        self.console.print()
+        self.console.print(
+            Panel(
+                instructions,
+                title="[bold cyan]Interactive Session[/bold cyan]",
                 border_style="cyan",
             )
         )

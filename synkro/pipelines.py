@@ -49,6 +49,7 @@ def create_pipeline(
     turns: int | str = "auto",
     checkpoint_dir: str | None = None,
     enable_hitl: bool = True,
+    base_url: str | None = None,
 ) -> Generator:
     """
     Create a pipeline for generating training datasets.
@@ -65,6 +66,7 @@ def create_pipeline(
             for policy complexity-driven turns (Simple=1-2, Conditional=3, Complex=5+)
         checkpoint_dir: Directory for checkpoints. Enables resumable generation.
         enable_hitl: Enable Human-in-the-Loop Logic Map editing (default: False)
+        base_url: Optional API base URL for local LLM providers (Ollama, vLLM, etc.)
 
     Returns:
         Generator instance ready to use
@@ -117,6 +119,7 @@ def create_pipeline(
         turns=turns,
         checkpoint_dir=checkpoint_dir,
         enable_hitl=enable_hitl,
+        base_url=base_url,
     )
 
 

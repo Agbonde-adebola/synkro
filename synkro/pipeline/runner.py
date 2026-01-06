@@ -29,6 +29,7 @@ from synkro.types.logic_map import LogicMap
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from synkro.interactive.logic_map_editor import LogicMapEditor
+    from synkro.types.core import Plan
 
 
 class GenerationResult:
@@ -210,10 +211,12 @@ class GenerationPipeline:
         self.reporter.on_logic_map_complete(logic_map)
 
         # =====================================================================
-        # HUMAN-IN-THE-LOOP: Logic Map Editing (Optional)
+        # HUMAN-IN-THE-LOOP: Unified Session (Turns + Logic Map)
         # =====================================================================
         if self.enable_hitl and self.hitl_editor:
-            logic_map = await self._run_hitl_session(logic_map, policy)
+            logic_map, target_turns = await self._run_hitl_session(
+                logic_map, policy, plan, target_turns
+            )
 
         # =====================================================================
         # STAGE 2: Scenario Synthesis (The Adversary)
@@ -325,52 +328,71 @@ class GenerationPipeline:
 
         return dataset
 
-    async def _run_hitl_session(self, logic_map: LogicMap, policy: Policy) -> LogicMap:
+    async def _run_hitl_session(
+        self,
+        logic_map: LogicMap,
+        policy: Policy,
+        plan: "Plan",
+        initial_turns: int,
+    ) -> tuple[LogicMap, int]:
         """
-        Run an interactive Human-in-the-Loop session for Logic Map editing.
+        Run unified HITL session for both turns and Logic Map editing.
 
         Args:
             logic_map: The extracted Logic Map to edit
             policy: The policy document (for context in refinements)
+            plan: The generation plan (for complexity info)
+            initial_turns: Initial target turns setting
 
         Returns:
-            The (potentially modified) Logic Map
+            Tuple of (modified LogicMap, confirmed target_turns)
         """
         from synkro.interactive.hitl_session import HITLSession
         from synkro.interactive.rich_ui import LogicMapDisplay, InteractivePrompt
+        from synkro.interactive.intent_classifier import HITLIntentClassifier
 
         session = HITLSession(original_logic_map=logic_map)
         display = LogicMapDisplay()
         prompt = InteractivePrompt()
+        classifier = HITLIntentClassifier(llm=self.factory.generation_llm)
 
-        # Show instructions and initial Logic Map
-        prompt.show_instructions()
-        display.display_full(session.current_logic_map)
+        current_turns = initial_turns
+        turns_history: list[int] = []  # For undo support
+
+        # Show unified instructions and initial state
+        prompt.show_unified_instructions()
+        display.display_session_state(plan, session.current_logic_map, current_turns)
 
         while True:
             feedback = prompt.get_feedback().strip()
 
-            # Handle commands
+            # Handle explicit commands first (no LLM needed)
             if feedback.lower() == "done":
                 break
 
             if feedback.lower() == "undo":
-                if session.can_undo:
-                    session.undo()
+                # Undo both turns and rules
+                if session.can_undo or turns_history:
+                    if session.can_undo:
+                        session.undo()
+                    if turns_history:
+                        current_turns = turns_history.pop()
                     display.show_success("Reverted to previous state")
-                    display.display_full(session.current_logic_map)
+                    display.display_session_state(plan, session.current_logic_map, current_turns)
                 else:
                     display.show_error("Nothing to undo")
                 continue
 
             if feedback.lower() == "reset":
                 session.reset()
-                display.show_success("Reset to original Logic Map")
-                display.display_full(session.current_logic_map)
+                current_turns = initial_turns
+                turns_history.clear()
+                display.show_success("Reset to original state")
+                display.display_session_state(plan, session.current_logic_map, current_turns)
                 continue
 
             if feedback.lower() == "help":
-                prompt.show_instructions()
+                prompt.show_unified_instructions()
                 continue
 
             if feedback.lower().startswith("show "):
@@ -382,43 +404,57 @@ class GenerationPipeline:
             if not feedback:
                 continue
 
-            # Apply LLM-based refinement
-            try:
-                new_map, changes_summary = await self.hitl_editor.refine(
-                    session.current_logic_map,
-                    feedback,
-                    policy.text,
-                )
+            # Classify intent via LLM
+            intent = await classifier.classify(
+                feedback,
+                current_turns,
+                plan.complexity_level,
+                len(session.current_logic_map.rules),
+            )
 
-                # Validate the refinement
-                is_valid, issues = self.hitl_editor.validate_refinement(
-                    session.current_logic_map,
-                    new_map,
-                )
+            if intent.intent_type == "turns" and intent.target_turns is not None:
+                # Handle turns change
+                turns_history.append(current_turns)
+                current_turns = intent.target_turns
+                reasoning = intent.turns_reasoning or "User preference"
+                display.show_success(f"Set to {current_turns} turns ({reasoning})")
+                display.display_session_state(plan, session.current_logic_map, current_turns)
 
-                if is_valid:
-                    display.display_diff(session.current_logic_map, new_map)
-                    session.apply_change(feedback, new_map)
-                    display.show_success(changes_summary)
-                else:
-                    display.show_error(f"Invalid refinement: {', '.join(issues)}")
+            elif intent.intent_type == "rules" and intent.rule_feedback:
+                # Handle rule change (existing logic)
+                try:
+                    new_map, changes_summary = await self.hitl_editor.refine(
+                        session.current_logic_map,
+                        intent.rule_feedback,
+                        policy.text,
+                    )
 
-            except Exception as e:
-                display.show_error(f"Failed to apply refinement: {e}")
+                    # Validate the refinement
+                    is_valid, issues = self.hitl_editor.validate_refinement(
+                        session.current_logic_map,
+                        new_map,
+                    )
+
+                    if is_valid:
+                        display.display_diff(session.current_logic_map, new_map)
+                        session.apply_change(intent.rule_feedback, new_map)
+                        display.show_success(changes_summary)
+                    else:
+                        display.show_error(f"Invalid refinement: {', '.join(issues)}")
+
+                except Exception as e:
+                    display.show_error(f"Failed to apply refinement: {e}")
+
+            elif intent.intent_type == "unclear":
+                display.show_error("Could not understand feedback. Try 'help' for examples.")
 
         # Final summary
-        if session.change_count > 0:
-            display.console.print(
-                f"\n[green]✅ HITL Complete[/green] - "
-                f"Made {session.change_count} change(s), proceeding with {len(session.current_logic_map.rules)} rules"
-            )
-        else:
-            display.console.print(
-                f"\n[green]✅ HITL Complete[/green] - "
-                f"No changes made, proceeding with {len(session.current_logic_map.rules)} rules"
-            )
+        display.console.print(
+            f"\n[green]✅ Session complete[/green] - "
+            f"{session.change_count} rule change(s), {current_turns} turns"
+        )
 
-        return session.current_logic_map
+        return session.current_logic_map, current_turns
 
 
 __all__ = ["GenerationPipeline", "GenerationResult"]

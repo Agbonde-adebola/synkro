@@ -193,21 +193,41 @@ synkro generate policy.pdf --no-interactive
 
 ## Interactive Mode
 
-By default, synkro extracts policy rules into a Logic Map and lets you review/edit them before generation:
+By default, synkro extracts policy rules into a Logic Map and lets you review/edit them before generation. The interactive session also shows the recommended conversation turns based on policy complexity:
 
 ```
-📜 Logic Map (3 rules extracted)
-├── R001: Expenses over $50 require manager approval
-├── R002: Client meals limited to $75/person
-└── R003: Receipts required for all expenses
+╭─────────────────────────── Conversation Settings ────────────────────────────╮
+│  Complexity:  Conditional                                                    │
+│  Turns:       3                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
 
-Enter feedback (or 'done'): Add a rule for travel expenses over $500
+╭────────────────────────── 📜 Logic Map (3 rules) ────────────────────────────╮
+│ ├── R001: Expenses over $50 require manager approval                         │
+│ ├── R002: Client meals limited to $75/person                                 │
+│ └── R003: Receipts required for all expenses                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+Enter feedback: shorter conversations
+✓ Set to 2 turns (User requested shorter/simpler conversations)
+
+Enter feedback: add a rule for travel expenses
 ✓ Added R004: Travel expenses over $500 require VP approval
 
-Enter feedback (or 'done'): done
+Enter feedback: done
+✅ Session complete - 1 rule change(s), 2 turns
 ```
 
-Commands: `done`, `undo`, `reset`, `show R001`
+You can adjust both **conversation turns** and **rules** using natural language:
+
+| Input | Action |
+|-------|--------|
+| `"shorter conversations"` | Reduce turns (1-2) |
+| `"I want 5 turns"` | Set specific turn count |
+| `"more thorough"` | Increase turns (5-6) |
+| `"remove R002"` | Delete a rule |
+| `"add a rule for..."` | Add new rule |
+
+Commands: `done`, `undo`, `reset`, `show R001`, `help`
 
 ## Logic Map Inspection
 

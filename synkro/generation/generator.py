@@ -65,6 +65,7 @@ class Generator:
         turns: int | str = "auto",
         checkpoint_dir: str | Path | None = None,
         enable_hitl: bool = True,
+        base_url: str | None = None,
     ):
         """
         Initialize the Generator.
@@ -83,6 +84,7 @@ class Generator:
                 generation. Progress is saved after each stage.
             enable_hitl: Enable Human-in-the-Loop Logic Map editing. When enabled,
                 pauses after Logic Map extraction to allow interactive refinement.
+            base_url: Optional API base URL for local LLM providers (Ollama, vLLM, etc.)
         """
         self.dataset_type = dataset_type
         self.mode_config = get_mode_config(dataset_type)
@@ -107,10 +109,10 @@ class Generator:
         # Store model info for reporting
         self.generation_model = generation_model
         self.grading_model = grading_model
-        
+
         # Create LLM clients
-        self.generation_llm = LLM(model=generation_model)
-        self.grading_llm = LLM(model=grading_model)
+        self.generation_llm = LLM(model=generation_model, base_url=base_url)
+        self.grading_llm = LLM(model=grading_model, base_url=base_url)
         
         # Create factory for component creation
         self.factory = ComponentFactory(

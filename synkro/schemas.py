@@ -389,6 +389,30 @@ class RefinedLogicMapOutput(BaseModel):
     )
 
 
+class HITLIntent(BaseModel):
+    """Classified user intent in unified HITL session."""
+
+    intent_type: Literal["turns", "rules", "command", "unclear"] = Field(
+        description="Type of user intent: turns adjustment, rule modification, command, or unclear"
+    )
+    confidence: float = Field(
+        ge=0, le=1, description="Confidence score for the classification"
+    )
+
+    # For turns changes
+    target_turns: int | None = Field(
+        default=None, ge=1, le=6, description="Target conversation turns (1-6) if intent is turns"
+    )
+    turns_reasoning: str | None = Field(
+        default=None, description="Explanation of why this turn count was chosen"
+    )
+
+    # For rule changes (passthrough to existing LogicMapEditor)
+    rule_feedback: str | None = Field(
+        default=None, description="Original user feedback for rule modification"
+    )
+
+
 class GoldenScenarioOutput(BaseModel):
     """Output schema for a single golden scenario."""
 

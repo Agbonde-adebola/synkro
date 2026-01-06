@@ -35,7 +35,17 @@ def generate(
     model: str = typer.Option(
         "gpt-4o-mini",
         "--model", "-m",
-        help="Model for generation (e.g., gpt-4o-mini, claude-3-5-sonnet, gemini-2.5-flash)",
+        help="Model for generation (e.g., gpt-4o-mini, claude-3-5-sonnet, gemini-2.5-flash, llama3.1)",
+    ),
+    provider: Optional[str] = typer.Option(
+        None,
+        "--provider", "-p",
+        help="LLM provider for local models (ollama, vllm)",
+    ),
+    endpoint: Optional[str] = typer.Option(
+        None,
+        "--endpoint", "-e",
+        help="API endpoint URL (e.g., http://localhost:11434)",
     ),
     interactive: bool = typer.Option(
         True,
@@ -63,7 +73,7 @@ def generate(
 
     # Determine if source is text, file, or URL
     source_path = Path(source)
-    
+
     if source_path.exists():
         # It's a file
         policy = Policy.from_file(source_path)
@@ -74,12 +84,30 @@ def generate(
         # Treat as raw text
         policy = Policy(text=source)
 
+    # Handle local LLM provider configuration
+    base_url = endpoint
+    effective_model = model
+
+    if provider:
+        # Format model string for LiteLLM if provider specified
+        if "/" not in model:
+            effective_model = f"{provider}/{model}"
+
+        # Use default endpoint if not specified
+        if not endpoint:
+            defaults = {
+                "ollama": "http://localhost:11434",
+                "vllm": "http://localhost:8000",
+            }
+            base_url = defaults.get(provider)
+
     # Generate
     dataset = synkro.generate(
         policy,
         traces=traces,
-        generation_model=model,
+        generation_model=effective_model,
         enable_hitl=interactive,
+        base_url=base_url,
     )
 
     # Save
