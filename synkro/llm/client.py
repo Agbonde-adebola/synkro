@@ -1,5 +1,6 @@
 """Type-safe LLM wrapper using LiteLLM."""
 
+import warnings
 from typing import TypeVar, Type, overload
 
 import litellm
@@ -8,7 +9,21 @@ from pydantic import BaseModel
 
 # Configure litellm
 litellm.suppress_debug_info = True
-litellm.enable_json_schema_validation=True
+litellm.enable_json_schema_validation = True
+
+# Suppress Pydantic serialization warnings from litellm response types
+warnings.filterwarnings(
+    "ignore",
+    message="Expected `Message`",
+    category=UserWarning,
+    module="pydantic.*",
+)
+warnings.filterwarnings(
+    "ignore",
+    message="Expected `StreamingChoices`",
+    category=UserWarning,
+    module="pydantic.*",
+)
 
 from synkro.models import OpenAI, Model, get_model_string, LocalModel
 
