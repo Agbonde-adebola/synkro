@@ -370,8 +370,7 @@ class GenerationPipeline:
         current_turns = initial_turns
         turns_history: list[int] = []  # For undo support
 
-        # Show unified instructions and initial state
-        prompt.show_unified_instructions()
+        # Show initial state (includes session details with instructions)
         display.display_full_session_state(
             plan,
             session.current_logic_map,

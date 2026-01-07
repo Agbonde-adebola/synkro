@@ -345,9 +345,8 @@ class LogicMapDisplay:
         scenarios: list["GoldenScenario"] | None,
         distribution: dict[str, int] | None,
     ) -> None:
-        """Display logic map, scenarios, and conversation settings (at bottom)."""
+        """Display logic map, scenarios, and session details (at bottom)."""
         from rich.panel import Panel
-        from rich.table import Table
 
         # Display logic map first
         self.display_full(logic_map)
@@ -356,22 +355,18 @@ class LogicMapDisplay:
         if scenarios:
             self.display_scenarios(scenarios)
 
-        # Conversation settings panel at bottom (right before feedback prompt)
-        turns_table = Table(show_header=False, box=None)
-        turns_table.add_row(
-            "[dim]Complexity:[/dim]",
-            f"[cyan]{plan.complexity_level.title()}[/cyan]",
-        )
-        turns_table.add_row(
-            "[dim]Turns:[/dim]",
-            f"[green]{current_turns}[/green]",
-        )
+        # Session Details panel at bottom (instructions + settings)
+        session_details = f"""[bold]Commands:[/bold] [cyan]done[/cyan] | [cyan]undo[/cyan] | [cyan]reset[/cyan] | [cyan]show R001[/cyan] | [cyan]show S3[/cyan] | [cyan]help[/cyan]
+
+[bold]Feedback:[/bold] [yellow]"shorter"[/yellow] [yellow]"5 turns"[/yellow] [yellow]"remove R005"[/yellow] [yellow]"add scenario for..."[/yellow] [yellow]"delete S3"[/yellow]
+
+[dim]Complexity:[/dim] [cyan]{plan.complexity_level.title()}[/cyan]    [dim]Turns:[/dim] [green]{current_turns}[/green]"""
 
         self.console.print()
         self.console.print(
             Panel(
-                turns_table,
-                title="[cyan]Conversation Settings[/cyan]",
+                session_details,
+                title="[bold cyan]Session Details[/bold cyan]",
                 border_style="cyan",
             )
         )
