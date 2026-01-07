@@ -199,3 +199,120 @@ The response should:
 - Handle edge cases gracefully (e.g., no results found)
 
 Return only the tool response content as a string."""
+
+# =============================================================================
+# MULTI-TURN TOOL CALLING
+# =============================================================================
+
+MULTI_TURN_TOOL_DECISION_PROMPT = """You are a customer support agent deciding whether to use tools for a follow-up question.
+
+AVAILABLE TOOLS:
+{tools_desc}
+
+TOOL USAGE GUIDELINES:
+{policy_text}
+
+CONVERSATION HISTORY (including previous tool calls and results):
+{conversation_history}
+
+NEW FOLLOW-UP QUESTION:
+{follow_up_question}
+
+Analyze this follow-up question and decide:
+1. Can this be answered using information from previous tool results?
+2. Does this require NEW tool calls?
+3. If new tools are needed, which ones and with what arguments?
+
+Important rules:
+- If previous tool results contain the needed information, DON'T call tools again
+- If the follow-up asks about something different, you MAY need new tools
+- Use correct tool names and parameter types
+- Provide clear reasoning for your decision"""
+
+MULTI_TURN_TOOL_SYNTHESIS_PROMPT = """Based on the conversation and tool results, respond to the follow-up question.
+
+CONVERSATION HISTORY:
+{conversation_history}
+
+LATEST FOLLOW-UP QUESTION:
+{follow_up_question}
+
+NEW TOOL RESULTS (if any):
+{new_tool_results}
+
+GUIDELINES:
+{policy_text}
+
+Synthesize a response that:
+- Directly addresses the follow-up question
+- Incorporates relevant information from ALL tool results (previous and new)
+- Maintains consistency with previous responses
+- Is conversational and helpful
+- Does not expose raw JSON or technical details"""
+
+# =============================================================================
+# GOLDEN MULTI-TURN TOOL CALLING
+# =============================================================================
+
+GOLDEN_MULTI_TURN_TOOL_DECISION_PROMPT = """You are a customer support agent deciding whether to use tools for a follow-up.
+Your decisions must be GROUNDED in the Logic Map rules.
+
+AVAILABLE TOOLS:
+{tools_desc}
+
+LOGIC MAP (Rules to Apply):
+{logic_map_str}
+
+POLICY GUIDELINES:
+{policy_text}
+
+CONVERSATION HISTORY (including previous tool calls and results):
+{conversation_history}
+
+RULES ALREADY APPLIED: {cumulative_rules_applied}
+
+NEW FOLLOW-UP QUESTION:
+{follow_up_question}
+
+YOUR TASK:
+1. Identify which NEW rules from the Logic Map apply to this follow-up
+2. Determine if any rule requires information that a tool can provide
+3. Consider if previous tool results satisfy the rule requirements
+4. If new tools needed, specify which rule requires each tool call
+
+TOOL CALLING RULES:
+- Only call a tool if a SPECIFIC RULE requires information not yet available
+- Cite the Rule ID that necessitates each tool call
+- If previous tool results satisfy the rule, don't call tools again
+- Explain your reasoning in terms of rule evaluation"""
+
+GOLDEN_MULTI_TURN_TOOL_SYNTHESIS_PROMPT = """Based on the conversation and tool results, respond to the follow-up question.
+Your response must be GROUNDED in the Logic Map rules.
+
+LOGIC MAP (Rules to Apply):
+{logic_map_str}
+
+CONVERSATION HISTORY:
+{conversation_history}
+
+LATEST FOLLOW-UP QUESTION:
+{follow_up_question}
+
+NEW TOOL RESULTS (if any):
+{new_tool_results}
+
+RULES ALREADY APPLIED: {cumulative_rules_applied}
+
+POLICY GUIDELINES:
+{policy_text}
+
+Synthesize a response that:
+- Directly addresses the follow-up question
+- Cites the Rule IDs that apply to this response
+- Incorporates relevant information from ALL tool results (previous and new)
+- Maintains consistency with previous responses
+- Does not expose raw JSON or technical details
+
+Also identify:
+- Which rules were applied in THIS turn's response
+- Which rules were explicitly excluded and why"""

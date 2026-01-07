@@ -10,9 +10,14 @@ from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
 from synkro.types.core import Scenario, Trace, Message
 from synkro.types.tool import ToolCall, ToolFunction, ToolDefinition
+from synkro.prompts.tool_templates import (
+    MULTI_TURN_TOOL_DECISION_PROMPT,
+    MULTI_TURN_TOOL_SYNTHESIS_PROMPT,
+)
 
 if TYPE_CHECKING:
     from synkro.generation.tool_simulator import ToolSimulator
+    from synkro.generation.follow_ups import FollowUpGenerator
 
 
 # =============================================================================
@@ -106,6 +111,15 @@ class ToolCallResponseGenerator:
         self.tools_by_name = {t.name: t for t in tools}
         self.llm = llm or LLM(model=model)
         self.simulator = simulator
+        self._follow_up_gen: "FollowUpGenerator | None" = None
+
+    @property
+    def follow_up_generator(self) -> "FollowUpGenerator":
+        """Lazy initialization of follow-up generator for multi-turn."""
+        if self._follow_up_gen is None:
+            from synkro.generation.follow_ups import FollowUpGenerator
+            self._follow_up_gen = FollowUpGenerator(llm=self.llm)
+        return self._follow_up_gen
     
     def _get_tools_description(self) -> str:
         """Get formatted description of all tools for system prompt."""
@@ -135,15 +149,16 @@ class ToolCallResponseGenerator:
         Args:
             policy_text: The policy/guidelines text
             scenario: The scenario to respond to
-            target_turns: Number of conversation turns (1 for single-turn).
-                Note: Multi-turn tool calling is not yet fully implemented.
-                For now, target_turns > 1 will still generate a single turn.
+            target_turns: Number of conversation turns (1 for single-turn,
+                >1 for multi-turn with follow-up questions)
 
         Returns:
             Trace with proper tool calling format
         """
-        # TODO: Implement multi-turn tool calling support
-        # For now, we generate single-turn regardless of target_turns
+        if target_turns > 1:
+            return await self._generate_multi_turn(policy_text, scenario, target_turns)
+
+        # Single-turn generation
         tools_desc = self._get_tools_description()
 
         # Step 1: Get LLM decision on tool usage
@@ -153,7 +168,7 @@ class ToolCallResponseGenerator:
         messages = await self._build_message_sequence(
             policy_text, scenario, tools_desc, decision
         )
-        
+
         return Trace(messages=messages, scenario=scenario)
     
     async def _get_tool_decision(
@@ -344,7 +359,241 @@ based on your knowledge and the guidelines."""
 
         synthesis = await self.llm.generate_structured(prompt, FinalSynthesis)
         return synthesis.response
-    
+
+    # =========================================================================
+    # MULTI-TURN TOOL CALLING
+    # =========================================================================
+
+    async def _generate_multi_turn(
+        self,
+        policy_text: str,
+        scenario: Scenario,
+        target_turns: int,
+    ) -> Trace:
+        """
+        Generate multi-turn tool call trace.
+
+        Each turn can independently decide if new tool calls are needed
+        based on the follow-up question and conversation history.
+
+        Args:
+            policy_text: The policy/guidelines text
+            scenario: The initial scenario to respond to
+            target_turns: Number of conversation turns
+
+        Returns:
+            Trace with multi-turn tool calling conversation
+        """
+        tools_desc = self._get_tools_description()
+
+        # Step 1: Generate initial response (Turn 1)
+        decision = await self._get_tool_decision(policy_text, scenario, tools_desc)
+        messages = await self._build_message_sequence(
+            policy_text, scenario, tools_desc, decision
+        )
+
+        # Step 2: Generate follow-up turns
+        for turn in range(1, target_turns):
+            # Generate follow-up question based on conversation so far
+            follow_up = await self.follow_up_generator.generate(
+                policy_text=policy_text,
+                messages=messages,
+                turn_index=turn,
+            )
+
+            # Add user message with follow-up question
+            messages.append(Message(role="user", content=follow_up.question))
+
+            # Get tool decision for this follow-up
+            follow_up_decision = await self._get_follow_up_tool_decision(
+                policy_text=policy_text,
+                messages=messages,
+                follow_up_question=follow_up.question,
+                tools_desc=tools_desc,
+            )
+
+            # Build response for this turn (may include new tool calls)
+            turn_messages = await self._build_follow_up_message_sequence(
+                policy_text=policy_text,
+                messages=messages,
+                follow_up_question=follow_up.question,
+                tools_desc=tools_desc,
+                decision=follow_up_decision,
+            )
+
+            # Extend conversation with this turn's messages
+            messages.extend(turn_messages)
+
+        return Trace(messages=messages, scenario=scenario)
+
+    def _format_conversation_with_tools(self, messages: list[Message]) -> str:
+        """
+        Format conversation including tool calls and results.
+
+        This provides context for follow-up tool decisions so the LLM knows:
+        - What tools were already called
+        - What results were obtained
+        - What information is already available
+        """
+        formatted = []
+        for msg in messages:
+            role = msg.role.upper()
+
+            if msg.role == "assistant" and msg.tool_calls:
+                # Format assistant message with tool calls
+                tool_strs = []
+                for tc in msg.tool_calls:
+                    if hasattr(tc, "function"):
+                        tool_strs.append(
+                            f"  - {tc.function.name}({tc.function.arguments})"
+                        )
+                    elif isinstance(tc, dict) and "function" in tc:
+                        func = tc["function"]
+                        tool_strs.append(
+                            f"  - {func.get('name', 'unknown')}({func.get('arguments', '{}')})"
+                        )
+                    else:
+                        tool_strs.append(f"  - {tc}")
+                formatted.append(f"ASSISTANT: [Tool Calls]\n" + "\n".join(tool_strs))
+            elif msg.role == "tool":
+                # Format tool response
+                formatted.append(f"TOOL RESULT [{msg.tool_call_id}]: {msg.content}")
+            else:
+                content = msg.content or "[No content]"
+                formatted.append(f"{role}: {content}")
+
+        return "\n\n".join(formatted)
+
+    async def _get_follow_up_tool_decision(
+        self,
+        policy_text: str,
+        messages: list[Message],
+        follow_up_question: str,
+        tools_desc: str,
+    ) -> ToolCallDecision:
+        """
+        Get tool decision for a follow-up question with full conversation context.
+
+        The LLM can see previous tool calls and results to decide if new
+        tools are needed or if existing results can answer the follow-up.
+        """
+        conversation_history = self._format_conversation_with_tools(messages)
+
+        prompt = MULTI_TURN_TOOL_DECISION_PROMPT.format(
+            tools_desc=tools_desc,
+            policy_text=policy_text,
+            conversation_history=conversation_history,
+            follow_up_question=follow_up_question,
+        )
+
+        return await self.llm.generate_structured(prompt, ToolCallDecision)
+
+    async def _build_follow_up_message_sequence(
+        self,
+        policy_text: str,
+        messages: list[Message],
+        follow_up_question: str,
+        tools_desc: str,
+        decision: ToolCallDecision,
+    ) -> list[Message]:
+        """
+        Build message sequence for a follow-up turn.
+
+        Returns only the new messages for this turn (not the full conversation).
+        May include: assistant with tool_calls, tool responses, final assistant.
+        Or just: assistant with direct response.
+        """
+        new_messages = []
+
+        if decision.needs_tool and decision.tool_calls:
+            # Assistant message with new tool_calls
+            tool_calls = []
+            for tc in decision.tool_calls:
+                call_id = self._generate_call_id()
+                tool_calls.append(
+                    ToolCall(
+                        id=call_id,
+                        type="function",
+                        function=ToolFunction(
+                            name=tc.name,
+                            arguments=tc.arguments,
+                        ),
+                    )
+                )
+
+            new_messages.append(
+                Message(role="assistant", content=None, tool_calls=tool_calls)
+            )
+
+            # Tool response messages
+            tool_results = []
+            for tc in tool_calls:
+                result = await self._simulate_tool_call(tc)
+                tool_results.append(result)
+                new_messages.append(
+                    Message(role="tool", content=result, tool_call_id=tc.id)
+                )
+
+            # Final assistant message synthesizing new results
+            final_response = await self._synthesize_follow_up_response(
+                policy_text=policy_text,
+                messages=messages,
+                follow_up_question=follow_up_question,
+                tool_calls=tool_calls,
+                tool_results=tool_results,
+            )
+            new_messages.append(Message(role="assistant", content=final_response))
+
+        else:
+            # Direct response without new tools
+            if decision.direct_response:
+                response = decision.direct_response
+            else:
+                # Generate response using existing context
+                response = await self._synthesize_follow_up_response(
+                    policy_text=policy_text,
+                    messages=messages,
+                    follow_up_question=follow_up_question,
+                    tool_calls=[],
+                    tool_results=[],
+                )
+            new_messages.append(Message(role="assistant", content=response))
+
+        return new_messages
+
+    async def _synthesize_follow_up_response(
+        self,
+        policy_text: str,
+        messages: list[Message],
+        follow_up_question: str,
+        tool_calls: list[ToolCall],
+        tool_results: list[str],
+    ) -> str:
+        """Synthesize response for a follow-up turn."""
+        conversation_history = self._format_conversation_with_tools(messages)
+
+        # Format new tool results if any
+        if tool_calls and tool_results:
+            new_tool_results = []
+            for tc, result in zip(tool_calls, tool_results):
+                new_tool_results.append(f"Tool: {tc.function.name}")
+                new_tool_results.append(f"Arguments: {tc.function.arguments}")
+                new_tool_results.append(f"Result: {result}")
+                new_tool_results.append("")
+            new_results_str = "\n".join(new_tool_results)
+        else:
+            new_results_str = "None (using existing information from conversation)"
+
+        prompt = MULTI_TURN_TOOL_SYNTHESIS_PROMPT.format(
+            conversation_history=conversation_history,
+            follow_up_question=follow_up_question,
+            new_tool_results=new_results_str,
+            policy_text=policy_text,
+        )
+
+        synthesis = await self.llm.generate_structured(prompt, FinalSynthesis)
+        return synthesis.response
+
     async def generate(
         self,
         policy_text: str,

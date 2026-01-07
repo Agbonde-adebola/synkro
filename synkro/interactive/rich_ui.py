@@ -198,25 +198,11 @@ class LogicMapDisplay:
     def display_scenarios(
         self,
         scenarios: list["GoldenScenario"],
-        distribution: dict[str, int],
+        distribution: dict[str, int] | None = None,
     ) -> None:
-        """Display all scenarios with S1, S2... IDs and distribution table."""
+        """Display all scenarios with S1, S2... IDs grouped by type."""
         from rich.panel import Panel
-        from rich.table import Table
         from rich.tree import Tree
-
-        # Distribution table
-        dist_table = Table(title="Distribution", show_header=True)
-        dist_table.add_column("Type", style="cyan")
-        dist_table.add_column("Count", justify="right", style="green")
-
-        total = sum(distribution.values())
-        for type_name, count in sorted(distribution.items()):
-            dist_table.add_row(type_name.replace("_", " ").title(), str(count))
-        dist_table.add_row("[bold]Total[/bold]", f"[bold]{total}[/bold]")
-
-        self.console.print()
-        self.console.print(dist_table)
 
         # Scenario tree view grouped by type
         tree = Tree("[bold cyan]Scenarios[/bold cyan]")
@@ -359,11 +345,18 @@ class LogicMapDisplay:
         scenarios: list["GoldenScenario"] | None,
         distribution: dict[str, int] | None,
     ) -> None:
-        """Display conversation settings, logic map, and scenarios together."""
+        """Display logic map, scenarios, and conversation settings (at bottom)."""
         from rich.panel import Panel
         from rich.table import Table
 
-        # Conversation settings panel
+        # Display logic map first
+        self.display_full(logic_map)
+
+        # Display scenarios if available
+        if scenarios:
+            self.display_scenarios(scenarios)
+
+        # Conversation settings panel at bottom (right before feedback prompt)
         turns_table = Table(show_header=False, box=None)
         turns_table.add_row(
             "[dim]Complexity:[/dim]",
@@ -382,13 +375,6 @@ class LogicMapDisplay:
                 border_style="cyan",
             )
         )
-
-        # Display logic map
-        self.display_full(logic_map)
-
-        # Display scenarios if available
-        if scenarios and distribution:
-            self.display_scenarios(scenarios, distribution)
 
 
 class InteractivePrompt:
