@@ -392,8 +392,8 @@ class RefinedLogicMapOutput(BaseModel):
 class HITLIntent(BaseModel):
     """Classified user intent in unified HITL session."""
 
-    intent_type: Literal["turns", "rules", "command", "unclear"] = Field(
-        description="Type of user intent: turns adjustment, rule modification, command, or unclear"
+    intent_type: Literal["turns", "rules", "scenarios", "command", "unclear"] = Field(
+        description="Type of user intent: turns adjustment, rule modification, scenario editing, command, or unclear"
     )
     confidence: float = Field(
         ge=0, le=1, description="Confidence score for the classification"
@@ -410,6 +410,17 @@ class HITLIntent(BaseModel):
     # For rule changes (passthrough to existing LogicMapEditor)
     rule_feedback: str | None = Field(
         default=None, description="Original user feedback for rule modification"
+    )
+
+    # For scenario changes
+    scenario_operation: Literal["add", "delete", "modify", "distribution"] | None = Field(
+        default=None, description="Type of scenario operation"
+    )
+    scenario_target: str | None = Field(
+        default=None, description="Target scenario (S3, 'the refund scenario', 'all edge cases')"
+    )
+    scenario_feedback: str | None = Field(
+        default=None, description="Original user feedback for scenario modification"
     )
 
 
@@ -433,6 +444,20 @@ class GoldenScenariosArray(BaseModel):
     """Array of generated golden scenarios."""
 
     scenarios: list[GoldenScenarioOutput]
+
+
+class RefinedScenariosOutput(BaseModel):
+    """Result of scenario refinement in HITL session."""
+
+    scenarios: list[GoldenScenarioOutput] = Field(
+        description="All scenarios after applying changes"
+    )
+    changes_summary: str = Field(
+        description="Brief summary of what changed (e.g., 'Added S21, deleted S3')"
+    )
+    reasoning: str = Field(
+        description="Explanation of how user feedback was interpreted"
+    )
 
 
 class ReasoningStepOutput(BaseModel):

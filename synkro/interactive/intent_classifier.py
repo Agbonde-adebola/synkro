@@ -12,9 +12,10 @@ class HITLIntentClassifier:
     """
     LLM-powered classifier for user feedback in unified HITL sessions.
 
-    Classifies user input into one of four intent types:
+    Classifies user input into one of five intent types:
     - "turns": User wants to adjust conversation turns
     - "rules": User wants to modify the Logic Map
+    - "scenarios": User wants to add/delete/modify scenarios or adjust distribution
     - "command": User typed a built-in command
     - "unclear": Cannot determine intent
 
@@ -24,7 +25,8 @@ class HITLIntentClassifier:
         ...     user_input="I want shorter conversations",
         ...     current_turns=3,
         ...     complexity_level="conditional",
-        ...     rule_count=10
+        ...     rule_count=10,
+        ...     scenario_count=20
         ... )
         >>> intent.intent_type
         'turns'
@@ -52,6 +54,7 @@ class HITLIntentClassifier:
         current_turns: int,
         complexity_level: str,
         rule_count: int,
+        scenario_count: int = 0,
     ) -> HITLIntent:
         """
         Classify user input and extract structured intent.
@@ -61,6 +64,7 @@ class HITLIntentClassifier:
             current_turns: Current conversation turns setting
             complexity_level: Policy complexity level (simple/conditional/complex)
             rule_count: Number of rules in the Logic Map
+            scenario_count: Number of scenarios generated
 
         Returns:
             HITLIntent with classified intent_type and relevant fields populated
@@ -70,6 +74,7 @@ class HITLIntentClassifier:
             current_turns=current_turns,
             complexity_level=complexity_level,
             rule_count=rule_count,
+            scenario_count=scenario_count,
         )
 
         try:

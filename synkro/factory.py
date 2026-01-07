@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from synkro.quality.verifier import TraceVerifier
     from synkro.quality.golden_refiner import GoldenRefiner
     from synkro.interactive.logic_map_editor import LogicMapEditor
+    from synkro.interactive.scenario_editor import ScenarioEditor
 
 
 class ComponentFactory:
@@ -270,6 +271,16 @@ class ComponentFactory:
         """
         from synkro.interactive.logic_map_editor import LogicMapEditor
         return LogicMapEditor(llm=self.grading_llm)
+
+    def create_scenario_editor(self) -> "ScenarioEditor":
+        """
+        Create a ScenarioEditor for Human-in-the-Loop scenario editing.
+
+        The editor uses the grading LLM (stronger model) to interpret
+        natural language feedback and refine scenarios.
+        """
+        from synkro.interactive.scenario_editor import ScenarioEditor
+        return ScenarioEditor(llm=self.grading_llm)
 
 
 __all__ = ["ComponentFactory"]

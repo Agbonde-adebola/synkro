@@ -67,6 +67,7 @@ HITL_INTENT_CLASSIFIER_PROMPT = """You are classifying user feedback in an inter
 CURRENT STATE:
 - Conversation turns: {current_turns} ({complexity_level} complexity)
 - Logic Map has {rule_count} rules
+- Scenarios: {scenario_count} total
 
 USER FEEDBACK: "{user_input}"
 
@@ -85,17 +86,95 @@ CLASSIFY THE INTENT:
    Examples: "remove R005", "add a rule for...", "merge R002 and R003", "change R001 to..."
    → Set intent_type="rules" and rule_feedback to the original user input
 
-3. "command" - User typed a built-in command (done, undo, reset, help, show Rxxx)
+3. "scenarios" - User wants to add/delete/modify scenarios or adjust distribution
+   Examples:
+   - "add a scenario for late submissions" → scenario_operation="add"
+   - "delete S3" → scenario_operation="delete", scenario_target="S3"
+   - "remove the refund scenario" → scenario_operation="delete", scenario_target="the refund scenario"
+   - "change S2 to test edge cases" → scenario_operation="modify", scenario_target="S2"
+   - "more negative scenarios" → scenario_operation="distribution"
+   - "fewer edge cases" → scenario_operation="distribution"
+   - "delete all irrelevant scenarios" → scenario_operation="delete", scenario_target="all irrelevant"
+   → Set intent_type="scenarios", scenario_operation, scenario_target (if applicable), and scenario_feedback
+
+4. "command" - User typed a built-in command (done, undo, reset, help, show Rxxx, show Sxxx)
    → Set intent_type="command", leave other fields null
    Note: Commands are handled separately, but classify them if they appear
 
-4. "unclear" - Cannot determine intent
+5. "unclear" - Cannot determine intent
    → Set intent_type="unclear"
 
 IMPORTANT:
 - Set confidence based on how clear the intent is (0.0 to 1.0)
-- If the user mentions both turns and rules, prioritize the more prominent intent
-- Default to "rules" if slightly ambiguous between rules and unclear"""
+- If the user mentions multiple intents, prioritize the most prominent one
+- Default to "rules" if ambiguous between rules and unclear
+- Default to "scenarios" if ambiguous between scenarios and unclear"""
 
 
-__all__ = ["LOGIC_MAP_REFINEMENT_PROMPT", "HITL_INTENT_CLASSIFIER_PROMPT"]
+SCENARIO_REFINEMENT_PROMPT = """You are a scenario editor for SFT data generation. Your task is to modify scenarios based on user feedback.
+
+LOGIC MAP (for rule references):
+{logic_map}
+
+CURRENT SCENARIOS:
+{scenarios_formatted}
+
+CURRENT DISTRIBUTION:
+{distribution}
+
+ORIGINAL POLICY (for context):
+{policy_text}
+
+USER FEEDBACK:
+{user_feedback}
+
+INSTRUCTIONS:
+Interpret the user's natural language request and modify the scenarios accordingly.
+
+SUPPORTED OPERATIONS:
+
+1. **ADD**: Create a new scenario
+   - User might say: "add a scenario for...", "include a test case for...", "there should be a scenario about..."
+   - Create scenario with appropriate type (positive, negative, edge_case, irrelevant)
+   - Set target_rule_ids to rules this scenario tests
+   - Write expected_outcome based on rule evaluation
+
+2. **DELETE**: Remove scenario(s)
+   - User might say: "delete S3", "remove the refund scenario", "delete all irrelevant scenarios"
+   - Match by ID (S1, S2...) or by description/content
+   - Can delete multiple scenarios if user requests
+
+3. **MODIFY**: Change an existing scenario
+   - User might say: "change S2 to...", "update S5 to test edge cases", "S3 should be negative"
+   - Update specified fields while preserving scenario_id
+   - Ensure target_rule_ids are updated if scenario focus changes
+
+4. **DISTRIBUTION**: Adjust type distribution
+   - User might say: "more negative scenarios", "fewer edge cases", "add more positive examples"
+   - Add/remove scenarios to achieve requested distribution
+   - Maintain total count unless user specifies otherwise
+
+SCENARIO ID MAPPING:
+Scenarios are displayed as S1, S2, S3... (1-indexed).
+User may reference by:
+- ID: "S3", "S5"
+- Description: "the refund scenario", "the one about late submissions"
+- Type: "all negative scenarios", "edge cases"
+
+CRITICAL REQUIREMENTS:
+- Ensure target_rule_ids reference valid rules from the Logic Map
+- Maintain scenario type validity (positive, negative, edge_case, irrelevant)
+- Write clear, testable expected_outcome for each scenario
+- Preserve scenarios not affected by the change
+
+OUTPUT:
+Return the complete updated scenarios list with ALL scenarios (both modified and unmodified).
+Provide a brief changes_summary explaining what was done.
+Provide reasoning explaining how you interpreted the user's feedback."""
+
+
+__all__ = [
+    "LOGIC_MAP_REFINEMENT_PROMPT",
+    "HITL_INTENT_CLASSIFIER_PROMPT",
+    "SCENARIO_REFINEMENT_PROMPT",
+]

@@ -129,8 +129,9 @@ class Generator:
         model_str = generation_model.value if isinstance(generation_model, Enum) else str(generation_model)
         self.workers = auto_workers(model_str)
 
-        # Create HITL editor if enabled
+        # Create HITL editors if enabled
         hitl_editor = self.factory.create_logic_map_editor() if enable_hitl else None
+        scenario_editor = self.factory.create_scenario_editor() if enable_hitl else None
 
         # Create pipeline
         self.pipeline = GenerationPipeline(
@@ -142,6 +143,7 @@ class Generator:
             checkpoint_manager=self.checkpoint_manager,
             enable_hitl=enable_hitl,
             hitl_editor=hitl_editor,
+            scenario_editor=scenario_editor,
         )
 
     @handle_error

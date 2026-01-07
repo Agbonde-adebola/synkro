@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from synkro.types.logic_map import LogicMap
+    from synkro.types.logic_map import LogicMap, GoldenScenario
     from synkro.types.core import Plan
 
 
@@ -195,6 +195,201 @@ class LogicMapDisplay:
         # Then display logic map (existing method)
         self.display_full(logic_map)
 
+    def display_scenarios(
+        self,
+        scenarios: list["GoldenScenario"],
+        distribution: dict[str, int],
+    ) -> None:
+        """Display all scenarios with S1, S2... IDs and distribution table."""
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich.tree import Tree
+
+        # Distribution table
+        dist_table = Table(title="Distribution", show_header=True)
+        dist_table.add_column("Type", style="cyan")
+        dist_table.add_column("Count", justify="right", style="green")
+
+        total = sum(distribution.values())
+        for type_name, count in sorted(distribution.items()):
+            dist_table.add_row(type_name.replace("_", " ").title(), str(count))
+        dist_table.add_row("[bold]Total[/bold]", f"[bold]{total}[/bold]")
+
+        self.console.print()
+        self.console.print(dist_table)
+
+        # Scenario tree view grouped by type
+        tree = Tree("[bold cyan]Scenarios[/bold cyan]")
+
+        # Group by type
+        by_type: dict[str, list[tuple[int, "GoldenScenario"]]] = {}
+        for i, scenario in enumerate(scenarios, start=1):
+            type_key = scenario.scenario_type.value
+            if type_key not in by_type:
+                by_type[type_key] = []
+            by_type[type_key].append((i, scenario))
+
+        # Add each type as a branch
+        for type_name in ["positive", "negative", "edge_case", "irrelevant"]:
+            if type_name in by_type:
+                type_display = type_name.replace("_", " ").title()
+                branch = tree.add(f"[bold]{type_display}[/bold] ({len(by_type[type_name])})")
+                for idx, scenario in by_type[type_name]:
+                    desc = scenario.description[:50] + "..." if len(scenario.description) > 50 else scenario.description
+                    rules = ", ".join(scenario.target_rule_ids[:3]) if scenario.target_rule_ids else "None"
+                    if len(scenario.target_rule_ids) > 3:
+                        rules += "..."
+                    branch.add(f"[cyan]S{idx}[/cyan]: {desc} [dim]→ {rules}[/dim]")
+
+        self.console.print()
+        self.console.print(
+            Panel(
+                tree,
+                title=f"[bold]📋 Scenarios ({len(scenarios)} total)[/bold]",
+                border_style="green",
+            )
+        )
+
+    def display_scenario(
+        self,
+        scenario_id: str,
+        scenarios: list["GoldenScenario"],
+    ) -> None:
+        """Display details of a specific scenario."""
+        from rich.panel import Panel
+
+        # Parse S1, S2, etc. to index
+        try:
+            idx = int(scenario_id.upper().replace("S", "")) - 1
+            if idx < 0 or idx >= len(scenarios):
+                self.console.print(f"[red]Scenario {scenario_id} not found (valid: S1-S{len(scenarios)})[/red]")
+                return
+        except ValueError:
+            self.console.print(f"[red]Invalid scenario ID: {scenario_id}[/red]")
+            return
+
+        scenario = scenarios[idx]
+        content = f"""[bold]ID:[/bold] S{idx + 1}
+[bold]Type:[/bold] {scenario.scenario_type.value.replace('_', ' ').title()}
+[bold]Description:[/bold] {scenario.description}
+[bold]Context:[/bold] {scenario.context or 'N/A'}
+[bold]Target Rules:[/bold] {', '.join(scenario.target_rule_ids) if scenario.target_rule_ids else 'None'}
+[bold]Expected Outcome:[/bold] {scenario.expected_outcome}"""
+
+        self.console.print(Panel(content, title=f"Scenario S{idx + 1}", border_style="green"))
+
+    def display_scenario_diff(
+        self,
+        before: list["GoldenScenario"],
+        after: list["GoldenScenario"],
+    ) -> None:
+        """Display all scenarios with changes highlighted in different colors."""
+        from rich.panel import Panel
+        from rich.tree import Tree
+
+        # Create simple ID comparison
+        before_descs = {s.description for s in before}
+        after_descs = {s.description for s in after}
+
+        added_descs = after_descs - before_descs
+        removed_descs = before_descs - after_descs
+
+        if not added_descs and not removed_descs:
+            self.console.print("[dim]No changes detected[/dim]")
+            return
+
+        # Build tree view grouped by type
+        tree = Tree("[bold cyan]Scenarios[/bold cyan]")
+
+        # Group by type
+        by_type: dict[str, list[tuple[int, "GoldenScenario", bool]]] = {}
+        for i, scenario in enumerate(after, start=1):
+            type_key = scenario.scenario_type.value
+            if type_key not in by_type:
+                by_type[type_key] = []
+            is_added = scenario.description in added_descs
+            by_type[type_key].append((i, scenario, is_added))
+
+        # Add each type as a branch
+        for type_name in ["positive", "negative", "edge_case", "irrelevant"]:
+            if type_name in by_type:
+                type_display = type_name.replace("_", " ").title()
+                branch = tree.add(f"[bold]{type_display}[/bold] ({len(by_type[type_name])})")
+                for idx, scenario, is_added in by_type[type_name]:
+                    desc = scenario.description[:50] + "..." if len(scenario.description) > 50 else scenario.description
+
+                    if is_added:
+                        prefix = "[green]+ "
+                        style_close = "[/green]"
+                        id_style = "[green]"
+                    else:
+                        prefix = ""
+                        style_close = ""
+                        id_style = "[cyan]"
+
+                    rules = ", ".join(scenario.target_rule_ids[:3]) if scenario.target_rule_ids else "None"
+                    branch.add(f"{prefix}{id_style}S{idx}[/]: {desc}{style_close} [dim]→ {rules}[/dim]")
+
+        # Add removed scenarios at bottom
+        if removed_descs:
+            removed_branch = tree.add("[red][bold]REMOVED[/bold][/red]")
+            for scenario in before:
+                if scenario.description in removed_descs:
+                    desc = scenario.description[:50] + "..." if len(scenario.description) > 50 else scenario.description
+                    removed_branch.add(f"[red][strike]- {desc}[/strike][/red]")
+
+        # Build legend
+        legend = "[dim]Legend: [green]+ Added[/green] | [red][strike]- Removed[/strike][/red][/dim]"
+
+        self.console.print()
+        self.console.print(
+            Panel(
+                tree,
+                title=f"[bold]📋 Scenarios ({len(after)} total)[/bold]",
+                subtitle=legend,
+                border_style="green",
+            )
+        )
+
+    def display_full_session_state(
+        self,
+        plan: "Plan",
+        logic_map: "LogicMap",
+        current_turns: int,
+        scenarios: list["GoldenScenario"] | None,
+        distribution: dict[str, int] | None,
+    ) -> None:
+        """Display conversation settings, logic map, and scenarios together."""
+        from rich.panel import Panel
+        from rich.table import Table
+
+        # Conversation settings panel
+        turns_table = Table(show_header=False, box=None)
+        turns_table.add_row(
+            "[dim]Complexity:[/dim]",
+            f"[cyan]{plan.complexity_level.title()}[/cyan]",
+        )
+        turns_table.add_row(
+            "[dim]Turns:[/dim]",
+            f"[green]{current_turns}[/green]",
+        )
+
+        self.console.print()
+        self.console.print(
+            Panel(
+                turns_table,
+                title="[cyan]Conversation Settings[/cyan]",
+                border_style="cyan",
+            )
+        )
+
+        # Display logic map
+        self.display_full(logic_map)
+
+        # Display scenarios if available
+        if scenarios and distribution:
+            self.display_scenarios(scenarios, distribution)
+
 
 class InteractivePrompt:
     """Handles user input for HITL sessions."""
@@ -226,7 +421,7 @@ class InteractivePrompt:
         )
 
     def show_unified_instructions(self) -> None:
-        """Display instructions for the unified HITL session (turns + rules)."""
+        """Display instructions for the unified HITL session (turns + rules + scenarios)."""
         from rich.panel import Panel
 
         instructions = """[bold]Commands:[/bold]
@@ -234,13 +429,20 @@ class InteractivePrompt:
   • [cyan]undo[/cyan] - Revert last change
   • [cyan]reset[/cyan] - Restore original state
   • [cyan]show R001[/cyan] - Show details of a specific rule
+  • [cyan]show S3[/cyan] - Show details of a specific scenario
   • [cyan]help[/cyan] - Show this message
 
 [bold]Feedback examples:[/bold]
+  [dim]Turns:[/dim]
   • [yellow]"shorter conversations"[/yellow] - Adjust conversation turns
   • [yellow]"I want 5 turns"[/yellow] - Set specific turn count
+  [dim]Rules:[/dim]
   • [yellow]"remove R005"[/yellow] - Delete a rule
-  • [yellow]"add rule for late submissions"[/yellow] - Add a new rule"""
+  • [yellow]"add rule for late submissions"[/yellow] - Add a new rule
+  [dim]Scenarios:[/dim]
+  • [yellow]"add scenario for expenses at $50 limit"[/yellow] - Add edge case
+  • [yellow]"delete S3"[/yellow] - Remove a scenario
+  • [yellow]"more negative scenarios"[/yellow] - Adjust distribution"""
 
         self.console.print()
         self.console.print(

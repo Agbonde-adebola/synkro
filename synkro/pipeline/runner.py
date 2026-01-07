@@ -29,7 +29,9 @@ from synkro.types.logic_map import LogicMap
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from synkro.interactive.logic_map_editor import LogicMapEditor
+    from synkro.interactive.scenario_editor import ScenarioEditor
     from synkro.types.core import Plan
+    from synkro.types.logic_map import GoldenScenario
 
 
 class GenerationResult:
@@ -91,6 +93,7 @@ class GenerationPipeline:
         checkpoint_manager: CheckpointManager | None = None,
         enable_hitl: bool = False,
         hitl_editor: "LogicMapEditor | None" = None,
+        scenario_editor: "ScenarioEditor | None" = None,
     ):
         """
         Initialize the pipeline.
@@ -102,8 +105,9 @@ class GenerationPipeline:
             max_iterations: Maximum refinement iterations
             skip_grading: Whether to skip the verification phase
             checkpoint_manager: Optional checkpoint manager for resumable generation
-            enable_hitl: Whether to enable Human-in-the-Loop Logic Map editing
+            enable_hitl: Whether to enable Human-in-the-Loop editing (rules + scenarios)
             hitl_editor: Optional LogicMapEditor for HITL sessions
+            scenario_editor: Optional ScenarioEditor for scenario editing
         """
         self.factory = factory
         self.reporter = reporter
@@ -113,6 +117,7 @@ class GenerationPipeline:
         self.checkpoint_manager = checkpoint_manager
         self.enable_hitl = enable_hitl
         self.hitl_editor = hitl_editor
+        self.scenario_editor = scenario_editor
 
         # Golden Trace phases
         self.plan_phase = PlanPhase()
@@ -211,14 +216,6 @@ class GenerationPipeline:
         self.reporter.on_logic_map_complete(logic_map)
 
         # =====================================================================
-        # HUMAN-IN-THE-LOOP: Unified Session (Turns + Logic Map)
-        # =====================================================================
-        if self.enable_hitl and self.hitl_editor:
-            logic_map, target_turns = await self._run_hitl_session(
-                logic_map, policy, plan, target_turns
-            )
-
-        # =====================================================================
         # STAGE 2: Scenario Synthesis (The Adversary)
         # =====================================================================
         if resuming and cm and cm.stage in ("scenarios", "traces", "complete"):
@@ -234,6 +231,14 @@ class GenerationPipeline:
                 cm.save_scenarios(golden_scenarios, distribution)
 
         self.reporter.on_golden_scenarios_complete(golden_scenarios, distribution)
+
+        # =====================================================================
+        # HUMAN-IN-THE-LOOP: Unified Session (Turns + Rules + Scenarios)
+        # =====================================================================
+        if self.enable_hitl and self.hitl_editor:
+            logic_map, golden_scenarios, distribution, target_turns = await self._run_hitl_session(
+                logic_map, golden_scenarios, distribution, policy, plan, target_turns
+            )
 
         # =====================================================================
         # STAGE 3: Trace Synthesis (The Thinker)
@@ -331,27 +336,33 @@ class GenerationPipeline:
     async def _run_hitl_session(
         self,
         logic_map: LogicMap,
+        scenarios: list["GoldenScenario"],
+        distribution: dict[str, int],
         policy: Policy,
         plan: "Plan",
         initial_turns: int,
-    ) -> tuple[LogicMap, int]:
+    ) -> tuple[LogicMap, list["GoldenScenario"], dict[str, int], int]:
         """
-        Run unified HITL session for both turns and Logic Map editing.
+        Run unified HITL session for turns, Logic Map, and scenario editing.
 
         Args:
             logic_map: The extracted Logic Map to edit
+            scenarios: The generated scenarios to edit
+            distribution: The scenario type distribution
             policy: The policy document (for context in refinements)
             plan: The generation plan (for complexity info)
             initial_turns: Initial target turns setting
 
         Returns:
-            Tuple of (modified LogicMap, confirmed target_turns)
+            Tuple of (modified LogicMap, modified scenarios, modified distribution, confirmed target_turns)
         """
         from synkro.interactive.hitl_session import HITLSession
         from synkro.interactive.rich_ui import LogicMapDisplay, InteractivePrompt
         from synkro.interactive.intent_classifier import HITLIntentClassifier
 
         session = HITLSession(original_logic_map=logic_map)
+        session.set_scenarios(scenarios, distribution)
+
         display = LogicMapDisplay()
         prompt = InteractivePrompt()
         classifier = HITLIntentClassifier(llm=self.factory.generation_llm)
@@ -361,7 +372,13 @@ class GenerationPipeline:
 
         # Show unified instructions and initial state
         prompt.show_unified_instructions()
-        display.display_session_state(plan, session.current_logic_map, current_turns)
+        display.display_full_session_state(
+            plan,
+            session.current_logic_map,
+            current_turns,
+            session.current_scenarios,
+            session.current_distribution,
+        )
 
         while True:
             feedback = prompt.get_feedback().strip()
@@ -371,14 +388,19 @@ class GenerationPipeline:
                 break
 
             if feedback.lower() == "undo":
-                # Undo both turns and rules
+                # Undo turns, rules, or scenarios
                 if session.can_undo or turns_history:
-                    if session.can_undo:
-                        session.undo()
+                    restored_map, restored_scenarios, restored_dist = session.undo()
                     if turns_history:
                         current_turns = turns_history.pop()
                     display.show_success("Reverted to previous state")
-                    display.display_session_state(plan, session.current_logic_map, current_turns)
+                    display.display_full_session_state(
+                        plan,
+                        session.current_logic_map,
+                        current_turns,
+                        session.current_scenarios,
+                        session.current_distribution,
+                    )
                 else:
                     display.show_error("Nothing to undo")
                 continue
@@ -388,7 +410,13 @@ class GenerationPipeline:
                 current_turns = initial_turns
                 turns_history.clear()
                 display.show_success("Reset to original state")
-                display.display_session_state(plan, session.current_logic_map, current_turns)
+                display.display_full_session_state(
+                    plan,
+                    session.current_logic_map,
+                    current_turns,
+                    session.current_scenarios,
+                    session.current_distribution,
+                )
                 continue
 
             if feedback.lower() == "help":
@@ -396,8 +424,14 @@ class GenerationPipeline:
                 continue
 
             if feedback.lower().startswith("show "):
-                rule_id = feedback[5:].strip().upper()
-                display.display_rule(rule_id, session.current_logic_map)
+                target = feedback[5:].strip().upper()
+                if target.startswith("S") and target[1:].isdigit():
+                    # Show scenario
+                    if session.current_scenarios:
+                        display.display_scenario(target, session.current_scenarios)
+                else:
+                    # Show rule
+                    display.display_rule(target, session.current_logic_map)
                 continue
 
             # Empty input
@@ -405,11 +439,13 @@ class GenerationPipeline:
                 continue
 
             # Classify intent via LLM
+            scenario_count = len(session.current_scenarios) if session.current_scenarios else 0
             intent = await classifier.classify(
                 feedback,
                 current_turns,
                 plan.complexity_level,
                 len(session.current_logic_map.rules),
+                scenario_count=scenario_count,
             )
 
             if intent.intent_type == "turns" and intent.target_turns is not None:
@@ -418,10 +454,16 @@ class GenerationPipeline:
                 current_turns = intent.target_turns
                 reasoning = intent.turns_reasoning or "User preference"
                 display.show_success(f"Set to {current_turns} turns ({reasoning})")
-                display.display_session_state(plan, session.current_logic_map, current_turns)
+                display.display_full_session_state(
+                    plan,
+                    session.current_logic_map,
+                    current_turns,
+                    session.current_scenarios,
+                    session.current_distribution,
+                )
 
             elif intent.intent_type == "rules" and intent.rule_feedback:
-                # Handle rule change (existing logic)
+                # Handle rule change
                 try:
                     new_map, changes_summary = await self.hitl_editor.refine(
                         session.current_logic_map,
@@ -445,16 +487,55 @@ class GenerationPipeline:
                 except Exception as e:
                     display.show_error(f"Failed to apply refinement: {e}")
 
+            elif intent.intent_type == "scenarios" and self.scenario_editor:
+                # Handle scenario change
+                try:
+                    scenario_feedback = intent.scenario_feedback or feedback
+                    new_scenarios, new_dist, changes_summary = await self.scenario_editor.refine(
+                        session.current_scenarios or [],
+                        session.current_distribution or {},
+                        scenario_feedback,
+                        policy.text,
+                        session.current_logic_map,
+                    )
+
+                    # Validate the scenarios
+                    is_valid, issues = self.scenario_editor.validate_scenarios(
+                        new_scenarios,
+                        session.current_logic_map,
+                    )
+
+                    if is_valid:
+                        if session.current_scenarios:
+                            display.display_scenario_diff(session.current_scenarios, new_scenarios)
+                        session.apply_scenario_change(scenario_feedback, new_scenarios, new_dist)
+                        display.show_success(changes_summary)
+                    else:
+                        display.show_error(f"Invalid scenario edit: {', '.join(issues)}")
+
+                except Exception as e:
+                    display.show_error(f"Failed to apply scenario edit: {e}")
+
+            elif intent.intent_type == "scenarios" and not self.scenario_editor:
+                display.show_error("Scenario editor not available")
+
             elif intent.intent_type == "unclear":
                 display.show_error("Could not understand feedback. Try 'help' for examples.")
 
         # Final summary
         display.console.print(
             f"\n[green]✅ Session complete[/green] - "
-            f"{session.change_count} rule change(s), {current_turns} turns"
+            f"{session.rule_change_count} rule change(s), "
+            f"{session.scenario_change_count} scenario change(s), "
+            f"{current_turns} turns"
         )
 
-        return session.current_logic_map, current_turns
+        return (
+            session.current_logic_map,
+            session.current_scenarios or scenarios,
+            session.current_distribution or distribution,
+            current_turns,
+        )
 
 
 __all__ = ["GenerationPipeline", "GenerationResult"]
