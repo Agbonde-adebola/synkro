@@ -43,10 +43,6 @@ class ProgressReporter(Protocol):
         """Called during scenario generation."""
         ...
     
-    def on_scenarios_complete(self, scenarios: list[Scenario]) -> None:
-        """Called when all scenarios are generated."""
-        ...
-    
     def on_response_progress(self, completed: int, total: int) -> None:
         """Called during response generation."""
         ...
@@ -85,17 +81,6 @@ class ProgressReporter(Protocol):
         """Called when golden scenarios are generated (Stage 2)."""
         ...
 
-    def on_hitl_start(self, rules_count: int) -> None:
-        """Called when HITL session starts."""
-        ...
-
-    def on_hitl_refinement(self, feedback: str, changes_summary: str) -> None:
-        """Called after each HITL refinement."""
-        ...
-
-    def on_hitl_complete(self, change_count: int, final_rules_count: int) -> None:
-        """Called when HITL session completes."""
-        ...
 
 
 class SilentReporter:
@@ -116,9 +101,6 @@ class SilentReporter:
         pass
     
     def on_scenario_progress(self, completed: int, total: int) -> None:
-        pass
-    
-    def on_scenarios_complete(self, scenarios: list[Scenario]) -> None:
         pass
     
     def on_response_progress(self, completed: int, total: int) -> None:
@@ -148,14 +130,6 @@ class SilentReporter:
     def on_golden_scenarios_complete(self, scenarios, distribution) -> None:
         pass
 
-    def on_hitl_start(self, rules_count: int) -> None:
-        pass
-
-    def on_hitl_refinement(self, feedback: str, changes_summary: str) -> None:
-        pass
-
-    def on_hitl_complete(self, change_count: int, final_rules_count: int) -> None:
-        pass
 
 
 class RichReporter:
@@ -198,25 +172,11 @@ class RichReporter:
         self.console.print()
     
     def on_scenario_progress(self, completed: int, total: int) -> None:
-        pass  # Progress shown in on_scenarios_complete
-    
-    def on_scenarios_complete(self, scenarios: list[Scenario]) -> None:
-        self.console.print(f"[green]💡 Scenarios[/green] [dim]{len(scenarios)} created[/dim]")
-        for idx, s in enumerate(scenarios, 1):
-            desc = s.description[:80] + "..." if len(s.description) > 80 else s.description
-            self.console.print(f"  [dim]#{idx}[/dim] [yellow]{desc}[/yellow]")
-    
+        pass
+
     def on_response_progress(self, completed: int, total: int) -> None:
-        pass  # Progress shown in on_responses_complete
-    
-    def on_responses_complete(self, traces: list[Trace]) -> None:
-        self.console.print(f"[green]✍️  Responses[/green] [dim]{len(traces)} generated[/dim]")
-        for idx, trace in enumerate(traces, 1):
-            user_preview = trace.user_message[:60] + "..." if len(trace.user_message) > 60 else trace.user_message
-            asst_preview = trace.assistant_message[:60] + "..." if len(trace.assistant_message) > 60 else trace.assistant_message
-            self.console.print(f"  [dim]#{idx}[/dim] [blue]User:[/blue] {user_preview}")
-            self.console.print(f"       [green]Assistant:[/green] {asst_preview}")
-    
+        pass
+
     def on_grading_progress(self, completed: int, total: int) -> None:
         pass  # Progress shown in on_grading_complete
     
@@ -254,47 +214,12 @@ class RichReporter:
         self.console.print()
 
     def on_logic_map_complete(self, logic_map) -> None:
-        """Display the extracted Logic Map (Stage 1)."""
-        from rich.panel import Panel
-        from rich.tree import Tree
-
-        self.console.print(f"\n[green]📜 Logic Map[/green] [dim]{len(logic_map.rules)} rules extracted[/dim]")
-
-        # Show rules as a tree
-        tree = Tree("[bold cyan]Rules[/bold cyan]")
-
-        # Group by category
-        by_category = {}
-        for rule in logic_map.rules:
-            cat = rule.category.value
-            by_category.setdefault(cat, []).append(rule)
-
-        for category, rules in by_category.items():
-            cat_branch = tree.add(f"[yellow]{category.upper()}[/yellow] ({len(rules)} rules)")
-            for rule in rules[:3]:  # Show first 3 per category
-                deps = f" → {', '.join(rule.dependencies)}" if rule.dependencies else ""
-                rule_text = rule.text[:50] + "..." if len(rule.text) > 50 else rule.text
-                cat_branch.add(f"[dim]{rule.rule_id}[/dim]: {rule_text}{deps}")
-            if len(rules) > 3:
-                cat_branch.add(f"[dim]... and {len(rules) - 3} more[/dim]")
-
-        self.console.print(tree)
-
-        # Show dependency chains
-        if logic_map.root_rules:
-            self.console.print(f"  [dim]Root rules: {', '.join(logic_map.root_rules)}[/dim]")
+        """Logic Map details shown in HITL session."""
+        pass
 
     def on_golden_scenarios_complete(self, scenarios, distribution) -> None:
-        """Display golden scenarios summary (Stage 2)."""
-        # Simple one-line summary - full details shown in HITL session
-        parts = []
-        for stype in ["positive", "negative", "edge_case", "irrelevant"]:
-            if distribution.get(stype, 0) > 0:
-                label = stype.replace("_", " ")
-                parts.append(f"{distribution[stype]} {label}")
-
-        summary = ", ".join(parts) if parts else "none"
-        self.console.print(f"\n[green]💡 Golden Scenarios[/green] [dim]{len(scenarios)} created ({summary})[/dim]")
+        """Scenario details shown in HITL session."""
+        pass
 
     def on_responses_complete(self, traces: list[Trace]) -> None:
         """Enhanced to show category and type for each trace."""
@@ -327,37 +252,6 @@ class RichReporter:
 
             if len(cat_traces) > 3:
                 self.console.print(f"    [dim]... and {len(cat_traces) - 3} more[/dim]")
-
-    def on_hitl_start(self, rules_count: int) -> None:
-        """Display HITL session start."""
-        from rich.panel import Panel
-
-        self.console.print()
-        self.console.print(Panel.fit(
-            f"[bold]Interactive Logic Map Editor[/bold]\n"
-            f"[dim]Review and refine {rules_count} extracted rules[/dim]",
-            title="[cyan]HITL Mode[/cyan]",
-            border_style="cyan"
-        ))
-
-    def on_hitl_refinement(self, feedback: str, changes_summary: str) -> None:
-        """Display refinement result."""
-        feedback_preview = feedback[:60] + "..." if len(feedback) > 60 else feedback
-        self.console.print(f"  [green]✓[/green] [dim]{feedback_preview}[/dim]")
-        self.console.print(f"    [cyan]{changes_summary}[/cyan]")
-
-    def on_hitl_complete(self, change_count: int, final_rules_count: int) -> None:
-        """Display HITL session completion."""
-        if change_count > 0:
-            self.console.print(
-                f"\n[green]✅ HITL Complete[/green] - "
-                f"Made {change_count} change(s), proceeding with {final_rules_count} rules"
-            )
-        else:
-            self.console.print(
-                f"\n[green]✅ HITL Complete[/green] - "
-                f"No changes made, proceeding with {final_rules_count} rules"
-            )
 
 
 class CallbackReporter:
@@ -481,15 +375,6 @@ class CallbackReporter:
 
     def on_golden_scenarios_complete(self, scenarios, distribution) -> None:
         self._emit("golden_scenarios_complete", {"count": len(scenarios), "distribution": distribution})
-
-    def on_hitl_start(self, rules_count: int) -> None:
-        self._emit("hitl_start", {"rules_count": rules_count})
-
-    def on_hitl_refinement(self, feedback: str, changes_summary: str) -> None:
-        self._emit("hitl_refinement", {"feedback": feedback, "changes_summary": changes_summary})
-
-    def on_hitl_complete(self, change_count: int, final_rules_count: int) -> None:
-        self._emit("hitl_complete", {"change_count": change_count, "final_rules_count": final_rules_count})
 
 
 __all__ = ["ProgressReporter", "SilentReporter", "RichReporter", "CallbackReporter"]
