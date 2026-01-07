@@ -97,16 +97,25 @@ CLASSIFY THE INTENT:
    - "delete all irrelevant scenarios" → scenario_operation="delete", scenario_target="all irrelevant"
    → Set intent_type="scenarios", scenario_operation, scenario_target (if applicable), and scenario_feedback
 
-4. "command" - User typed a built-in command (done, undo, reset, help, show Rxxx, show Sxxx)
+4. "compound" - User wants BOTH rule changes AND scenario changes in one request
+   Examples:
+   - "add a rule for alcohol refunds and create 2 scenarios for it"
+   - "add a rule about late fees, then add some negative scenarios testing that rule"
+   - "create a rule for VIP discounts and add edge case scenarios for the boundary conditions"
+   - "remove R005 and delete all scenarios that reference it"
+   → Set intent_type="compound", rule_feedback (the rule part), AND scenario_feedback (the scenario part)
+   → The system will execute rules first, then scenarios, so scenarios can reference newly added rules
+
+5. "command" - User typed a built-in command (done, undo, reset, help, show Rxxx, show Sxxx)
    → Set intent_type="command", leave other fields null
    Note: Commands are handled separately, but classify them if they appear
 
-5. "unclear" - Cannot determine intent
+6. "unclear" - Cannot determine intent
    → Set intent_type="unclear"
 
 IMPORTANT:
 - Set confidence based on how clear the intent is (0.0 to 1.0)
-- If the user mentions multiple intents, prioritize the most prominent one
+- Use "compound" when the user explicitly wants BOTH rule AND scenario changes in ONE request
 - Default to "rules" if ambiguous between rules and unclear
 - Default to "scenarios" if ambiguous between scenarios and unclear"""
 

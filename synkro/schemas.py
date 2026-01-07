@@ -392,8 +392,8 @@ class RefinedLogicMapOutput(BaseModel):
 class HITLIntent(BaseModel):
     """Classified user intent in unified HITL session."""
 
-    intent_type: Literal["turns", "rules", "scenarios", "command", "unclear"] = Field(
-        description="Type of user intent: turns adjustment, rule modification, scenario editing, command, or unclear"
+    intent_type: Literal["turns", "rules", "scenarios", "compound", "command", "unclear"] = Field(
+        description="Type of user intent: turns adjustment, rule modification, scenario editing, compound (rules + scenarios together), command, or unclear"
     )
     confidence: float = Field(
         ge=0, le=1, description="Confidence score for the classification"

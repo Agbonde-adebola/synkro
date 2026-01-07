@@ -518,6 +518,58 @@ class GenerationPipeline:
             elif intent.intent_type == "scenarios" and not self.scenario_editor:
                 display.show_error("Scenario editor not available")
 
+            elif intent.intent_type == "compound" and intent.rule_feedback and intent.scenario_feedback:
+                # Handle compound intent: rules first, then scenarios
+                try:
+                    # Step 1: Apply rule changes
+                    new_map, rule_summary = await self.hitl_editor.refine(
+                        session.current_logic_map,
+                        intent.rule_feedback,
+                        policy.text,
+                    )
+
+                    is_valid, issues = self.hitl_editor.validate_refinement(
+                        session.current_logic_map,
+                        new_map,
+                    )
+
+                    if not is_valid:
+                        display.show_error(f"Invalid rule change: {', '.join(issues)}")
+                        continue
+
+                    # Show rule diff and apply
+                    display.display_diff(session.current_logic_map, new_map)
+                    session.apply_change(intent.rule_feedback, new_map)
+                    display.show_success(rule_summary)
+
+                    # Step 2: Apply scenario changes (using updated logic map)
+                    if self.scenario_editor:
+                        new_scenarios, new_dist, scenario_summary = await self.scenario_editor.refine(
+                            session.current_scenarios or [],
+                            session.current_distribution or {},
+                            intent.scenario_feedback,
+                            policy.text,
+                            session.current_logic_map,  # Now has the new rules
+                        )
+
+                        is_valid, issues = self.scenario_editor.validate_scenarios(
+                            new_scenarios,
+                            session.current_logic_map,
+                        )
+
+                        if is_valid:
+                            if session.current_scenarios:
+                                display.display_scenario_diff(session.current_scenarios, new_scenarios)
+                            session.apply_scenario_change(intent.scenario_feedback, new_scenarios, new_dist)
+                            display.show_success(scenario_summary)
+                        else:
+                            display.show_error(f"Invalid scenario edit: {', '.join(issues)}")
+                    else:
+                        display.show_error("Scenario editor not available for compound operation")
+
+                except Exception as e:
+                    display.show_error(f"Failed to apply compound change: {e}")
+
             elif intent.intent_type == "unclear":
                 display.show_error("Could not understand feedback. Try 'help' for examples.")
 
