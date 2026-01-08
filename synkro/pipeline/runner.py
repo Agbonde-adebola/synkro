@@ -439,13 +439,14 @@ class GenerationPipeline:
 
             # Classify intent via LLM
             scenario_count = len(session.current_scenarios) if session.current_scenarios else 0
-            intent = await classifier.classify(
-                feedback,
-                current_turns,
-                plan.complexity_level,
-                len(session.current_logic_map.rules),
-                scenario_count=scenario_count,
-            )
+            with display.spinner("Processing..."):
+                intent = await classifier.classify(
+                    feedback,
+                    current_turns,
+                    plan.complexity_level,
+                    len(session.current_logic_map.rules),
+                    scenario_count=scenario_count,
+                )
 
             if intent.intent_type == "turns" and intent.target_turns is not None:
                 # Handle turns change
@@ -464,17 +465,18 @@ class GenerationPipeline:
             elif intent.intent_type == "rules" and intent.rule_feedback:
                 # Handle rule change
                 try:
-                    new_map, changes_summary = await self.hitl_editor.refine(
-                        session.current_logic_map,
-                        intent.rule_feedback,
-                        policy.text,
-                    )
+                    with display.spinner("Updating rules..."):
+                        new_map, changes_summary = await self.hitl_editor.refine(
+                            session.current_logic_map,
+                            intent.rule_feedback,
+                            policy.text,
+                        )
 
-                    # Validate the refinement
-                    is_valid, issues = self.hitl_editor.validate_refinement(
-                        session.current_logic_map,
-                        new_map,
-                    )
+                        # Validate the refinement
+                        is_valid, issues = self.hitl_editor.validate_refinement(
+                            session.current_logic_map,
+                            new_map,
+                        )
 
                     if is_valid:
                         display.display_diff(session.current_logic_map, new_map)
@@ -490,19 +492,20 @@ class GenerationPipeline:
                 # Handle scenario change
                 try:
                     scenario_feedback = intent.scenario_feedback or feedback
-                    new_scenarios, new_dist, changes_summary = await self.scenario_editor.refine(
-                        session.current_scenarios or [],
-                        session.current_distribution or {},
-                        scenario_feedback,
-                        policy.text,
-                        session.current_logic_map,
-                    )
+                    with display.spinner("Updating scenarios..."):
+                        new_scenarios, new_dist, changes_summary = await self.scenario_editor.refine(
+                            session.current_scenarios or [],
+                            session.current_distribution or {},
+                            scenario_feedback,
+                            policy.text,
+                            session.current_logic_map,
+                        )
 
-                    # Validate the scenarios
-                    is_valid, issues = self.scenario_editor.validate_scenarios(
-                        new_scenarios,
-                        session.current_logic_map,
-                    )
+                        # Validate the scenarios
+                        is_valid, issues = self.scenario_editor.validate_scenarios(
+                            new_scenarios,
+                            session.current_logic_map,
+                        )
 
                     if is_valid:
                         if session.current_scenarios:
@@ -522,16 +525,17 @@ class GenerationPipeline:
                 # Handle compound intent: rules first, then scenarios
                 try:
                     # Step 1: Apply rule changes
-                    new_map, rule_summary = await self.hitl_editor.refine(
-                        session.current_logic_map,
-                        intent.rule_feedback,
-                        policy.text,
-                    )
+                    with display.spinner("Updating rules..."):
+                        new_map, rule_summary = await self.hitl_editor.refine(
+                            session.current_logic_map,
+                            intent.rule_feedback,
+                            policy.text,
+                        )
 
-                    is_valid, issues = self.hitl_editor.validate_refinement(
-                        session.current_logic_map,
-                        new_map,
-                    )
+                        is_valid, issues = self.hitl_editor.validate_refinement(
+                            session.current_logic_map,
+                            new_map,
+                        )
 
                     if not is_valid:
                         display.show_error(f"Invalid rule change: {', '.join(issues)}")
@@ -544,18 +548,19 @@ class GenerationPipeline:
 
                     # Step 2: Apply scenario changes (using updated logic map)
                     if self.scenario_editor:
-                        new_scenarios, new_dist, scenario_summary = await self.scenario_editor.refine(
-                            session.current_scenarios or [],
-                            session.current_distribution or {},
-                            intent.scenario_feedback,
-                            policy.text,
-                            session.current_logic_map,  # Now has the new rules
-                        )
+                        with display.spinner("Updating scenarios..."):
+                            new_scenarios, new_dist, scenario_summary = await self.scenario_editor.refine(
+                                session.current_scenarios or [],
+                                session.current_distribution or {},
+                                intent.scenario_feedback,
+                                policy.text,
+                                session.current_logic_map,  # Now has the new rules
+                            )
 
-                        is_valid, issues = self.scenario_editor.validate_scenarios(
-                            new_scenarios,
-                            session.current_logic_map,
-                        )
+                            is_valid, issues = self.scenario_editor.validate_scenarios(
+                                new_scenarios,
+                                session.current_logic_map,
+                            )
 
                         if is_valid:
                             if session.current_scenarios:

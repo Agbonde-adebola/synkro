@@ -162,6 +162,16 @@ class LogicMapDisplay:
         """Display a success message."""
         self.console.print(f"[green]✓[/green] {message}")
 
+    def spinner(self, message: str = "Processing..."):
+        """Context manager that shows a loading spinner.
+
+        Usage:
+            with display.spinner("Applying changes..."):
+                await some_llm_call()
+        """
+        from rich.status import Status
+        return Status(f"[cyan]{message}[/cyan]", spinner="dots", console=self.console)
+
     def display_session_state(
         self,
         plan: "Plan",
