@@ -83,17 +83,29 @@ class ProgressReporter(Protocol):
 
 
 
+class _NoOpContextManager:
+    """No-op context manager for SilentReporter spinner."""
+    def __enter__(self):
+        return self
+    def __exit__(self, *args):
+        pass
+
+
 class SilentReporter:
     """
     No-op reporter for testing and embedding.
-    
+
     Use this when you don't want any console output.
-    
+
     Examples:
         >>> generator = Generator(reporter=SilentReporter())
         >>> dataset = generator.generate(policy)  # No console output
     """
-    
+
+    def spinner(self, message: str = "Thinking..."):
+        """No-op spinner for silent mode."""
+        return _NoOpContextManager()
+
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:
         pass
     
@@ -135,15 +147,25 @@ class SilentReporter:
 class RichReporter:
     """
     Rich console reporter with progress bars and formatted output.
-    
+
     This is the default reporter that provides the familiar synkro CLI experience.
     """
-    
+
     def __init__(self):
         from rich.console import Console
         self.console = Console()
         self._progress = None
         self._current_task = None
+
+    def spinner(self, message: str = "Thinking..."):
+        """Context manager that shows a loading spinner.
+
+        Usage:
+            with reporter.spinner("Thinking..."):
+                await some_llm_call()
+        """
+        from rich.status import Status
+        return Status(f"[cyan]{message}[/cyan]", spinner="dots", console=self.console)
     
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:
         from rich.panel import Panel
@@ -318,6 +340,10 @@ class CallbackReporter:
         """Emit an event to the generic callback."""
         if self._on_progress:
             self._on_progress(event, data)
+
+    def spinner(self, message: str = "Thinking..."):
+        """No-op spinner for callback mode."""
+        return _NoOpContextManager()
 
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:
         self._emit("start", {"traces": traces, "model": model, "dataset_type": dataset_type})

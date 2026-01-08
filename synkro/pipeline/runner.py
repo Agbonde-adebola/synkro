@@ -209,7 +209,8 @@ class GenerationPipeline:
             from rich.console import Console
             Console().print("[dim]📂 Loaded Logic Map from checkpoint[/dim]")
         else:
-            logic_map = await self.logic_extraction_phase.execute(policy, logic_extractor)
+            with self.reporter.spinner("Extracting rules..."):
+                logic_map = await self.logic_extraction_phase.execute(policy, logic_extractor)
             if cm:
                 cm.save_logic_map(logic_map, policy_hash, traces, dataset_type)
 
@@ -224,9 +225,10 @@ class GenerationPipeline:
             from rich.console import Console
             Console().print(f"[dim]📂 Loaded {len(golden_scenarios)} scenarios from checkpoint[/dim]")
         else:
-            golden_scenarios, distribution = await self.golden_scenario_phase.execute(
-                policy, logic_map, plan, golden_scenario_gen, semaphore
-            )
+            with self.reporter.spinner("Generating scenarios..."):
+                golden_scenarios, distribution = await self.golden_scenario_phase.execute(
+                    policy, logic_map, plan, golden_scenario_gen, semaphore
+                )
             if cm:
                 cm.save_scenarios(golden_scenarios, distribution)
 
@@ -255,14 +257,15 @@ class GenerationPipeline:
                 # Generate only pending scenarios
                 pending_scenarios = [golden_scenarios[i] for i in pending_indices]
 
-                if is_tool_call and self.factory.has_tools:
-                    new_traces = await self.golden_tool_call_phase.execute(
-                        policy, logic_map, pending_scenarios, golden_tool_call_gen, semaphore, target_turns
-                    )
-                else:
-                    new_traces = await self.golden_trace_phase.execute(
-                        policy, logic_map, pending_scenarios, golden_response_gen, semaphore, target_turns
-                    )
+                with self.reporter.spinner("Generating responses..."):
+                    if is_tool_call and self.factory.has_tools:
+                        new_traces = await self.golden_tool_call_phase.execute(
+                            policy, logic_map, pending_scenarios, golden_tool_call_gen, semaphore, target_turns
+                        )
+                    else:
+                        new_traces = await self.golden_trace_phase.execute(
+                            policy, logic_map, pending_scenarios, golden_response_gen, semaphore, target_turns
+                        )
 
                 # Save new traces to checkpoint
                 if cm:
@@ -272,14 +275,15 @@ class GenerationPipeline:
             else:
                 all_traces = existing_traces
         else:
-            if is_tool_call and self.factory.has_tools:
-                all_traces = await self.golden_tool_call_phase.execute(
-                    policy, logic_map, golden_scenarios, golden_tool_call_gen, semaphore, target_turns
-                )
-            else:
-                all_traces = await self.golden_trace_phase.execute(
-                    policy, logic_map, golden_scenarios, golden_response_gen, semaphore, target_turns
-                )
+            with self.reporter.spinner("Generating responses..."):
+                if is_tool_call and self.factory.has_tools:
+                    all_traces = await self.golden_tool_call_phase.execute(
+                        policy, logic_map, golden_scenarios, golden_tool_call_gen, semaphore, target_turns
+                    )
+                else:
+                    all_traces = await self.golden_trace_phase.execute(
+                        policy, logic_map, golden_scenarios, golden_response_gen, semaphore, target_turns
+                    )
 
             # Save all traces to checkpoint
             if cm:
@@ -302,16 +306,17 @@ class GenerationPipeline:
             final_traces = list(all_traces)
             self.reporter.on_grading_skipped()
         else:
-            final_traces, pass_rate = await self.verification_phase.execute(
-                policy,
-                logic_map,
-                golden_scenarios,
-                list(all_traces),
-                verifier,
-                golden_refiner,
-                self.max_iterations,
-                semaphore,
-            )
+            with self.reporter.spinner("Verifying responses..."):
+                final_traces, pass_rate = await self.verification_phase.execute(
+                    policy,
+                    logic_map,
+                    golden_scenarios,
+                    list(all_traces),
+                    verifier,
+                    golden_refiner,
+                    self.max_iterations,
+                    semaphore,
+                )
             if cm:
                 cm.save_verified_traces(final_traces)
 
