@@ -444,6 +444,7 @@ class GenerationPipeline:
 
             # Classify intent via LLM
             scenario_count = len(session.current_scenarios) if session.current_scenarios else 0
+            history = session.get_history_for_prompt()
             with display.spinner("Processing..."):
                 intent = await classifier.classify(
                     feedback,
@@ -451,6 +452,7 @@ class GenerationPipeline:
                     plan.complexity_level,
                     len(session.current_logic_map.rules),
                     scenario_count=scenario_count,
+                    conversation_history=history,
                 )
 
             if intent.intent_type == "turns" and intent.target_turns is not None:
@@ -458,7 +460,9 @@ class GenerationPipeline:
                 turns_history.append(current_turns)
                 current_turns = intent.target_turns
                 reasoning = intent.turns_reasoning or "User preference"
-                display.show_success(f"Set to {current_turns} turns ({reasoning})")
+                summary = f"Set to {current_turns} turns ({reasoning})"
+                display.show_success(summary)
+                session.record_feedback(feedback, "turns", summary)
                 display.display_full_session_state(
                     plan,
                     session.current_logic_map,
@@ -475,6 +479,7 @@ class GenerationPipeline:
                             session.current_logic_map,
                             intent.rule_feedback,
                             policy.text,
+                            conversation_history=history,
                         )
 
                         # Validate the refinement
@@ -487,6 +492,7 @@ class GenerationPipeline:
                         display.display_diff(session.current_logic_map, new_map)
                         session.apply_change(intent.rule_feedback, new_map)
                         display.show_success(changes_summary)
+                        session.record_feedback(feedback, "rules", changes_summary)
                     else:
                         display.show_error(f"Invalid refinement: {', '.join(issues)}")
 
@@ -504,6 +510,7 @@ class GenerationPipeline:
                             scenario_feedback,
                             policy.text,
                             session.current_logic_map,
+                            conversation_history=history,
                         )
 
                         # Validate the scenarios
@@ -517,6 +524,7 @@ class GenerationPipeline:
                             display.display_scenario_diff(session.current_scenarios, new_scenarios)
                         session.apply_scenario_change(scenario_feedback, new_scenarios, new_dist)
                         display.show_success(changes_summary)
+                        session.record_feedback(feedback, "scenarios", changes_summary)
                     else:
                         display.show_error(f"Invalid scenario edit: {', '.join(issues)}")
 
@@ -535,6 +543,7 @@ class GenerationPipeline:
                             session.current_logic_map,
                             intent.rule_feedback,
                             policy.text,
+                            conversation_history=history,
                         )
 
                         is_valid, issues = self.hitl_editor.validate_refinement(
@@ -550,8 +559,11 @@ class GenerationPipeline:
                     display.display_diff(session.current_logic_map, new_map)
                     session.apply_change(intent.rule_feedback, new_map)
                     display.show_success(rule_summary)
+                    session.record_feedback(feedback, "rules", rule_summary)
 
                     # Step 2: Apply scenario changes (using updated logic map)
+                    # Get updated history after rule change
+                    updated_history = session.get_history_for_prompt()
                     if self.scenario_editor:
                         with display.spinner("Updating scenarios..."):
                             new_scenarios, new_dist, scenario_summary = await self.scenario_editor.refine(
@@ -560,6 +572,7 @@ class GenerationPipeline:
                                 intent.scenario_feedback,
                                 policy.text,
                                 session.current_logic_map,  # Now has the new rules
+                                conversation_history=updated_history,
                             )
 
                             is_valid, issues = self.scenario_editor.validate_scenarios(
@@ -572,6 +585,7 @@ class GenerationPipeline:
                                 display.display_scenario_diff(session.current_scenarios, new_scenarios)
                             session.apply_scenario_change(intent.scenario_feedback, new_scenarios, new_dist)
                             display.show_success(scenario_summary)
+                            session.record_feedback(feedback, "scenarios", scenario_summary)
                         else:
                             display.show_error(f"Invalid scenario edit: {', '.join(issues)}")
                     else:

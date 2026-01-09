@@ -54,6 +54,7 @@ class ScenarioEditor:
         user_feedback: str,
         policy_text: str,
         logic_map: LogicMap,
+        conversation_history: str = "No previous feedback in this session.",
     ) -> tuple[list[GoldenScenario], dict[str, int], str]:
         """
         Refine scenarios based on natural language feedback.
@@ -64,6 +65,7 @@ class ScenarioEditor:
             user_feedback: Natural language instruction from user
             policy_text: Original policy text for context
             logic_map: Logic Map for rule references
+            conversation_history: Formatted history of previous feedback in this session
 
         Returns:
             Tuple of (refined scenarios, updated distribution, changes summary)
@@ -80,6 +82,7 @@ class ScenarioEditor:
             distribution=distribution_str,
             policy_text=policy_text,
             user_feedback=user_feedback,
+            conversation_history=conversation_history,
         )
 
         # Generate structured output

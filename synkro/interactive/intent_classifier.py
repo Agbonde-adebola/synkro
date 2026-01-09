@@ -55,6 +55,7 @@ class HITLIntentClassifier:
         complexity_level: str,
         rule_count: int,
         scenario_count: int = 0,
+        conversation_history: str = "No previous feedback in this session.",
     ) -> HITLIntent:
         """
         Classify user input and extract structured intent.
@@ -65,6 +66,7 @@ class HITLIntentClassifier:
             complexity_level: Policy complexity level (simple/conditional/complex)
             rule_count: Number of rules in the Logic Map
             scenario_count: Number of scenarios generated
+            conversation_history: Formatted history of previous feedback in this session
 
         Returns:
             HITLIntent with classified intent_type and relevant fields populated
@@ -75,6 +77,7 @@ class HITLIntentClassifier:
             complexity_level=complexity_level,
             rule_count=rule_count,
             scenario_count=scenario_count,
+            conversation_history=conversation_history,
         )
 
         try:

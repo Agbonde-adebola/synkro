@@ -50,6 +50,7 @@ class LogicMapEditor:
         logic_map: LogicMap,
         user_feedback: str,
         policy_text: str,
+        conversation_history: str = "No previous feedback in this session.",
     ) -> tuple[LogicMap, str]:
         """
         Refine the Logic Map based on natural language feedback.
@@ -58,6 +59,7 @@ class LogicMapEditor:
             logic_map: Current Logic Map to refine
             user_feedback: Natural language instruction from user
             policy_text: Original policy text for context
+            conversation_history: Formatted history of previous feedback in this session
 
         Returns:
             Tuple of (refined LogicMap, changes summary string)
@@ -73,6 +75,7 @@ class LogicMapEditor:
             current_logic_map=current_map_str,
             policy_text=policy_text,
             user_feedback=user_feedback,
+            conversation_history=conversation_history,
         )
 
         # Generate structured output

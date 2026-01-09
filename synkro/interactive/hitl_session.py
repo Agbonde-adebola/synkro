@@ -10,6 +10,15 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class FeedbackEntry:
+    """Single feedback entry in conversation history."""
+
+    user_feedback: str
+    intent_type: str  # "turns", "rules", "scenarios"
+    action_summary: str  # "Added R015: No smoking policy"
+
+
+@dataclass
 class HITLSession:
     """
     Tracks state of an interactive Logic Map and Scenario editing session.
@@ -38,6 +47,9 @@ class HITLSession:
     scenario_history: list[tuple[str, list["GoldenScenario"], dict[str, int]]] = field(
         default_factory=list
     )
+
+    # Conversation history for context-aware feedback
+    conversation_history: list[FeedbackEntry] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Initialize current_logic_map from original."""
@@ -131,6 +143,7 @@ class HITLSession:
         """
         self.history.clear()
         self.scenario_history.clear()
+        self.conversation_history.clear()
         self.current_logic_map = self.original_logic_map
         self.current_scenarios = self.original_scenarios
         self.current_distribution = self.original_distribution
@@ -160,3 +173,33 @@ class HITLSession:
     def has_scenarios(self) -> bool:
         """Check if scenarios have been initialized."""
         return self.current_scenarios is not None
+
+    def record_feedback(self, feedback: str, intent_type: str, summary: str) -> None:
+        """
+        Record feedback for conversation context.
+
+        Args:
+            feedback: The user's original feedback text
+            intent_type: Type of intent ("turns", "rules", "scenarios")
+            summary: Summary of what action was taken
+        """
+        self.conversation_history.append(FeedbackEntry(feedback, intent_type, summary))
+
+    def get_history_for_prompt(self, max_entries: int = 5) -> str:
+        """
+        Format recent history for LLM prompts.
+
+        Args:
+            max_entries: Maximum number of entries to include
+
+        Returns:
+            Formatted string of recent feedback history
+        """
+        if not self.conversation_history:
+            return "No previous feedback in this session."
+
+        lines = []
+        for i, entry in enumerate(self.conversation_history[-max_entries:], 1):
+            lines.append(f"{i}. User: \"{entry.user_feedback}\"")
+            lines.append(f"   Result: {entry.action_summary}")
+        return "\n".join(lines)

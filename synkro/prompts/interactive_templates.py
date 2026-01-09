@@ -8,6 +8,9 @@ CURRENT LOGIC MAP:
 ORIGINAL POLICY (for reference):
 {policy_text}
 
+PREVIOUS FEEDBACK IN THIS SESSION:
+{conversation_history}
+
 USER FEEDBACK:
 {user_feedback}
 
@@ -68,6 +71,9 @@ CURRENT STATE:
 - Conversation turns: {current_turns} ({complexity_level} complexity)
 - Logic Map has {rule_count} rules
 - Scenarios: {scenario_count} total
+
+PREVIOUS FEEDBACK IN THIS SESSION:
+{conversation_history}
 
 USER FEEDBACK: "{user_input}"
 
@@ -133,6 +139,9 @@ CURRENT DISTRIBUTION:
 
 ORIGINAL POLICY (for context):
 {policy_text}
+
+PREVIOUS FEEDBACK IN THIS SESSION:
+{conversation_history}
 
 USER FEEDBACK:
 {user_feedback}
