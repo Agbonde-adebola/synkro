@@ -232,6 +232,77 @@ high_quality = dataset.filter(passed=True)
 high_quality.save("training.jsonl")
 ```
 
+## Eval API
+
+Generate test scenarios and grade your own model's responses against policy compliance.
+
+```python
+import synkro
+
+# Generate scenarios with ground truth (no synthetic responses)
+result = synkro.generate_scenarios(
+    policy="Expenses over $50 require manager approval...",
+    count=100,
+)
+
+# Each scenario has ground truth labels
+for scenario in result.scenarios:
+    print(scenario.user_message)       # "Can I expense a $200 dinner?"
+    print(scenario.expected_outcome)   # "Requires manager approval per R001"
+    print(scenario.target_rule_ids)    # ["R001", "R003"]
+    print(scenario.scenario_type)      # "positive" | "negative" | "edge_case"
+
+# Grade YOUR model's responses
+for scenario in result.scenarios:
+    response = my_model(scenario.user_message)  # Your model
+    grade = synkro.grade(response, scenario, policy)
+
+    if not grade.passed:
+        print(f"Failed: {grade.feedback}")
+```
+
+### When to Use
+
+| Use Case | API |
+|----------|-----|
+| Generate training data | `synkro.generate()` |
+| Generate eval scenarios | `synkro.generate_scenarios()` |
+| Grade external model | `synkro.grade()` |
+
+### Scenario Types
+
+Scenarios are generated with balanced coverage:
+
+| Type | % | Description |
+|------|---|-------------|
+| `positive` | 35% | Happy path - user meets all criteria |
+| `negative` | 30% | Violations - user fails one criterion |
+| `edge_case` | 25% | Boundary conditions at exact limits |
+| `irrelevant` | 10% | Outside policy scope |
+
+### EvalScenario Fields
+
+```python
+scenario.user_message      # The test input
+scenario.expected_outcome  # Ground truth behavior
+scenario.target_rule_ids   # Rules being tested
+scenario.scenario_type     # positive/negative/edge_case/irrelevant
+scenario.category          # Policy category
+scenario.context           # Additional context
+```
+
+### Temperature
+
+Use `temperature` to control output diversity:
+
+```python
+# High temp for diverse scenario coverage
+result = synkro.generate_scenarios(policy, temperature=0.8)
+
+# Low temp for deterministic training data
+dataset = synkro.generate(policy, temperature=0.2)
+```
+
 ## Cost & Performance
 
 Approximate costs using Gemini 2.5 Flash (multi-turn conversations):
