@@ -48,13 +48,17 @@ class LangfuseFormatter:
         examples = []
 
         for trace in traces:
+            # Use assistant_message if available, otherwise use expected_outcome
+            # This handles both full traces and scenario-only generation
+            answer = trace.assistant_message or trace.scenario.expected_outcome or ""
+
             example = {
                 "input": {
                     "question": trace.user_message,
                     "context": trace.scenario.context or "",
                 },
                 "expectedOutput": {
-                    "answer": trace.assistant_message,
+                    "answer": answer,
                     "expected_outcome": trace.scenario.expected_outcome or "",
                 },
                 "metadata": {

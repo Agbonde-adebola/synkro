@@ -115,32 +115,44 @@ class GoldenScenarioGenerator:
 
     def _calculate_type_distribution(self, total: int) -> dict[ScenarioType, int]:
         """Calculate how many scenarios of each type to generate."""
-        counts = {}
-        remaining = total
+        counts = {
+            ScenarioType.POSITIVE: 0,
+            ScenarioType.NEGATIVE: 0,
+            ScenarioType.EDGE_CASE: 0,
+            ScenarioType.IRRELEVANT: 0,
+        }
 
-        # For small counts, prioritize non-IRRELEVANT types
-        # IRRELEVANT should only appear when we have enough scenarios
-        priority_order = [
-            ScenarioType.POSITIVE,
-            ScenarioType.NEGATIVE,
-            ScenarioType.EDGE_CASE,
-            ScenarioType.IRRELEVANT,  # Last priority
-        ]
+        if total == 0:
+            return counts
 
-        if total <= 3:
-            # For very small counts, assign one to each priority type until exhausted
-            for stype in priority_order:
-                if remaining > 0:
-                    counts[stype] = 1
-                    remaining -= 1
-                else:
-                    counts[stype] = 0
+        if total == 1:
+            # Single scenario - use the configured distribution ratio to pick type
+            # This ensures variety across categories
+            import random
+            types = list(self.distribution.keys())
+            weights = list(self.distribution.values())
+            chosen = random.choices(types, weights=weights, k=1)[0]
+            counts[chosen] = 1
+        elif total == 2:
+            # Two scenarios - always include variety (positive + one other)
+            counts[ScenarioType.POSITIVE] = 1
+            # Randomly pick between negative and edge_case for the second
+            import random
+            other = random.choice([ScenarioType.NEGATIVE, ScenarioType.EDGE_CASE])
+            counts[other] = 1
+        elif total == 3:
+            # Three scenarios - positive, negative, edge_case
+            counts[ScenarioType.POSITIVE] = 1
+            counts[ScenarioType.NEGATIVE] = 1
+            counts[ScenarioType.EDGE_CASE] = 1
         else:
-            # Normal distribution for larger counts
-            for i, (stype, ratio) in enumerate(self.distribution.items()):
-                if i == len(self.distribution) - 1:
+            # Normal distribution for larger counts (4+)
+            remaining = total
+            types_list = list(self.distribution.items())
+            for i, (stype, ratio) in enumerate(types_list):
+                if i == len(types_list) - 1:
                     # Last type gets remaining to ensure total is exact
-                    counts[stype] = remaining
+                    counts[stype] = max(0, remaining)
                 else:
                     count = round(total * ratio)
                     counts[stype] = count
@@ -285,6 +297,8 @@ class GoldenScenarioGenerator:
         """
         Generate scenarios for multiple categories with distribution tracking.
 
+        Uses GLOBAL distribution across all categories to ensure proper type variety.
+
         Args:
             policy_text: The policy document text
             logic_map: The extracted Logic Map
@@ -293,10 +307,39 @@ class GoldenScenarioGenerator:
         Returns:
             Tuple of (all scenarios, type distribution counts)
         """
-        # Generate for each category in parallel
+        # Calculate GLOBAL distribution across all scenarios
+        total_scenarios = sum(cat.count for cat in categories)
+        global_distribution = self._calculate_type_distribution(total_scenarios)
+
+        # Create a pool of types to assign to categories
+        type_pool = []
+        for stype, count in global_distribution.items():
+            type_pool.extend([stype] * count)
+
+        # Shuffle for randomness, but maintain overall distribution
+        import random
+        random.shuffle(type_pool)
+
+        # Assign type distributions to each category from the pool
+        category_type_counts = []
+        pool_idx = 0
+        for cat in categories:
+            cat_types = {
+                ScenarioType.POSITIVE: 0,
+                ScenarioType.NEGATIVE: 0,
+                ScenarioType.EDGE_CASE: 0,
+                ScenarioType.IRRELEVANT: 0,
+            }
+            for _ in range(cat.count):
+                if pool_idx < len(type_pool):
+                    cat_types[type_pool[pool_idx]] += 1
+                    pool_idx += 1
+            category_type_counts.append(cat_types)
+
+        # Generate for each category with assigned type distributions
         tasks = [
-            self.generate(policy_text, logic_map, cat, cat.count)
-            for cat in categories
+            self._generate_with_distribution(policy_text, logic_map, cat, type_counts)
+            for cat, type_counts in zip(categories, category_type_counts)
         ]
         results = await asyncio.gather(*tasks)
 
@@ -305,7 +348,7 @@ class GoldenScenarioGenerator:
         for batch in results:
             all_scenarios.extend(batch)
 
-        # Calculate distribution
+        # Calculate actual distribution from results
         distribution = {
             ScenarioType.POSITIVE.value: 0,
             ScenarioType.NEGATIVE.value: 0,
@@ -316,6 +359,25 @@ class GoldenScenarioGenerator:
             distribution[s.scenario_type.value] += 1
 
         return all_scenarios, distribution
+
+    async def _generate_with_distribution(
+        self,
+        policy_text: str,
+        logic_map: LogicMap,
+        category: Category,
+        type_counts: dict[ScenarioType, int],
+    ) -> list[GoldenScenario]:
+        """Generate scenarios for a category with a specific type distribution."""
+        total_count = sum(type_counts.values())
+        if total_count == 0:
+            return []
+
+        return await self._generate_batched(
+            policy_text=policy_text,
+            logic_map=logic_map,
+            category=category,
+            type_counts=type_counts,
+        )
 
     def get_distribution_summary(self, scenarios: list[GoldenScenario]) -> dict[str, int]:
         """Get a summary of scenario type distribution."""

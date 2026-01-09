@@ -24,10 +24,10 @@ class LangSmithFormatter:
                 "context": "Expense: $200, No receipt"
             },
             "outputs": {
-                "answer": "All expenses require receipts..."
+                "answer": "All expenses require receipts...",
+                "expected_outcome": "Deny - missing receipt violates R003"
             },
             "metadata": {
-                "expected_outcome": "Deny - missing receipt",
                 "ground_truth_rules": ["R003"],
                 "difficulty": "negative",
                 "category": "Receipt Requirements"
@@ -48,16 +48,20 @@ class LangSmithFormatter:
         examples = []
 
         for trace in traces:
+            # Use assistant_message if available, otherwise use expected_outcome
+            # This handles both full traces and scenario-only generation
+            answer = trace.assistant_message or trace.scenario.expected_outcome or ""
+
             example = {
                 "inputs": {
                     "question": trace.user_message,
                     "context": trace.scenario.context or "",
                 },
                 "outputs": {
-                    "answer": trace.assistant_message,
+                    "answer": answer,
+                    "expected_outcome": trace.scenario.expected_outcome or "",
                 },
                 "metadata": {
-                    "expected_outcome": trace.scenario.expected_outcome or "",
                     "ground_truth_rules": trace.scenario.target_rule_ids or [],
                     "difficulty": trace.scenario.scenario_type or "unknown",
                     "category": trace.scenario.category or "",

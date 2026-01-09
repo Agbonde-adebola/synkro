@@ -33,7 +33,5 @@ result = synkro.generate_scenarios(
 print(f"\nGenerated {len(result.scenarios)} eval scenarios")
 print(f"Distribution: {result.distribution}")
 
-# Save to LangSmith format
-output_path = "eval_scenarios.jsonl"
-result.save(output_path, format="langsmith")
-print(f"\nSaved to {output_path}")
+# Save to LangSmith format (auto-names: synkro_eval_YYYY-MM-DD_HHMM.jsonl)
+result.save(format="langsmith")

@@ -57,9 +57,13 @@ class QAFormatter:
         examples = []
 
         for trace in traces:
+            # Use assistant_message if available, otherwise use expected_outcome
+            # This handles both full traces and scenario-only generation
+            answer = trace.assistant_message or trace.scenario.expected_outcome or ""
+
             example = {
                 "question": trace.user_message,
-                "answer": trace.assistant_message,
+                "answer": answer,
                 "expected_outcome": trace.scenario.expected_outcome or "",
                 "ground_truth_rules": trace.scenario.target_rule_ids or [],
                 "difficulty": trace.scenario.scenario_type or "unknown",

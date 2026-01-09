@@ -111,22 +111,34 @@ class ScenariosResult:
     def __iter__(self):
         return iter(self.scenarios)
 
-    def save(self, path: str, format: str = "langsmith") -> "ScenariosResult":
+    def save(self, path: str | None = None, format: str = "langsmith") -> "ScenariosResult":
         """
         Save scenarios to a JSONL file.
 
         Args:
-            path: Output file path
+            path: Output file path (auto-generates if not provided)
             format: Output format - "langsmith", "langfuse", or "qa"
 
         Returns:
             Self for method chaining
+
+        Example:
+            >>> result.save()  # Auto-names: synkro_eval_2024-01-15_1430.jsonl
+            >>> result.save("my_eval.jsonl")
+            >>> result.save(format="langfuse")
         """
         import json
         from pathlib import Path
+        from datetime import datetime
         from rich.console import Console
 
         console = Console()
+
+        # Auto-generate filename if not provided
+        if path is None:
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+            path = f"synkro_eval_{timestamp}.jsonl"
+
         path = Path(path)
 
         examples = []
@@ -137,9 +149,11 @@ class ScenariosResult:
                         "question": scenario.user_message,
                         "context": scenario.context or "",
                     },
-                    "outputs": {},  # No synthetic response - user will fill this
-                    "metadata": {
+                    "outputs": {
+                        "answer": scenario.expected_outcome or "",
                         "expected_outcome": scenario.expected_outcome or "",
+                    },
+                    "metadata": {
                         "ground_truth_rules": scenario.target_rule_ids or [],
                         "difficulty": scenario.scenario_type or "unknown",
                         "category": scenario.category or "",
@@ -152,6 +166,7 @@ class ScenariosResult:
                         "context": scenario.context or "",
                     },
                     "expectedOutput": {
+                        "answer": scenario.expected_outcome or "",
                         "expected_outcome": scenario.expected_outcome or "",
                     },
                     "metadata": {
@@ -163,6 +178,7 @@ class ScenariosResult:
             elif format == "qa":
                 example = {
                     "question": scenario.user_message,
+                    "answer": scenario.expected_outcome or "",
                     "context": scenario.context or "",
                     "expected_outcome": scenario.expected_outcome or "",
                     "ground_truth_rules": scenario.target_rule_ids or [],
