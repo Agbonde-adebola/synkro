@@ -185,6 +185,30 @@ high_quality = dataset.filter(passed=True)
 high_quality.save("training.jsonl")
 ```
 
+## Local LLMs
+
+Run with Ollama, vLLM, or any OpenAI-compatible endpoint:
+
+```python
+from synkro import create_pipeline
+from synkro.models import Local
+
+# Ollama
+pipeline = create_pipeline(model=Local.OLLAMA("llama3.2"))
+
+# vLLM
+pipeline = create_pipeline(model=Local.VLLM("mistral-7b"))
+
+# Custom endpoint
+pipeline = create_pipeline(model=Local.CUSTOM("my-model", endpoint="http://localhost:8080"))
+```
+
+**CLI:**
+```bash
+synkro generate policy.pdf --provider ollama --model llama3.2
+synkro generate policy.pdf --provider vllm --endpoint http://localhost:8000
+```
+
 ## CLI
 
 ```bash
@@ -199,12 +223,18 @@ synkro generate https://example.com/policy -o training.jsonl
 
 # Skip interactive mode
 synkro generate policy.pdf --no-interactive
+
+# Quick demo with built-in policy
+synkro demo
 ```
 
 **Options:**
 - `--traces, -n` - Number of traces (default: 20)
 - `--output, -o` - Output file path
 - `--model, -m` - Model for generation
+- `--format, -f` - Output format: `sft` (default) or `qa`
+- `--provider, -p` - LLM provider for local models (`ollama`, `vllm`)
+- `--endpoint, -e` - Custom API endpoint URL
 - `--interactive/-i, --no-interactive/-I` - Review/edit extracted rules before generation (default: on)
 
 ## Interactive Mode
@@ -244,6 +274,41 @@ You can adjust both **conversation turns** and **rules** using natural language:
 | `"add a rule for..."` | Add new rule |
 
 Commands: `done`, `undo`, `reset`, `show R001`, `help`
+
+## Advanced Features
+
+### Checkpointing
+
+Resume interrupted generations:
+
+```python
+pipeline = create_pipeline(checkpoint_dir="./checkpoints")
+dataset = pipeline.generate(policy, traces=100)  # Resumes from checkpoint
+```
+
+### Dataset Operations
+
+```python
+# Filter by quality
+high_quality = dataset.filter(passed=True)
+
+# Remove duplicates
+unique = dataset.dedupe(threshold=0.85)
+
+# Check pass rate
+print(f"Pass rate: {dataset.passing_rate:.1%}")
+```
+
+### Folder Loading
+
+Generate from multiple documents at once:
+
+```python
+from synkro.core.policy import Policy
+
+policy = Policy.from_file("policies/")  # Loads all PDF, DOCX, TXT, MD files
+dataset = pipeline.generate(policy, traces=100)
+```
 
 ## Logic Map Inspection
 
