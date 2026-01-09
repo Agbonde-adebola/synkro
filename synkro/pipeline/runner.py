@@ -111,6 +111,79 @@ class ScenariosResult:
     def __iter__(self):
         return iter(self.scenarios)
 
+    def save(self, path: str, format: str = "langsmith") -> "ScenariosResult":
+        """
+        Save scenarios to a JSONL file.
+
+        Args:
+            path: Output file path
+            format: Output format - "langsmith", "langfuse", or "qa"
+
+        Returns:
+            Self for method chaining
+        """
+        import json
+        from pathlib import Path
+        from rich.console import Console
+
+        console = Console()
+        path = Path(path)
+
+        examples = []
+        for scenario in self.scenarios:
+            if format == "langsmith":
+                example = {
+                    "inputs": {
+                        "question": scenario.user_message,
+                        "context": scenario.context or "",
+                    },
+                    "outputs": {},  # No synthetic response - user will fill this
+                    "metadata": {
+                        "expected_outcome": scenario.expected_outcome or "",
+                        "ground_truth_rules": scenario.target_rule_ids or [],
+                        "difficulty": scenario.scenario_type or "unknown",
+                        "category": scenario.category or "",
+                    },
+                }
+            elif format == "langfuse":
+                example = {
+                    "input": {
+                        "question": scenario.user_message,
+                        "context": scenario.context or "",
+                    },
+                    "expectedOutput": {
+                        "expected_outcome": scenario.expected_outcome or "",
+                    },
+                    "metadata": {
+                        "ground_truth_rules": scenario.target_rule_ids or [],
+                        "difficulty": scenario.scenario_type or "unknown",
+                        "category": scenario.category or "",
+                    },
+                }
+            elif format == "qa":
+                example = {
+                    "question": scenario.user_message,
+                    "context": scenario.context or "",
+                    "expected_outcome": scenario.expected_outcome or "",
+                    "ground_truth_rules": scenario.target_rule_ids or [],
+                    "difficulty": scenario.scenario_type or "unknown",
+                    "category": scenario.category or "",
+                }
+            else:
+                raise ValueError(f"Unknown format: {format}. Use 'langsmith', 'langfuse', or 'qa'")
+
+            examples.append(example)
+
+        with open(path, "w") as f:
+            for example in examples:
+                f.write(json.dumps(example) + "\n")
+
+        file_size = path.stat().st_size
+        size_str = f"{file_size / 1024:.1f} KB" if file_size < 1024 * 1024 else f"{file_size / 1024 / 1024:.1f} MB"
+        console.print(f"[green]📁 Saved:[/green] {path} ({size_str})")
+
+        return self
+
 
 class GenerationPipeline:
     """

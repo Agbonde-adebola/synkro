@@ -33,6 +33,11 @@ result = synkro.generate_scenarios(
 print(f"\nGenerated {len(result.scenarios)} eval scenarios")
 print(f"Distribution: {result.distribution}")
 
+# Save to LangSmith format
+output_path = "eval_scenarios.jsonl"
+result.save(output_path, format="langsmith")
+print(f"\nSaved to {output_path}")
+
 # Preview scenarios
 for i, scenario in enumerate(result.scenarios):
     print(f"\n--- Scenario {i+1} ---")
