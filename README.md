@@ -7,9 +7,10 @@ Turn policies, handbooks, and documentation into high-quality training data for 
 - **Quality Evaluation** - Each response is graded and automatically refined if it fails
 - **Multiple Formats** - Conversation (multi-turn), Instruction (single-turn), and Tool Calling
 - **Tool Call Training** - Generate OpenAI function calling format for teaching models to use custom tools
-- **Top LLM Providers** - OpenAI, Anthropic, and Google
+- **Top LLM Providers** - OpenAI, Anthropic, Google, and local models (Ollama, vLLM)
 - **File Support** - PDF, DOCX, TXT, Markdown, URLs
 - **CLI Included** - Generate datasets from the command line
+- **Cost Tracking** - See total cost and LLM call breakdown after each generation
 
 ## Installation
 

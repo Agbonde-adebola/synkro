@@ -67,7 +67,15 @@ class ProgressReporter(Protocol):
         """Called when grading is skipped."""
         ...
     
-    def on_complete(self, dataset_size: int, elapsed_seconds: float, pass_rate: float | None) -> None:
+    def on_complete(
+        self,
+        dataset_size: int,
+        elapsed_seconds: float,
+        pass_rate: float | None,
+        total_cost: float | None = None,
+        generation_calls: int | None = None,
+        grading_calls: int | None = None,
+    ) -> None:
         """Called when generation is complete."""
         ...
 
@@ -133,7 +141,15 @@ class SilentReporter:
     def on_grading_skipped(self) -> None:
         pass
 
-    def on_complete(self, dataset_size: int, elapsed_seconds: float, pass_rate: float | None) -> None:
+    def on_complete(
+        self,
+        dataset_size: int,
+        elapsed_seconds: float,
+        pass_rate: float | None,
+        total_cost: float | None = None,
+        generation_calls: int | None = None,
+        grading_calls: int | None = None,
+    ) -> None:
         pass
 
     def on_logic_map_complete(self, logic_map) -> None:
@@ -215,7 +231,15 @@ class RichReporter:
     def on_grading_skipped(self) -> None:
         self.console.print(f"  [dim]⚖️  Grading skipped[/dim]")
     
-    def on_complete(self, dataset_size: int, elapsed_seconds: float, pass_rate: float | None) -> None:
+    def on_complete(
+        self,
+        dataset_size: int,
+        elapsed_seconds: float,
+        pass_rate: float | None,
+        total_cost: float | None = None,
+        generation_calls: int | None = None,
+        grading_calls: int | None = None,
+    ) -> None:
         from rich.panel import Panel
         from rich.table import Table
 
@@ -228,6 +252,10 @@ class RichReporter:
         summary.add_row("✅ Done!", f"Generated {dataset_size} traces in {elapsed_str}")
         if pass_rate is not None:
             summary.add_row("📊 Quality:", f"{pass_rate:.0f}% passed verification")
+        if total_cost is not None and total_cost > 0:
+            summary.add_row("💰 Cost:", f"${total_cost:.4f}")
+        if generation_calls is not None and grading_calls is not None:
+            summary.add_row("🔄 LLM Calls:", f"{generation_calls} generation, {grading_calls} grading")
         self.console.print(Panel(summary, border_style="green", title="[green]Complete[/green]"))
         self.console.print()
 
@@ -387,8 +415,23 @@ class CallbackReporter:
     def on_grading_skipped(self) -> None:
         self._emit("grading_skipped", {})
 
-    def on_complete(self, dataset_size: int, elapsed_seconds: float, pass_rate: float | None) -> None:
-        self._emit("complete", {"dataset_size": dataset_size, "elapsed_seconds": elapsed_seconds, "pass_rate": pass_rate})
+    def on_complete(
+        self,
+        dataset_size: int,
+        elapsed_seconds: float,
+        pass_rate: float | None,
+        total_cost: float | None = None,
+        generation_calls: int | None = None,
+        grading_calls: int | None = None,
+    ) -> None:
+        self._emit("complete", {
+            "dataset_size": dataset_size,
+            "elapsed_seconds": elapsed_seconds,
+            "pass_rate": pass_rate,
+            "total_cost": total_cost,
+            "generation_calls": generation_calls,
+            "grading_calls": grading_calls,
+        })
         if self._on_complete_cb:
             self._on_complete_cb(dataset_size, elapsed_seconds, pass_rate)
 

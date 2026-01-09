@@ -4,7 +4,7 @@ import warnings
 from typing import TypeVar, Type, overload
 
 import litellm
-from litellm import acompletion, supports_response_schema
+from litellm import acompletion, supports_response_schema, completion_cost
 from pydantic import BaseModel
 
 # Configure litellm
@@ -101,6 +101,10 @@ class LLM:
         self.max_tokens = max_tokens
         self._api_key = api_key
 
+        # Cost and usage tracking
+        self._total_cost = 0.0
+        self._call_count = 0
+
     async def generate(self, prompt: str, system: str | None = None) -> str:
         """
         Generate a text response.
@@ -129,6 +133,7 @@ class LLM:
             kwargs["api_base"] = self._base_url
 
         response = await acompletion(**kwargs)
+        self._track_cost(response)
         return response.choices[0].message.content
 
     async def generate_batch(
@@ -222,6 +227,7 @@ class LLM:
             kwargs["api_base"] = self._base_url
 
         response = await acompletion(**kwargs)
+        self._track_cost(response)
         return response_model.model_validate_json(response.choices[0].message.content)
 
     async def generate_chat(
@@ -259,6 +265,7 @@ class LLM:
                 kwargs["api_base"] = self._base_url
 
             response = await acompletion(**kwargs)
+            self._track_cost(response)
             return response_model.model_validate_json(response.choices[0].message.content)
 
         kwargs = {
@@ -273,5 +280,30 @@ class LLM:
             kwargs["api_base"] = self._base_url
 
         response = await acompletion(**kwargs)
+        self._track_cost(response)
         return response.choices[0].message.content
 
+    def _track_cost(self, response) -> None:
+        """Track cost and call count from a response."""
+        self._call_count += 1
+        try:
+            cost = completion_cost(completion_response=response)
+            self._total_cost += cost
+        except Exception:
+            # Some models may not have pricing info
+            pass
+
+    @property
+    def total_cost(self) -> float:
+        """Get total cost of all LLM calls made by this client."""
+        return self._total_cost
+
+    @property
+    def call_count(self) -> int:
+        """Get total number of LLM calls made by this client."""
+        return self._call_count
+
+    def reset_tracking(self) -> None:
+        """Reset cost and call tracking."""
+        self._total_cost = 0.0
+        self._call_count = 0

@@ -322,9 +322,20 @@ class GenerationPipeline:
 
             self.reporter.on_grading_complete(final_traces, pass_rate)
 
-        # Report completion
+        # Report completion with cost tracking
         elapsed = (datetime.now() - start_time).total_seconds()
-        self.reporter.on_complete(len(final_traces), elapsed, pass_rate)
+        total_cost = (
+            self.factory.generation_llm.total_cost +
+            self.factory.grading_llm.total_cost
+        )
+        self.reporter.on_complete(
+            len(final_traces),
+            elapsed,
+            pass_rate,
+            total_cost=total_cost,
+            generation_calls=self.factory.generation_llm.call_count,
+            grading_calls=self.factory.grading_llm.call_count,
+        )
 
         dataset = Dataset(traces=final_traces)
 
