@@ -1,0 +1,98 @@
+"""Langfuse formatter for evaluation datasets."""
+
+import json
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from synkro.types.core import Trace
+
+
+class LangfuseFormatter:
+    """
+    Format traces for Langfuse datasets.
+
+    Langfuse format uses input/expectedOutput structure:
+    - input: any JSON object with input data
+    - expectedOutput: any JSON object with expected output
+    - metadata: optional key-value pairs
+
+    Example output:
+        {
+            "input": {
+                "question": "Can I submit a $200 expense without a receipt?",
+                "context": "Expense: $200, No receipt"
+            },
+            "expectedOutput": {
+                "answer": "All expenses require receipts...",
+                "expected_outcome": "Deny - missing receipt"
+            },
+            "metadata": {
+                "ground_truth_rules": ["R003"],
+                "difficulty": "negative",
+                "category": "Receipt Requirements"
+            }
+        }
+    """
+
+    def format(self, traces: list["Trace"]) -> list[dict]:
+        """
+        Format traces as Langfuse dataset items.
+
+        Args:
+            traces: List of traces to format
+
+        Returns:
+            List of Langfuse-compatible dataset items
+        """
+        examples = []
+
+        for trace in traces:
+            example = {
+                "input": {
+                    "question": trace.user_message,
+                    "context": trace.scenario.context or "",
+                },
+                "expectedOutput": {
+                    "answer": trace.assistant_message,
+                    "expected_outcome": trace.scenario.expected_outcome or "",
+                },
+                "metadata": {
+                    "ground_truth_rules": trace.scenario.target_rule_ids or [],
+                    "difficulty": trace.scenario.scenario_type or "unknown",
+                    "category": trace.scenario.category or "",
+                    "passed": trace.grade.passed if trace.grade else None,
+                },
+            }
+
+            examples.append(example)
+
+        return examples
+
+    def save(self, traces: list["Trace"], path: str | Path) -> None:
+        """
+        Save formatted traces to a JSONL file.
+
+        Args:
+            traces: List of traces to save
+            path: Output file path
+        """
+        path = Path(path)
+        examples = self.format(traces)
+
+        with open(path, "w") as f:
+            for example in examples:
+                f.write(json.dumps(example) + "\n")
+
+    def to_jsonl(self, traces: list["Trace"]) -> str:
+        """
+        Convert traces to JSONL string.
+
+        Args:
+            traces: List of traces to convert
+
+        Returns:
+            JSONL formatted string
+        """
+        examples = self.format(traces)
+        return "\n".join(json.dumps(e) for e in examples)
