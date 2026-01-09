@@ -153,6 +153,64 @@ IRRELEVANT_SCENARIO_INSTRUCTIONS = """For IRRELEVANT scenarios:
 - Example: Asking about company history when policy only covers refunds"""
 
 
+GOLDEN_SCENARIO_BATCHED_PROMPT = """You are a scenario generator creating diverse test cases for a policy.
+
+POLICY DOCUMENT:
+{policy_text}
+
+LOGIC MAP (Extracted Rules):
+{logic_map}
+
+CATEGORY: {category}
+
+GENERATE EXACTLY:
+- {positive_count} POSITIVE scenarios (happy path - user meets ALL criteria)
+- {negative_count} NEGATIVE scenarios (violation - user fails EXACTLY ONE criterion)
+- {edge_case_count} EDGE_CASE scenarios (boundary - user is at exact limits)
+- {irrelevant_count} IRRELEVANT scenarios (query not covered by policy)
+
+SCENARIO TYPE DEFINITIONS:
+- POSITIVE: User meets ALL criteria, rules should approve/allow
+- NEGATIVE: User fails EXACTLY ONE criterion, rules should deny/reject
+- EDGE_CASE: User is at exact limits (e.g., day 30 of 30-day window)
+- IRRELEVANT: Query not covered by the policy at all
+
+REQUIREMENTS FOR EACH SCENARIO:
+1. description: The user's EXACT words - a realistic request/question
+   - This is LITERALLY what the user says, nothing more
+   - Should be natural and conversational
+   - Example: "I'd like to submit an expense for a client lunch"
+
+2. context: Background facts for evaluation that the user has NOT stated
+   - Include specific details: amounts, dates, receipt status, approval status
+   - These details inform the assistant's reasoning but are NOT in the user's message
+   - Example: "Expense amount: $180, Purchase date: 5 days ago, Has digital receipt"
+
+3. scenario_type: Must be one of "positive", "negative", "edge_case", "irrelevant"
+4. target_rule_ids: Which rules from the Logic Map this scenario tests
+5. expected_outcome: What the correct response should do based on the rules
+
+CRITICAL - DIVERSITY:
+- Each scenario within a type should test DIFFERENT rules or rule combinations
+- Vary user tone (formal, casual, frustrated, confused)
+- Vary complexity (simple single-rule to multi-rule scenarios)
+- Avoid repetitive patterns
+
+CRITICAL - DESCRIPTION VS CONTEXT SEPARATION:
+- The description should NOT contain specific amounts, dates, or status details
+- Those details belong in context ONLY
+
+BAD EXAMPLE:
+  description: "I want to submit a $180 expense from last week with receipt"
+  context: "Has manager approval"
+
+GOOD EXAMPLE:
+  description: "I'd like to submit an expense for a client lunch"
+  context: "Expense amount: $180, Purchase date: 5 days ago, Has digital receipt, Has manager approval"
+
+Generate all {total_count} scenarios now, ensuring the exact counts per type."""
+
+
 # =============================================================================
 # STAGE 3: TRACE SYNTHESIS (The Thinker)
 # =============================================================================
@@ -462,6 +520,7 @@ The trace should include:
 __all__ = [
     "LOGIC_EXTRACTION_PROMPT",
     "GOLDEN_SCENARIO_PROMPT",
+    "GOLDEN_SCENARIO_BATCHED_PROMPT",
     "POSITIVE_SCENARIO_INSTRUCTIONS",
     "NEGATIVE_SCENARIO_INSTRUCTIONS",
     "EDGE_CASE_SCENARIO_INSTRUCTIONS",

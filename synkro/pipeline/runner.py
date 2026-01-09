@@ -223,6 +223,9 @@ class GenerationPipeline:
         # =====================================================================
         # STAGE 2: Scenario Synthesis (The Adversary)
         # =====================================================================
+        # Track scenario generation calls
+        scenario_calls_start = self.factory.generation_llm.call_count
+
         if resuming and cm and cm.stage in ("scenarios", "traces", "complete"):
             golden_scenarios = cm.get_scenarios()
             distribution = cm.load().scenario_distribution
@@ -236,6 +239,7 @@ class GenerationPipeline:
             if cm:
                 cm.save_scenarios(golden_scenarios, distribution)
 
+        scenario_calls = self.factory.generation_llm.call_count - scenario_calls_start
         self.reporter.on_golden_scenarios_complete(golden_scenarios, distribution)
 
         # =====================================================================
@@ -249,6 +253,9 @@ class GenerationPipeline:
         # =====================================================================
         # STAGE 3: Trace Synthesis (The Thinker)
         # =====================================================================
+        # Track response generation calls
+        response_calls_start = self.factory.generation_llm.call_count
+
         if resuming and cm and cm.stage in ("traces", "complete"):
             # Resume from checkpoint - get already completed traces
             existing_traces = cm.get_traces()
@@ -293,6 +300,7 @@ class GenerationPipeline:
             if cm:
                 cm.save_traces_batch(list(all_traces), list(range(len(all_traces))))
 
+        response_calls = self.factory.generation_llm.call_count - response_calls_start
         self.reporter.on_responses_complete(list(all_traces))
 
         # =====================================================================
@@ -339,6 +347,8 @@ class GenerationPipeline:
             total_cost=total_cost,
             generation_calls=self.factory.generation_llm.call_count,
             grading_calls=self.factory.grading_llm.call_count,
+            scenario_calls=scenario_calls,
+            response_calls=response_calls,
         )
 
         dataset = Dataset(traces=final_traces)

@@ -14,6 +14,7 @@ from synkro.types.core import Category
 from synkro.types.logic_map import LogicMap, GoldenScenario, ScenarioType
 from synkro.prompts.golden_templates import (
     GOLDEN_SCENARIO_PROMPT,
+    GOLDEN_SCENARIO_BATCHED_PROMPT,
     POSITIVE_SCENARIO_INSTRUCTIONS,
     NEGATIVE_SCENARIO_INSTRUCTIONS,
     EDGE_CASE_SCENARIO_INSTRUCTIONS,
@@ -90,6 +91,8 @@ class GoldenScenarioGenerator:
         """
         Generate scenarios for a category with balanced type distribution.
 
+        Uses batched generation (single LLM call per category) for efficiency.
+
         Args:
             policy_text: The policy document text
             logic_map: The extracted Logic Map (DAG of rules)
@@ -102,28 +105,13 @@ class GoldenScenarioGenerator:
         # Calculate counts per type based on distribution
         type_counts = self._calculate_type_distribution(count)
 
-        # Generate scenarios for each type in parallel
-        tasks = []
-        for scenario_type, type_count in type_counts.items():
-            if type_count > 0:
-                task = self._generate_type(
-                    policy_text=policy_text,
-                    logic_map=logic_map,
-                    category=category,
-                    scenario_type=scenario_type,
-                    count=type_count,
-                )
-                tasks.append(task)
-
-        # Gather all results
-        results = await asyncio.gather(*tasks)
-
-        # Flatten and return
-        scenarios = []
-        for batch in results:
-            scenarios.extend(batch)
-
-        return scenarios
+        # Use batched generation (single call for all types)
+        return await self._generate_batched(
+            policy_text=policy_text,
+            logic_map=logic_map,
+            category=category,
+            type_counts=type_counts,
+        )
 
     def _calculate_type_distribution(self, total: int) -> dict[ScenarioType, int]:
         """Calculate how many scenarios of each type to generate."""
@@ -159,6 +147,75 @@ class GoldenScenarioGenerator:
                     remaining -= count
 
         return counts
+
+    async def _generate_batched(
+        self,
+        policy_text: str,
+        logic_map: LogicMap,
+        category: Category,
+        type_counts: dict[ScenarioType, int],
+    ) -> list[GoldenScenario]:
+        """
+        Generate all scenario types in a single LLM call (batched).
+
+        This is more efficient than making separate calls per type.
+        Includes retry logic if the LLM doesn't return the exact count.
+        """
+        # Format Logic Map for prompt
+        logic_map_str = self._format_logic_map(logic_map)
+
+        # Calculate total
+        total_count = sum(type_counts.values())
+
+        # Build batched prompt
+        prompt = GOLDEN_SCENARIO_BATCHED_PROMPT.format(
+            policy_text=policy_text,
+            logic_map=logic_map_str,
+            category=category.name,
+            positive_count=type_counts.get(ScenarioType.POSITIVE, 0),
+            negative_count=type_counts.get(ScenarioType.NEGATIVE, 0),
+            edge_case_count=type_counts.get(ScenarioType.EDGE_CASE, 0),
+            irrelevant_count=type_counts.get(ScenarioType.IRRELEVANT, 0),
+            total_count=total_count,
+        )
+
+        # Generate with retry (max 1 retry if count is wrong)
+        scenarios = await self._generate_and_parse(prompt, category.name, total_count)
+
+        # Retry once if count doesn't match
+        if len(scenarios) != total_count:
+            retry_prompt = prompt + f"\n\nIMPORTANT: You must generate EXACTLY {total_count} scenarios. You previously generated {len(scenarios)}."
+            retry_scenarios = await self._generate_and_parse(retry_prompt, category.name, total_count)
+
+            # Use retry result if it's closer to target, otherwise keep original
+            if abs(len(retry_scenarios) - total_count) < abs(len(scenarios) - total_count):
+                scenarios = retry_scenarios
+
+        # Truncate if over, accept if under (after retry)
+        return scenarios[:total_count]
+
+    async def _generate_and_parse(
+        self,
+        prompt: str,
+        category_name: str,
+        expected_count: int,
+    ) -> list[GoldenScenario]:
+        """Generate scenarios and parse to domain models."""
+        result = await self.llm.generate_structured(prompt, GoldenScenariosArray)
+
+        scenarios = []
+        for s in result.scenarios:
+            scenario = GoldenScenario(
+                description=s.description,
+                context=s.context,
+                category=category_name,
+                scenario_type=ScenarioType(s.scenario_type),
+                target_rule_ids=s.target_rule_ids,
+                expected_outcome=s.expected_outcome,
+            )
+            scenarios.append(scenario)
+
+        return scenarios
 
     async def _generate_type(
         self,

@@ -75,6 +75,8 @@ class ProgressReporter(Protocol):
         total_cost: float | None = None,
         generation_calls: int | None = None,
         grading_calls: int | None = None,
+        scenario_calls: int | None = None,
+        response_calls: int | None = None,
     ) -> None:
         """Called when generation is complete."""
         ...
@@ -149,6 +151,8 @@ class SilentReporter:
         total_cost: float | None = None,
         generation_calls: int | None = None,
         grading_calls: int | None = None,
+        scenario_calls: int | None = None,
+        response_calls: int | None = None,
     ) -> None:
         pass
 
@@ -239,6 +243,8 @@ class RichReporter:
         total_cost: float | None = None,
         generation_calls: int | None = None,
         grading_calls: int | None = None,
+        scenario_calls: int | None = None,
+        response_calls: int | None = None,
     ) -> None:
         from rich.panel import Panel
         from rich.table import Table
@@ -254,8 +260,16 @@ class RichReporter:
             summary.add_row("📊 Quality:", f"{pass_rate:.0f}% passed verification")
         if total_cost is not None and total_cost > 0:
             summary.add_row("💰 Cost:", f"${total_cost:.4f}")
-        if generation_calls is not None and grading_calls is not None:
-            summary.add_row("🔄 LLM Calls:", f"{generation_calls} generation, {grading_calls} grading")
+        if scenario_calls is not None and response_calls is not None:
+            calls_str = f"{scenario_calls} scenario + {response_calls} response"
+            if grading_calls is not None and grading_calls > 0:
+                calls_str += f" + {grading_calls} grading"
+            summary.add_row("🔄 LLM Calls:", calls_str)
+        elif generation_calls is not None:
+            calls_str = f"{generation_calls} generation"
+            if grading_calls is not None and grading_calls > 0:
+                calls_str += f" + {grading_calls} grading"
+            summary.add_row("🔄 LLM Calls:", calls_str)
         self.console.print(Panel(summary, border_style="green", title="[green]Complete[/green]"))
         self.console.print()
 
@@ -423,6 +437,8 @@ class CallbackReporter:
         total_cost: float | None = None,
         generation_calls: int | None = None,
         grading_calls: int | None = None,
+        scenario_calls: int | None = None,
+        response_calls: int | None = None,
     ) -> None:
         self._emit("complete", {
             "dataset_size": dataset_size,
@@ -431,6 +447,8 @@ class CallbackReporter:
             "total_cost": total_cost,
             "generation_calls": generation_calls,
             "grading_calls": grading_calls,
+            "scenario_calls": scenario_calls,
+            "response_calls": response_calls,
         })
         if self._on_complete_cb:
             self._on_complete_cb(dataset_size, elapsed_seconds, pass_rate)
