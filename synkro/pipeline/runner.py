@@ -68,6 +68,50 @@ class GenerationResult:
         return getattr(self.dataset, name)
 
 
+class ScenariosResult:
+    """
+    Result of scenario-only generation for eval datasets.
+
+    Contains scenarios with ground truth labels but no synthetic responses.
+    Use with synkro.grade() to evaluate your own model's outputs.
+
+    Examples:
+        >>> result = synkro.generate_scenarios(policy, count=100)
+        >>> for scenario in result.scenarios:
+        ...     response = my_model(scenario.user_message)
+        ...     grade = synkro.grade(response, scenario, policy)
+    """
+
+    def __init__(
+        self,
+        scenarios: list,
+        logic_map: LogicMap,
+        distribution: dict[str, int],
+    ):
+        from synkro.types.core import EvalScenario
+
+        # Convert GoldenScenarios to EvalScenarios for public API
+        self.scenarios: list[EvalScenario] = [
+            EvalScenario(
+                user_message=s.description,
+                expected_outcome=s.expected_outcome,
+                target_rule_ids=s.target_rule_ids,
+                scenario_type=s.scenario_type.value if hasattr(s.scenario_type, 'value') else s.scenario_type,
+                category=s.category,
+                context=s.context,
+            )
+            for s in scenarios
+        ]
+        self.logic_map = logic_map
+        self.distribution = distribution
+
+    def __len__(self) -> int:
+        return len(self.scenarios)
+
+    def __iter__(self):
+        return iter(self.scenarios)
+
+
 class GenerationPipeline:
     """
     Orchestrates the Golden Trace generation pipeline.
@@ -363,6 +407,90 @@ class GenerationPipeline:
 
         return dataset
 
+    async def run_scenarios_only(
+        self,
+        policy: Policy,
+        count: int,
+        model: str,
+    ) -> ScenariosResult:
+        """
+        Run stages 0-2 only, returning scenarios without generating responses.
+
+        This is the eval-focused pipeline that produces test scenarios with
+        ground truth labels but no synthetic responses.
+
+        Args:
+            policy: The policy to generate scenarios from
+            count: Target number of scenarios
+            model: Model name (for reporting)
+
+        Returns:
+            ScenariosResult with scenarios, logic_map, and distribution
+        """
+        from datetime import datetime
+
+        start_time = datetime.now()
+        semaphore = asyncio.Semaphore(self.workers)
+
+        # Report start (using a simplified message)
+        self.reporter.on_start(count, model, "scenarios")
+
+        # Create components via factory
+        planner = self.factory.create_planner()
+        logic_extractor = self.factory.create_logic_extractor()
+        golden_scenario_gen = self.factory.create_golden_scenario_generator()
+
+        # Phase 0: Planning (for category distribution)
+        plan = await self.plan_phase.execute(policy, count, planner, analyze_turns=False)
+        self.reporter.on_plan_complete(plan)
+
+        # =====================================================================
+        # STAGE 1: Logic Extraction (The Cartographer)
+        # =====================================================================
+        with self.reporter.spinner("Extracting rules..."):
+            logic_map = await self.logic_extraction_phase.execute(policy, logic_extractor)
+
+        self.reporter.on_logic_map_complete(logic_map)
+
+        # =====================================================================
+        # STAGE 2: Scenario Synthesis (The Adversary)
+        # =====================================================================
+        with self.reporter.spinner("Generating scenarios..."):
+            golden_scenarios, distribution = await self.golden_scenario_phase.execute(
+                policy, logic_map, plan, golden_scenario_gen, semaphore
+            )
+
+        self.reporter.on_golden_scenarios_complete(golden_scenarios, distribution)
+
+        # =====================================================================
+        # HUMAN-IN-THE-LOOP (optional)
+        # =====================================================================
+        if self.enable_hitl and self.hitl_editor:
+            logic_map, golden_scenarios, distribution, _ = await self._run_hitl_session(
+                logic_map, golden_scenarios, distribution, policy, plan, 1
+            )
+
+        # Report completion
+        elapsed = (datetime.now() - start_time).total_seconds()
+        total_cost = self.factory.generation_llm.total_cost
+
+        self.reporter.on_complete(
+            len(golden_scenarios),
+            elapsed,
+            pass_rate=None,
+            total_cost=total_cost,
+            generation_calls=self.factory.generation_llm.call_count,
+            grading_calls=0,
+            scenario_calls=self.factory.generation_llm.call_count,
+            response_calls=0,
+        )
+
+        return ScenariosResult(
+            scenarios=golden_scenarios,
+            logic_map=logic_map,
+            distribution=distribution,
+        )
+
     async def _run_hitl_session(
         self,
         logic_map: LogicMap,
@@ -638,4 +766,4 @@ class GenerationPipeline:
         )
 
 
-__all__ = ["GenerationPipeline", "GenerationResult"]
+__all__ = ["GenerationPipeline", "GenerationResult", "ScenariosResult"]

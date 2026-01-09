@@ -108,6 +108,28 @@ class Trace(BaseModel):
         return False
 
 
+class EvalScenario(BaseModel):
+    """
+    A scenario for evaluation with ground truth labels.
+
+    Used by generate_scenarios() for eval dataset generation.
+    Contains the test input and expected behavior, but no synthetic response.
+
+    Examples:
+        >>> scenarios = synkro.generate_scenarios(policy, count=100)
+        >>> for s in scenarios:
+        ...     response = my_model(s.user_message)
+        ...     grade = synkro.grade(response, s, policy)
+    """
+
+    user_message: str = Field(description="The user's request or question (test input)")
+    expected_outcome: str = Field(description="Expected behavior based on policy rules")
+    target_rule_ids: list[str] = Field(default_factory=list, description="Rule IDs this scenario tests")
+    scenario_type: str = Field(description="Type: positive, negative, edge_case, irrelevant")
+    category: str = Field(default="", description="Policy category this scenario belongs to")
+    context: str = Field(default="", description="Additional context for the scenario")
+
+
 class Category(BaseModel):
     """A category for organizing scenarios."""
 

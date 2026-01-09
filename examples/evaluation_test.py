@@ -36,8 +36,8 @@ pipeline = create_pipeline(
 # Generate 5 eval traces
 dataset = pipeline.generate(EXPENSE_POLICY, traces=5)
 
-# Save as QA format (includes ground truth)
-dataset.save("eval_test.jsonl", format="qa")
+# Save as LangSmith format (includes ground truth)
+dataset.save("eval_test.jsonl", format="langsmith")
 
 # Show what we generated
 print(f"\nGenerated {len(dataset)} eval traces")

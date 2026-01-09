@@ -16,7 +16,7 @@ from synkro.modes.config import get_mode_config
 from synkro.errors import handle_error
 from synkro.factory import ComponentFactory
 from synkro.reporting import ProgressReporter, RichReporter
-from synkro.pipeline.runner import GenerationPipeline, GenerationResult
+from synkro.pipeline.runner import GenerationPipeline, GenerationResult, ScenariosResult
 
 if TYPE_CHECKING:
     from synkro.types.tool import ToolDefinition
@@ -244,3 +244,71 @@ class Generator:
             policy = Policy(text=policy)
 
         return await self._generate_async(policy, traces, return_logic_map)
+
+    @handle_error
+    def generate_scenarios(
+        self,
+        policy: Policy | str,
+        count: int = 20,
+    ) -> ScenariosResult:
+        """
+        Generate eval scenarios without synthetic responses.
+
+        This runs stages 0-2 of the pipeline (planning, logic extraction,
+        scenario synthesis) but skips response generation. Use this for
+        creating eval datasets where you want to test your own model.
+
+        Args:
+            policy: Policy object or text string
+            count: Target number of scenarios to generate (default: 20)
+
+        Returns:
+            ScenariosResult with scenarios, logic_map, and distribution
+
+        Examples:
+            >>> result = generator.generate_scenarios(policy, count=100)
+            >>> for scenario in result.scenarios:
+            ...     response = my_model(scenario.user_message)
+            ...     grade = synkro.grade(response, scenario, policy)
+        """
+        if isinstance(policy, str):
+            policy = Policy(text=policy)
+
+        # Validate policy has enough content
+        policy.validate_length()
+
+        return asyncio.run(self._generate_scenarios_async(policy, count))
+
+    async def _generate_scenarios_async(
+        self,
+        policy: Policy,
+        count: int,
+    ) -> ScenariosResult:
+        """Async implementation of scenario-only generation."""
+        model_str = self.generation_model.value if isinstance(self.generation_model, Enum) else str(self.generation_model)
+
+        return await self.pipeline.run_scenarios_only(
+            policy=policy,
+            count=count,
+            model=model_str,
+        )
+
+    async def generate_scenarios_async(
+        self,
+        policy: Policy | str,
+        count: int = 20,
+    ) -> ScenariosResult:
+        """
+        Async version of generate_scenarios for use in async contexts.
+
+        Args:
+            policy: Policy object or text string
+            count: Target number of scenarios to generate (default: 20)
+
+        Returns:
+            ScenariosResult with scenarios, logic_map, and distribution
+        """
+        if isinstance(policy, str):
+            policy = Policy(text=policy)
+
+        return await self._generate_scenarios_async(policy, count)
