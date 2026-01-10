@@ -44,4 +44,4 @@ dataset = pipeline.generate(EXPENSE_POLICY, traces=20)
 
 # Save to JSONL file (ready for training)
 # Note: When skip_grading=True, don't filter by passed since traces have no grades
-dataset.save()
+dataset.save(pretty_print=True)
