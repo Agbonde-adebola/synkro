@@ -69,7 +69,11 @@ class SFTFormatter:
             path: Output file path (should end in .jsonl)
         """
         path = Path(path)
+        print(f"DEBUG SFTFormatter: Received {len(traces)} traces")
         examples = self.format(traces)
+        print(f"DEBUG SFTFormatter: Formatted into {len(examples)} examples")
+        if examples:
+            print(f"DEBUG SFTFormatter: First example has {len(examples[0].get('messages', []))} messages")
 
         with open(path, "w") as f:
             for example in examples:

@@ -244,6 +244,9 @@ class Dataset(BaseModel):
 
         path = Path(path)
 
+        # Debug: Check if traces exist
+        print(f"DEBUG: Dataset has {len(self.traces)} traces to save")
+
         if format == "sft":
             SFTFormatter().save(self.traces, path)
         elif format == "qa":
