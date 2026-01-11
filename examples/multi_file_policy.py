@@ -25,6 +25,7 @@ load_dotenv(env_path)
 
 from synkro import create_pipeline, Policy, DatasetType
 from synkro.models.google import Google
+from synkro.reporting import FileLoggingReporter
 
 # =============================================================================
 # Method 1: Load from Folder
@@ -93,12 +94,16 @@ print("Generating Training Data from Combined Policy")
 print("=" * 80)
 print()
 
+# Use FileLoggingReporter for both CLI output and file logging
+reporter = FileLoggingReporter(log_dir="./logs")
+
 # Create pipeline
 pipeline = create_pipeline(
     model=Google.GEMINI_25_FLASH,
     grading_model=Google.GEMINI_25_FLASH,
     dataset_type=DatasetType.CONVERSATION,
     max_iterations=2,
+    reporter=reporter,                  # Log to both CLI and file
 )
 
 # Generate from the combined policy (using folder method)

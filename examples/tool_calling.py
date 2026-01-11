@@ -38,6 +38,7 @@ load_dotenv(env_path)
 
 from synkro import create_pipeline, ToolDefinition, DatasetType
 from synkro.models.google import Google
+from synkro.reporting import FileLoggingReporter
 
 # =============================================================================
 # Step 1: Define your tools
@@ -159,12 +160,16 @@ no results, tell the customer honestly and offer alternatives.
 # Step 3: Create pipeline and generate traces
 # =============================================================================
 
+# Use FileLoggingReporter for both CLI output and file logging
+reporter = FileLoggingReporter(log_dir="./logs")
+
 pipeline = create_pipeline(
     dataset_type=DatasetType.TOOL_CALL,
     tools=[web_search, customer_lookup, create_ticket],
     model=Google.GEMINI_25_FLASH,
     grading_model=Google.GEMINI_25_FLASH,
     max_iterations=2,
+    reporter=reporter,                  # Log to both CLI and file
 )
 
 # Generate training traces

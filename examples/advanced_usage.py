@@ -33,6 +33,7 @@ from synkro import (
     LLM,
     OpenAI,
     Anthropic,
+    FileLoggingReporter,
 )
 from synkro.examples import EXPENSE_POLICY
 
@@ -64,12 +65,16 @@ async def main():
     print("-" * 80)
     print()
 
+    # Use FileLoggingReporter for both CLI output and file logging
+    reporter = FileLoggingReporter(log_dir="./logs")
+
     # Configure generator with custom models
     # Fast/cheap for generation, high-quality for grading
     generator = Generator(
         generation_model=OpenAI.GPT_4O_MINI,  # Fast, cheap
         grading_model=OpenAI.GPT_4O,          # High quality
         max_iterations=3,
+        reporter=reporter,                    # Log to both CLI and file
     )
 
     # Generate chat format (default)

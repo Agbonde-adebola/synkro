@@ -24,10 +24,14 @@ load_dotenv(env_path)
 import synkro
 from synkro.models import Google
 from synkro.examples import EXPENSE_POLICY
+from synkro.reporting import FileLoggingReporter
 
 # =============================================================================
 # STEP 1: Generate eval scenarios (no synthetic responses)
 # =============================================================================
+
+# Use FileLoggingReporter for both CLI output and file logging
+reporter = FileLoggingReporter(log_dir="./logs")
 
 print("Generating eval scenarios...")
 result = synkro.generate_scenarios(
@@ -36,6 +40,7 @@ result = synkro.generate_scenarios(
     generation_model=Google.GEMINI_25_FLASH,
     temperature=0.8,  # High temp for diverse scenarios
     enable_hitl=False,
+    reporter=reporter,                  # Log to both CLI and file
 )
 
 print(f"\nGenerated {len(result.scenarios)} scenarios")

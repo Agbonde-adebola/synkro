@@ -22,6 +22,7 @@ from synkro.pipelines import create_pipeline
 from synkro.models.google import Google
 from synkro.types import DatasetType
 from synkro.core.policy import Policy
+from synkro.reporting import FileLoggingReporter
 
 # =============================================================================
 # STEP 1: Generate Training Data (skip if already exists)
@@ -37,11 +38,15 @@ else:
     policy = Policy.from_file(policy_path)
 
     print("🔄 Step 2: Generating training data...")
+    # Use FileLoggingReporter for both CLI output and file logging
+    reporter = FileLoggingReporter(log_dir="./logs")
+    
     pipeline = create_pipeline(
         model=Google.GEMINI_25_FLASH,       # Fast generation
         grading_model=Google.GEMINI_25_PRO, # Quality grading
         dataset_type=DatasetType.CONVERSATION,       # Chat format
         max_iterations=3,                   # Up to 3 refinement attempts
+        reporter=reporter,                  # Log to both CLI and file
     )
 
     dataset = pipeline.generate(policy, traces=100)

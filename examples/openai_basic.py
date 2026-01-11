@@ -20,6 +20,10 @@ from synkro.pipelines import create_pipeline
 from synkro.models.openai import OpenAI
 from synkro.types import DatasetType
 from synkro.examples import EXPENSE_POLICY
+from synkro.reporting import FileLoggingReporter
+
+# Use FileLoggingReporter for both CLI output and file logging
+reporter = FileLoggingReporter(log_dir="./logs")
 
 # Create pipeline with OpenAI models
 # - model: Used for scenario and response generation
@@ -29,6 +33,7 @@ pipeline = create_pipeline(
     grading_model=OpenAI.GPT_4O,        # High-quality grading
     dataset_type=DatasetType.CONVERSATION,      # Chat format for fine-tuning
     max_iterations=3,                   # Max refinement attempts per trace
+    reporter=reporter,                  # Log to both CLI and file
 )
 
 # Generate dataset from policy
