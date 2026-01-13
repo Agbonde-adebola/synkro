@@ -48,7 +48,7 @@ class TaxonomyExtractor:
         self,
         policy_text: str,
         logic_map: LogicMap,
-        categories: list[Category],
+        categories: list[Category | str],
     ) -> SubCategoryTaxonomy:
         """
         Extract a sub-category taxonomy from a policy document.
@@ -97,11 +97,14 @@ class TaxonomyExtractor:
             lines.append(f"  Action: {rule.action}")
         return "\n".join(lines)
 
-    def _format_categories(self, categories: list[Category]) -> str:
+    def _format_categories(self, categories: list[Category | str]) -> str:
         """Format categories for the prompt."""
         lines = []
         for cat in categories:
-            lines.append(f"- {cat.name}: {cat.description}")
+            if hasattr(cat, 'name'):
+                lines.append(f"- {cat.name}: {cat.description}")
+            else:
+                lines.append(f"- {cat}")
         return "\n".join(lines)
 
     def _convert_to_taxonomy(self, output: TaxonomyOutput) -> SubCategoryTaxonomy:
@@ -126,10 +129,14 @@ class TaxonomyExtractor:
     def _validate_taxonomy(
         self,
         taxonomy: SubCategoryTaxonomy,
-        categories: list[Category],
+        categories: list[Category | str],
     ) -> None:
         """Validate the extracted taxonomy."""
-        category_names = {cat.name for cat in categories}
+        # Handle both Category objects and strings
+        category_names = {
+            cat.name if hasattr(cat, 'name') else str(cat)
+            for cat in categories
+        }
 
         # Check that sub-categories reference valid parent categories
         for sc in taxonomy.sub_categories:
@@ -143,7 +150,8 @@ class TaxonomyExtractor:
                         break
                 if not matched:
                     # Assign to first category if no match
-                    sc.parent_category = categories[0].name
+                    first_cat = categories[0]
+                    sc.parent_category = first_cat.name if hasattr(first_cat, 'name') else str(first_cat)
 
         # Ensure unique IDs
         seen_ids = set()

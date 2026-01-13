@@ -389,11 +389,16 @@ class GenerationPipeline:
             coverage_calculator = self.factory.create_coverage_calculator()
 
             # Extract sub-category taxonomy from policy
+            # Handle both Category objects and strings
+            category_names = [
+                cat.name if hasattr(cat, 'name') else str(cat)
+                for cat in plan.categories
+            ]
             with self.reporter.spinner("Extracting coverage taxonomy..."):
                 taxonomy = await taxonomy_extractor.extract(
                     policy.text,
                     logic_map,
-                    [cat.name for cat in plan.categories],
+                    category_names,
                 )
 
             if taxonomy and taxonomy.sub_categories:
@@ -416,9 +421,11 @@ class GenerationPipeline:
                     )
 
                 self.reporter.on_coverage_calculated(coverage_report)
-        except Exception:
+        except Exception as e:
             # Coverage tracking is optional - don't fail the whole pipeline
-            pass
+            # But log the error for debugging
+            import sys
+            print(f"[Coverage tracking error: {e}]", file=sys.stderr)
 
         # =====================================================================
         # HUMAN-IN-THE-LOOP: Unified Session (Turns + Rules + Scenarios)
