@@ -23,15 +23,19 @@ pip install synkro
 ## Quick Start
 
 ```python
-from synkro import create_pipeline
+from synkro import create_pipeline, DatasetType
+from synkro.models import Google
 from synkro.examples import EXPENSE_POLICY
 
-pipeline = create_pipeline()
+pipeline = create_pipeline(
+    model=Google.GEMINI_25_FLASH,          # Fast generation
+    grading_model=Google.GEMINI_25_PRO,    # Quality grading
+    dataset_type=DatasetType.CONVERSATION,
+)
+
 dataset = pipeline.generate(EXPENSE_POLICY, traces=50)
 dataset.save("training.jsonl")
 ```
-
-Other built-in policies: `HR_HANDBOOK`, `REFUND_POLICY`, `SUPPORT_GUIDELINES`, `SECURITY_POLICY`
 
 ### From Files
 
