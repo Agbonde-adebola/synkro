@@ -11,7 +11,7 @@ This helps you:
 """
 
 import synkro
-from synkro.models.anthropic import Anthropic
+from synkro.models.google import Google
 
 # Sample policy
 POLICY = """
@@ -49,8 +49,8 @@ def main():
     result = synkro.generate(
         POLICY,
         traces=5,
-        generation_model=Anthropic.CLAUDE_45_SONNET,
-        grading_model=Anthropic.CLAUDE_45_SONNET,
+        generation_model=Google.GEMINI_20_FLASH,
+        grading_model=Google.GEMINI_20_FLASH,
         return_logic_map=True,
     )
 
