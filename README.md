@@ -1,6 +1,6 @@
 # Synkro
 
-Turn policies, handbooks, and documentation into high-quality training data for fine-tuning LLMs.
+Library for turning unstructured policies, handbooks, and documentation into high-quality conversation, tool calling or evaluation data for LLMs.
 
 ## Features
 
