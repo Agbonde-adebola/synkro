@@ -423,7 +423,9 @@ class GenerationPipeline:
                         generate_suggestions=True,
                     )
 
-                self.reporter.on_coverage_calculated(coverage_report)
+                # Only show coverage here if HITL is disabled (HITL shows it in session)
+                if not self.enable_hitl:
+                    self.reporter.on_coverage_calculated(coverage_report)
         except Exception as e:
             # Coverage tracking is optional - don't fail the whole pipeline
             # But log the error for debugging
@@ -717,11 +719,11 @@ class GenerationPipeline:
             session.current_distribution,
         )
 
-        while True:
-            # Auto-display coverage report before each feedback prompt
-            if coverage_report:
-                self.reporter.on_coverage_calculated(coverage_report)
+        # Show coverage once at start of HITL session (after session state)
+        if coverage_report:
+            self.reporter.on_coverage_calculated(coverage_report)
 
+        while True:
             feedback = prompt.get_feedback().strip()
 
             # Handle explicit commands first (no LLM needed)
