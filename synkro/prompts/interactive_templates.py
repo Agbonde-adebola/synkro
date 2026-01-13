@@ -123,7 +123,11 @@ CLASSIFY THE INTENT:
    - "improve coverage of amount thresholds" → coverage_operation="increase", coverage_target_sub_category="amount thresholds"
    - "get amount thresholds to 80%" → coverage_operation="target", coverage_target_sub_category="amount thresholds", coverage_target_percent=80
    - "fully cover time rules" / "100% coverage for X" → coverage_operation="target", coverage_target_sub_category="X", coverage_target_percent=100
+   - "do the suggestions" / "apply suggestions" / "do what you suggested" → coverage_operation="increase" (apply the coverage suggestions shown)
+   - "fix the gaps" / "fill the gaps" / "address the gaps" → coverage_operation="increase" (improve coverage for gap areas)
+   - "improve coverage" / "increase coverage" / "better coverage" → coverage_operation="increase"
    → Set intent_type="coverage" and the appropriate coverage_* fields
+   → When user says "do suggestions" or "fix gaps", set coverage_operation="increase" without specific target (system picks lowest coverage)
 
 6. "command" - User typed a built-in command (done, undo, reset, help, show Rxxx, show Sxxx)
    → Set intent_type="command", leave other fields null

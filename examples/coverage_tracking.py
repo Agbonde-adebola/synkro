@@ -52,7 +52,7 @@ def main():
         generation_model=Google.GEMINI_25_FLASH,
         grading_model=Google.GEMINI_25_FLASH,
         return_logic_map=True,
-        # enable_hitl=True,  # Enable for interactive coverage improvement
+        enable_hitl=True,  # Enable for interactive coverage improvement
     )
 
     # View coverage report (prints to console)

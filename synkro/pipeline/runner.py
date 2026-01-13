@@ -784,6 +784,18 @@ class GenerationPipeline:
             # Classify intent via LLM
             scenario_count = len(session.current_scenarios) if session.current_scenarios else 0
             history = session.get_history_for_prompt()
+
+            # Build coverage summary for classifier context
+            coverage_summary = "Not available"
+            if coverage_report:
+                coverage_summary = (
+                    f"{coverage_report.overall_coverage_percent:.0f}% overall, "
+                    f"{coverage_report.covered_count} covered, "
+                    f"{coverage_report.partial_count} partial, "
+                    f"{coverage_report.uncovered_count} uncovered, "
+                    f"{len(coverage_report.gaps)} gaps"
+                )
+
             with display.spinner("Processing..."):
                 intent = await classifier.classify(
                     feedback,
@@ -792,6 +804,7 @@ class GenerationPipeline:
                     len(session.current_logic_map.rules),
                     scenario_count=scenario_count,
                     conversation_history=history,
+                    coverage_summary=coverage_summary,
                 )
 
             if intent.intent_type == "turns" and intent.target_turns is not None:
