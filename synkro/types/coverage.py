@@ -291,6 +291,53 @@ class CoverageReport(BaseModel):
 
         return "\n".join(lines)
 
+    def to_dict(self) -> dict:
+        """
+        Return coverage report as a dictionary.
+
+        Returns:
+            Dictionary representation of the coverage report
+
+        Example:
+            >>> report = result.coverage_report
+            >>> d = report.to_dict()
+            >>> print(f"Coverage: {d['overall_coverage_percent']}%")
+        """
+        return self.model_dump()
+
+    def to_json(self, indent: int = 2) -> str:
+        """
+        Return coverage report as a JSON string.
+
+        Args:
+            indent: Number of spaces for indentation (default: 2)
+
+        Returns:
+            JSON string representation of the coverage report
+
+        Example:
+            >>> report = result.coverage_report
+            >>> json_str = report.to_json()
+            >>> print(json_str)
+        """
+        import json
+        return json.dumps(self.model_dump(), indent=indent)
+
+    def print(self) -> None:
+        """
+        Print formatted coverage report to console.
+
+        Uses the RichReporter to display a nicely formatted coverage report
+        with colors and tables.
+
+        Example:
+            >>> result = synkro.generate(policy, return_logic_map=True)
+            >>> result.coverage_report.print()
+        """
+        from synkro.reporting import RichReporter
+        reporter = RichReporter()
+        reporter.on_coverage_calculated(self)
+
 
 class CoverageIntent(BaseModel):
     """

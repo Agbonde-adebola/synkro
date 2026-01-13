@@ -7,7 +7,7 @@ different aspects of your policy - like code coverage, but for policies.
 This helps you:
 - Identify gaps in scenario coverage
 - Ensure all policy areas have test cases
-- Improve coverage with natural language commands
+- Improve coverage with natural language commands (HITL)
 """
 
 import synkro
@@ -52,21 +52,24 @@ def main():
         generation_model=Google.GEMINI_25_FLASH,
         grading_model=Google.GEMINI_25_FLASH,
         return_logic_map=True,
-        enable_hitl=False,  # Disable interactive mode for scripted example
+        # enable_hitl=True,  # Enable for interactive coverage improvement
     )
 
     # View coverage report (prints to console)
     print("\n" + "=" * 60)
     print("COVERAGE REPORT")
     print("=" * 60)
-    synkro.coverage_report(result)
 
-    # Get coverage as dictionary for programmatic use
-    print("\n" + "=" * 60)
-    print("PROGRAMMATIC ACCESS")
-    print("=" * 60)
-    report = synkro.coverage_report(result, format="dict")
-    if report:
+    # Access coverage report directly from result
+    if result.coverage_report:
+        # Method 1: Print formatted to console
+        result.coverage_report.print()
+
+        # Method 2: Get as dictionary for programmatic use
+        print("\n" + "=" * 60)
+        print("PROGRAMMATIC ACCESS")
+        print("=" * 60)
+        report = result.coverage_report.to_dict()
         print(f"Overall coverage: {report['overall_coverage_percent']:.1f}%")
         print(f"Covered: {report['covered_count']}")
         print(f"Partial: {report['partial_count']}")
@@ -77,6 +80,12 @@ def main():
             print("\nGaps to address:")
             for gap in report['gaps'][:3]:
                 print(f"  - {gap}")
+
+        # Method 3: Get as JSON string
+        # json_str = result.coverage_report.to_json()
+        # print(json_str)
+    else:
+        print("No coverage data available.")
 
     # Get the dataset
     dataset = result.dataset

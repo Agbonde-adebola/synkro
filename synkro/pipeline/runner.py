@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from synkro.interactive.scenario_editor import ScenarioEditor
     from synkro.types.core import Plan
     from synkro.types.logic_map import GoldenScenario
-    from synkro.types.coverage import CoverageReport
+    from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
 
 
 class GenerationResult:
@@ -383,6 +383,9 @@ class GenerationPipeline:
         # COVERAGE TRACKING: Extract taxonomy and calculate coverage
         # =====================================================================
         coverage_report = None
+        taxonomy = None
+        coverage_calls_start = self.factory.generation_llm.call_count
+
         try:
             taxonomy_extractor = self.factory.create_taxonomy_extractor()
             scenario_tagger = self.factory.create_scenario_tagger()
@@ -427,6 +430,8 @@ class GenerationPipeline:
             import sys
             print(f"[Coverage tracking error: {e}]", file=sys.stderr)
 
+        coverage_calls = self.factory.generation_llm.call_count - coverage_calls_start
+
         # =====================================================================
         # HUMAN-IN-THE-LOOP: Unified Session (Turns + Rules + Scenarios)
         # =====================================================================
@@ -435,8 +440,10 @@ class GenerationPipeline:
         hitl_calls = 0
         if self.enable_hitl and self.hitl_editor:
             hitl_calls_start = self.factory.generation_llm.call_count
-            logic_map, golden_scenarios, distribution, target_turns = await self._run_hitl_session(
-                logic_map, golden_scenarios, distribution, policy, plan, target_turns
+            logic_map, golden_scenarios, distribution, target_turns, coverage_report = await self._run_hitl_session(
+                logic_map, golden_scenarios, distribution, policy, plan, target_turns,
+                coverage_report=coverage_report,
+                taxonomy=taxonomy,
             )
             hitl_calls = self.factory.generation_llm.call_count - hitl_calls_start
             # Reset grading_llm after HITL so only verification calls count as "grading"
@@ -549,6 +556,7 @@ class GenerationPipeline:
             response_calls=response_calls,
             refinement_calls=refinement_calls,
             hitl_calls=hitl_calls,
+            coverage_calls=coverage_calls,
         )
 
         dataset = Dataset(traces=final_traces)
@@ -627,7 +635,7 @@ class GenerationPipeline:
         scenario_calls = self.factory.generation_llm.call_count
         if self.enable_hitl and self.hitl_editor:
             hitl_calls_start = self.factory.generation_llm.call_count
-            logic_map, golden_scenarios, distribution, _ = await self._run_hitl_session(
+            logic_map, golden_scenarios, distribution, _, _ = await self._run_hitl_session(
                 logic_map, golden_scenarios, distribution, policy, plan, 1
             )
             hitl_calls = self.factory.generation_llm.call_count - hitl_calls_start
@@ -667,9 +675,11 @@ class GenerationPipeline:
         policy: Policy,
         plan: "Plan",
         initial_turns: int,
-    ) -> tuple[LogicMap, list["GoldenScenario"], dict[str, int], int]:
+        coverage_report: "CoverageReport | None" = None,
+        taxonomy: "SubCategoryTaxonomy | None" = None,
+    ) -> tuple[LogicMap, list["GoldenScenario"], dict[str, int], int, "CoverageReport | None"]:
         """
-        Run unified HITL session for turns, Logic Map, and scenario editing.
+        Run unified HITL session for turns, Logic Map, scenario, and coverage editing.
 
         Args:
             logic_map: The extracted Logic Map to edit
@@ -678,9 +688,11 @@ class GenerationPipeline:
             policy: The policy document (for context in refinements)
             plan: The generation plan (for complexity info)
             initial_turns: Initial target turns setting
+            coverage_report: Coverage report (for display and increase commands)
+            taxonomy: Sub-category taxonomy (for coverage improvement)
 
         Returns:
-            Tuple of (modified LogicMap, modified scenarios, modified distribution, confirmed target_turns)
+            Tuple of (modified LogicMap, modified scenarios, modified distribution, confirmed target_turns, updated coverage_report)
         """
         from synkro.interactive.hitl_session import HITLSession
         from synkro.interactive.rich_ui import LogicMapDisplay, InteractivePrompt
@@ -706,6 +718,10 @@ class GenerationPipeline:
         )
 
         while True:
+            # Auto-display coverage report before each feedback prompt
+            if coverage_report:
+                self.reporter.on_coverage_calculated(coverage_report)
+
             feedback = prompt.get_feedback().strip()
 
             # Handle explicit commands first (no LLM needed)
@@ -855,6 +871,62 @@ class GenerationPipeline:
             elif intent.intent_type == "scenarios" and not self.scenario_editor:
                 display.show_error("Scenario editor not available")
 
+            elif intent.intent_type == "coverage":
+                # Handle coverage improvement commands
+                if not coverage_report or not taxonomy:
+                    display.show_error("Coverage data not available")
+                    continue
+
+                if intent.coverage_operation in ("increase", "target"):
+                    try:
+                        coverage_improver = self.factory.create_coverage_improver()
+                        coverage_calculator = self.factory.create_coverage_calculator()
+
+                        # Generate new scenarios to improve coverage
+                        with display.spinner("Generating coverage scenarios..."):
+                            new_scenarios = await coverage_improver.improve_from_command(
+                                feedback,
+                                coverage_report,
+                                taxonomy,
+                                session.current_logic_map,
+                                policy.text,
+                                session.current_scenarios,
+                            )
+
+                        if new_scenarios:
+                            # Add new scenarios to existing
+                            old_scenarios = session.current_scenarios or []
+                            all_scenarios = old_scenarios + new_scenarios
+                            new_dist = session.current_distribution or {}
+                            for s in new_scenarios:
+                                t = s.scenario_type.value
+                                new_dist[t] = new_dist.get(t, 0) + 1
+
+                            # Update session
+                            session.apply_scenario_change(feedback, all_scenarios, new_dist)
+
+                            # Recalculate coverage
+                            with display.spinner("Recalculating coverage..."):
+                                old_coverage = coverage_report
+                                coverage_report = await coverage_calculator.calculate(
+                                    all_scenarios,
+                                    taxonomy,
+                                    generate_suggestions=True,
+                                )
+
+                            display.show_success(f"Added {len(new_scenarios)} coverage scenarios")
+                            self.reporter.on_coverage_improved(
+                                old_coverage,
+                                coverage_report,
+                                len(new_scenarios),
+                            )
+                            session.record_feedback(feedback, "coverage", f"Added {len(new_scenarios)} scenarios")
+                        else:
+                            display.show_error("Could not generate scenarios for coverage improvement")
+
+                    except Exception as e:
+                        display.show_error(f"Failed to improve coverage: {e}")
+
             elif intent.intent_type == "compound" and intent.rule_feedback and intent.scenario_feedback:
                 # Handle compound intent: rules first, then scenarios
                 try:
@@ -931,6 +1003,7 @@ class GenerationPipeline:
             session.current_scenarios or scenarios,
             session.current_distribution or distribution,
             current_turns,
+            coverage_report,
         )
 
 

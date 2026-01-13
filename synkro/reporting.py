@@ -80,6 +80,7 @@ class ProgressReporter(Protocol):
         response_calls: int | None = None,
         refinement_calls: int | None = None,
         hitl_calls: int | None = None,
+        coverage_calls: int | None = None,
     ) -> None:
         """Called when generation is complete."""
         ...
@@ -174,6 +175,7 @@ class SilentReporter:
         response_calls: int | None = None,
         refinement_calls: int | None = None,
         hitl_calls: int | None = None,
+        coverage_calls: int | None = None,
     ) -> None:
         pass
 
@@ -276,6 +278,7 @@ class RichReporter:
         response_calls: int | None = None,
         refinement_calls: int | None = None,
         hitl_calls: int | None = None,
+        coverage_calls: int | None = None,
     ) -> None:
         from rich.panel import Panel
         from rich.table import Table
@@ -293,6 +296,8 @@ class RichReporter:
             summary.add_row("💰 Cost:", f"${total_cost:.4f}")
         if scenario_calls is not None and response_calls is not None:
             calls_str = f"{scenario_calls} scenario"
+            if coverage_calls is not None and coverage_calls > 0:
+                calls_str += f" + {coverage_calls} coverage"
             if hitl_calls is not None and hitl_calls > 0:
                 calls_str += f" + {hitl_calls} hitl"
             calls_str += f" + {response_calls} response"
@@ -546,6 +551,7 @@ class CallbackReporter:
         response_calls: int | None = None,
         refinement_calls: int | None = None,
         hitl_calls: int | None = None,
+        coverage_calls: int | None = None,
     ) -> None:
         self._emit("complete", {
             "dataset_size": dataset_size,
@@ -558,6 +564,7 @@ class CallbackReporter:
             "response_calls": response_calls,
             "refinement_calls": refinement_calls,
             "hitl_calls": hitl_calls,
+            "coverage_calls": coverage_calls,
         })
         if self._on_complete_cb:
             self._on_complete_cb(dataset_size, elapsed_seconds, pass_rate)
@@ -755,6 +762,7 @@ class FileLoggingReporter:
         response_calls: int | None = None,
         refinement_calls: int | None = None,
         hitl_calls: int | None = None,
+        coverage_calls: int | None = None,
     ) -> None:
         self._write_log("=" * 50)
         self._write_log(f"COMPLETE: Generated {dataset_size} traces in {self._format_duration(elapsed_seconds)}")
@@ -764,21 +772,23 @@ class FileLoggingReporter:
             self._write_log(f"  Cost: ${total_cost:.4f}")
         if scenario_calls is not None:
             self._write_log(f"  Scenario calls: {scenario_calls}")
+        if coverage_calls is not None and coverage_calls > 0:
+            self._write_log(f"  Coverage calls: {coverage_calls}")
+        if hitl_calls is not None and hitl_calls > 0:
+            self._write_log(f"  HITL calls: {hitl_calls}")
         if response_calls is not None:
             self._write_log(f"  Response calls: {response_calls}")
+        if refinement_calls is not None and refinement_calls > 0:
+            self._write_log(f"  Refinement calls: {refinement_calls}")
         if grading_calls is not None:
             self._write_log(f"  Grading calls: {grading_calls}")
-        if refinement_calls is not None:
-            self._write_log(f"  Refinement calls: {refinement_calls}")
-        if hitl_calls is not None:
-            self._write_log(f"  HITL calls: {hitl_calls}")
         self._write_log(f"Log saved to: {self._log_path}")
         self._write_log("=" * 50)
 
         self._delegate.on_complete(
             dataset_size, elapsed_seconds, pass_rate, total_cost,
             generation_calls, grading_calls, scenario_calls, response_calls,
-            refinement_calls, hitl_calls
+            refinement_calls, hitl_calls, coverage_calls
         )
 
         # Print log file location to console
