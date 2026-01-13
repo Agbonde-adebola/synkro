@@ -23,22 +23,15 @@ pip install synkro
 ## Quick Start
 
 ```python
-from synkro.pipelines import create_pipeline
-from synkro.models.google import Google
-from synkro.types import DatasetType
+from synkro import create_pipeline
+from synkro.examples import EXPENSE_POLICY
 
-pipeline = create_pipeline(
-    model=Google.GEMINI_25_FLASH,          # Fast generation
-    grading_model=Google.GEMINI_25_PRO,    # Quality grading
-    dataset_type=DatasetType.CONVERSATION,
-)
-
-dataset = pipeline.generate(
-    "All expenses over $50 require manager approval.",
-    traces=50,
-)
+pipeline = create_pipeline()
+dataset = pipeline.generate(EXPENSE_POLICY, traces=50)
 dataset.save("training.jsonl")
 ```
+
+Other built-in policies: `HR_HANDBOOK`, `REFUND_POLICY`, `SUPPORT_GUIDELINES`, `SECURITY_POLICY`
 
 ### From Files
 
