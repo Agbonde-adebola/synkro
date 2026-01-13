@@ -227,18 +227,11 @@ class RichReporter:
         )
     
     def on_plan_complete(self, plan: Plan) -> None:
-        from rich.table import Table
-        
-        self.console.print(f"[green]📋 Planning[/green] [dim]{len(plan.categories)} categories[/dim]")
-        
-        cat_table = Table(title="Categories", show_header=True, header_style="bold cyan")
-        cat_table.add_column("Name")
-        cat_table.add_column("Description")
-        cat_table.add_column("Count", justify="right")
-        for cat in plan.categories:
-            cat_table.add_row(cat.name, cat.description, str(cat.count))
-        self.console.print(cat_table)
-        self.console.print()
+        """Categories now shown in scenarios table, so just show count here."""
+        cat_names = ", ".join(c.name for c in plan.categories[:3])
+        if len(plan.categories) > 3:
+            cat_names += f" +{len(plan.categories) - 3}"
+        self.console.print(f"[green]📋 Planning[/green] [dim]{len(plan.categories)} categories: {cat_names}[/dim]")
     
     def on_scenario_progress(self, completed: int, total: int) -> None:
         pass

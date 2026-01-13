@@ -251,18 +251,27 @@ class LogicMapDisplay:
                 type_display = type_name.replace("_", " ").title()
                 branch = tree.add(f"[bold]{type_display}[/bold] ({len(by_type[type_name])})")
                 for idx, scenario in by_type[type_name]:
-                    desc = scenario.description[:45] + "..." if len(scenario.description) > 45 else scenario.description
+                    desc = scenario.description[:40] + "..." if len(scenario.description) > 40 else scenario.description
 
-                    # Get sub-categories for this scenario
+                    # Get parent category (green) and sub-categories (yellow)
+                    parent_cat = getattr(scenario, 'category', None)
                     sub_cats = scenario_sub_categories.get(idx, [])
                     if not sub_cats and hasattr(scenario, 'sub_category_ids') and scenario.sub_category_ids:
                         sub_cats = scenario.sub_category_ids[:2]
 
-                    # Format sub-category tags
+                    # Build tags: parent category in green, sub-categories in yellow
+                    tags_parts = []
+                    if parent_cat:
+                        cat_name = parent_cat[:12] if isinstance(parent_cat, str) else str(parent_cat)[:12]
+                        tags_parts.append(f"[green][{cat_name}][/green]")
                     if sub_cats:
-                        tags = " ".join(f"[magenta][{sc[:15]}][/magenta]" for sc in sub_cats[:2])
+                        for sc in sub_cats[:2]:
+                            tags_parts.append(f"[yellow][{sc[:12]}][/yellow]")
                         if len(sub_cats) > 2:
-                            tags += f" [dim]+{len(sub_cats)-2}[/dim]"
+                            tags_parts.append(f"[dim]+{len(sub_cats)-2}[/dim]")
+
+                    if tags_parts:
+                        tags = " ".join(tags_parts)
                         branch.add(f"[cyan]S{idx}[/cyan]: {desc} {tags}")
                     else:
                         rules = ", ".join(scenario.target_rule_ids[:2]) if scenario.target_rule_ids else ""
