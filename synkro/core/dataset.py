@@ -218,7 +218,8 @@ class Dataset(BaseModel):
 
         Args:
             path: Output file path (auto-generated if not provided)
-            format: Output format - "messages", "qa", "langsmith", "langfuse", "tool_call", or "chatml"
+            format: Output format - "messages", "qa", "langsmith", "langfuse", "tool_call", "chatml",
+                    or "bert" / "bert:<task>" for BERT models
             pretty_print: If True, format JSON with indentation (multi-line)
 
         Returns:
@@ -232,17 +233,21 @@ class Dataset(BaseModel):
             >>> dataset.save("eval.jsonl", format="langfuse")  # Langfuse format
             >>> dataset.save("tools.jsonl", format="tool_call")
             >>> dataset.save("chatml.jsonl", format="chatml")
+            >>> dataset.save("bert.jsonl", format="bert")  # BERT classification
+            >>> dataset.save("bert_qa.jsonl", format="bert:qa")  # BERT extractive QA
             >>> dataset.save("readable.jsonl", pretty_print=True)  # Human-readable
         """
         from synkro.formatters import (
             MessagesFormatter, ToolCallFormatter, ChatMLFormatter,
             QAFormatter, LangSmithFormatter, LangfuseFormatter,
+            BERTFormatter,
         )
 
         # Auto-generate filename if not provided
         if path is None:
             timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
-            path = f"synkro_{format}_{timestamp}.jsonl"
+            format_name = format.replace(":", "_")
+            path = f"synkro_{format_name}_{timestamp}.jsonl"
 
         path = Path(path)
 
@@ -258,8 +263,14 @@ class Dataset(BaseModel):
             ToolCallFormatter().save(self.traces, path, pretty_print=pretty_print)
         elif format == "chatml":
             ChatMLFormatter().save(self.traces, path, pretty_print=pretty_print)
+        elif format == "bert" or format.startswith("bert:"):
+            task = format.split(":")[1] if ":" in format else "classification"
+            BERTFormatter(task=task).save(self.traces, path, pretty_print=pretty_print)
         else:
-            raise ValueError(f"Unknown format: {format}. Use 'messages', 'qa', 'langsmith', 'langfuse', 'tool_call', or 'chatml'")
+            raise ValueError(
+                f"Unknown format: {format}. Use 'messages', 'qa', 'langsmith', 'langfuse', "
+                f"'tool_call', 'chatml', or 'bert'/'bert:<task>'"
+            )
         
         # Print confirmation
         file_size = path.stat().st_size
@@ -273,7 +284,8 @@ class Dataset(BaseModel):
         Convert dataset to JSONL string.
 
         Args:
-            format: Output format - "messages", "qa", "langsmith", "langfuse", "tool_call", or "chatml"
+            format: Output format - "messages", "qa", "langsmith", "langfuse", "tool_call", "chatml",
+                    or "bert" / "bert:<task>" for BERT models
             pretty_print: If True, format JSON with indentation (multi-line)
 
         Returns:
@@ -282,6 +294,7 @@ class Dataset(BaseModel):
         from synkro.formatters import (
             MessagesFormatter, ToolCallFormatter, ChatMLFormatter,
             QAFormatter, LangSmithFormatter, LangfuseFormatter,
+            BERTFormatter,
         )
 
         if format == "messages":
@@ -296,15 +309,22 @@ class Dataset(BaseModel):
             return ToolCallFormatter().to_jsonl(self.traces, pretty_print=pretty_print)
         elif format == "chatml":
             return ChatMLFormatter().to_jsonl(self.traces, pretty_print=pretty_print)
+        elif format == "bert" or format.startswith("bert:"):
+            task = format.split(":")[1] if ":" in format else "classification"
+            return BERTFormatter(task=task).to_jsonl(self.traces, pretty_print=pretty_print)
         else:
-            raise ValueError(f"Unknown format: {format}. Use 'messages', 'qa', 'langsmith', 'langfuse', 'tool_call', or 'chatml'")
+            raise ValueError(
+                f"Unknown format: {format}. Use 'messages', 'qa', 'langsmith', 'langfuse', "
+                f"'tool_call', 'chatml', or 'bert'/'bert:<task>'"
+            )
 
     def to_hf_dataset(self, format: str = "messages"):
         """
         Convert to HuggingFace Dataset.
 
         Args:
-            format: Output format - "messages", "qa", "langsmith", "langfuse", "tool_call", or "chatml"
+            format: Output format - "messages", "qa", "langsmith", "langfuse", "tool_call", "chatml",
+                    or "bert" / "bert:<task>" for BERT models
 
         Returns:
             HuggingFace datasets.Dataset object
@@ -317,6 +337,9 @@ class Dataset(BaseModel):
             >>> hf_dataset = dataset.to_hf_dataset()
             >>> split = hf_dataset.train_test_split(test_size=0.1)
             >>> split.push_to_hub("my-org/policy-traces")
+
+            >>> # BERT format for encoder models
+            >>> hf_dataset = dataset.to_hf_dataset(format="bert:classification")
         """
         try:
             from datasets import Dataset as HFDataset
@@ -329,6 +352,7 @@ class Dataset(BaseModel):
         from synkro.formatters import (
             MessagesFormatter, ToolCallFormatter, ChatMLFormatter,
             QAFormatter, LangSmithFormatter, LangfuseFormatter,
+            BERTFormatter,
         )
 
         if format == "messages":
@@ -343,8 +367,14 @@ class Dataset(BaseModel):
             examples = ToolCallFormatter().format(self.traces)
         elif format == "chatml":
             examples = ChatMLFormatter().format(self.traces)
+        elif format == "bert" or format.startswith("bert:"):
+            task = format.split(":")[1] if ":" in format else "classification"
+            examples = BERTFormatter(task=task, include_metadata=True).format(self.traces)
         else:
-            raise ValueError(f"Unknown format: {format}. Use 'messages', 'qa', 'langsmith', 'langfuse', 'tool_call', or 'chatml'")
+            raise ValueError(
+                f"Unknown format: {format}. Use 'messages', 'qa', 'langsmith', 'langfuse', "
+                f"'tool_call', 'chatml', or 'bert'/'bert:<task>'"
+            )
 
         return HFDataset.from_list(examples)
 

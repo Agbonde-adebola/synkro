@@ -128,6 +128,55 @@ SECURITY_POLICY = """# Information Security Policy
 - Security team leads all incident response
 """
 
+TOXICITY_POLICY = """# Content Moderation Policy
+
+## Prohibited Content (Toxic)
+
+### Harassment & Threats
+- Direct threats of violence or harm
+- Targeted harassment of individuals
+- Doxxing or sharing personal information
+- Stalking-related requests
+
+### Malicious Hacking
+- Requests to hack into accounts without authorization
+- Social engineering attack assistance
+- Malware creation or distribution
+- Credential theft or phishing
+
+### Illegal Activities
+- Drug trafficking or synthesis instructions
+- Weapons manufacturing
+- Financial fraud schemes
+- Identity theft methods
+
+### Harmful Content
+- Self-harm or suicide instructions
+- Child exploitation (absolute zero tolerance)
+- Terrorism or extremism promotion
+- Hate speech targeting protected groups
+
+## Allowed Content (Safe)
+
+### Legitimate Security
+- Password security best practices
+- Authorized penetration testing
+- Security awareness training
+- Vulnerability disclosure (responsible)
+
+### General Tech Help
+- Software troubleshooting
+- Programming questions
+- System administration
+- Network configuration
+
+### Educational Content
+- Cybersecurity career advice
+- Certification study help
+- Academic research
+- Historical security incidents
+"""
+
 # All policies available as a list
 ALL_POLICIES = [
     ("expense", EXPENSE_POLICY),
@@ -135,14 +184,16 @@ ALL_POLICIES = [
     ("refund", REFUND_POLICY),
     ("support", SUPPORT_GUIDELINES),
     ("security", SECURITY_POLICY),
+    ("toxicity", TOXICITY_POLICY),
 ]
 
 __all__ = [
     "EXPENSE_POLICY",
-    "HR_HANDBOOK", 
+    "HR_HANDBOOK",
     "REFUND_POLICY",
     "SUPPORT_GUIDELINES",
     "SECURITY_POLICY",
+    "TOXICITY_POLICY",
     "ALL_POLICIES",
 ]
 

@@ -6,6 +6,12 @@ from synkro.formatters.chatml import ChatMLFormatter
 from synkro.formatters.qa import QAFormatter
 from synkro.formatters.langsmith import LangSmithFormatter
 from synkro.formatters.langfuse import LangfuseFormatter
+from synkro.formatters.bert import (
+    BERTFormatter,
+    BERTTaskFormatter,
+    register_bert_task,
+    get_available_bert_tasks,
+)
 
 __all__ = [
     "MessagesFormatter",
@@ -14,4 +20,8 @@ __all__ = [
     "QAFormatter",
     "LangSmithFormatter",
     "LangfuseFormatter",
+    "BERTFormatter",
+    "BERTTaskFormatter",
+    "register_bert_task",
+    "get_available_bert_tasks",
 ]
