@@ -46,7 +46,6 @@ class LogicMapDisplay:
         # Show root rules
         root_info = f"[dim]Root rules: {', '.join(logic_map.root_rules)}[/dim]"
 
-        self.console.print()
         self.console.print(
             Panel(
                 tree,
@@ -127,7 +126,6 @@ class LogicMapDisplay:
         # Build legend
         legend = "[dim]Legend: [green]+ Added[/green] | [yellow]~ Modified[/yellow] | [red][strike]- Removed[/strike][/red][/dim]"
 
-        self.console.print()
         self.console.print(
             Panel(
                 tree,
@@ -171,7 +169,6 @@ class LogicMapDisplay:
                 await some_llm_call()
         """
         from rich.status import Status
-        self.console.print()  # Add space above spinner
         return Status(f"[cyan]{message}[/cyan]", spinner="dots", console=self.console)
 
     def display_session_state(
@@ -195,7 +192,6 @@ class LogicMapDisplay:
             f"[green]{current_turns}[/green]",
         )
 
-        self.console.print()
         self.console.print(
             Panel(
                 turns_table,
@@ -280,7 +276,6 @@ class LogicMapDisplay:
                         else:
                             branch.add(f"[cyan]S{idx}[/cyan]: {desc}")
 
-        self.console.print()
         self.console.print(
             Panel(
                 tree,
@@ -380,7 +375,6 @@ class LogicMapDisplay:
         # Build legend
         legend = "[dim]Legend: [green]+ Added[/green] | [red][strike]- Removed[/strike][/red][/dim]"
 
-        self.console.print()
         self.console.print(
             Panel(
                 tree,
@@ -427,7 +421,6 @@ class LogicMapDisplay:
             "",
         )
 
-        self.console.print()
         self.console.print(table)
 
     def display_full_session_state(
@@ -469,7 +462,6 @@ class LogicMapDisplay:
 
 [dim]Complexity:[/dim] [cyan]{plan.complexity_level.title()}[/cyan]    [dim]Turns:[/dim] [green]{current_turns}[/green]{suggestions_text}"""
 
-        self.console.print()
         self.console.print(
             Panel(
                 session_details,
@@ -499,7 +491,6 @@ class InteractivePrompt:
   • [cyan]show R001[/cyan] - Show details of a specific rule
   • [cyan]help[/cyan] - Show this message"""
 
-        self.console.print()
         self.console.print(
             Panel(
                 instructions,
@@ -532,7 +523,6 @@ class InteractivePrompt:
   • [yellow]"delete S3"[/yellow] - Remove a scenario
   • [yellow]"more negative scenarios"[/yellow] - Adjust distribution"""
 
-        self.console.print()
         self.console.print(
             Panel(
                 instructions,
@@ -545,7 +535,6 @@ class InteractivePrompt:
         """Prompt user for feedback on the Logic Map."""
         from rich.prompt import Prompt
 
-        self.console.print()
         return Prompt.ask("[cyan]Enter feedback[/cyan]")
 
     def confirm_continue(self) -> bool:

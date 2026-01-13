@@ -216,7 +216,6 @@ class RichReporter:
                 await some_llm_call()
         """
         from rich.status import Status
-        self.console.print()  # Add space above spinner
         return Status(f"[cyan]{message}[/cyan]", spinner="dots", console=self.console)
     
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:
