@@ -8,6 +8,7 @@ Turn policies, handbooks, and documentation into high-quality training data for 
 - **Multiple Formats** - Conversation (multi-turn), Instruction (single-turn), Evaluation (Q&A), and Tool Calling
 - **Eval Platform Support** - Export to LangSmith, Langfuse, or generic Q&A format
 - **Tool Call Training** - Generate OpenAI function calling format for teaching models to use custom tools
+- **Coverage Tracking** - Track scenario diversity like code coverage, identify gaps, and improve coverage with natural language commands
 - **Top LLM Providers** - OpenAI, Anthropic, Google, and local models (Ollama, vLLM)
 - **File Support** - PDF, DOCX, TXT, Markdown, URLs
 - **CLI Included** - Generate datasets from the command line
@@ -302,6 +303,81 @@ result = synkro.generate_scenarios(policy, temperature=0.8)
 # Low temp for deterministic training data
 dataset = synkro.generate(policy, temperature=0.2)
 ```
+
+## Coverage Tracking
+
+Track how well your generated scenarios cover different aspects of your policy, similar to code coverage for tests.
+
+```python
+import synkro
+
+# Generate with logic map access
+result = synkro.generate(policy, traces=50, return_logic_map=True)
+
+# View coverage report
+synkro.coverage_report(result)
+```
+
+Output:
+```
+Coverage Report
+========================================
+Overall: 68.8%
+Sub-categories: 2 covered, 1 partial, 1 uncovered
+Total scenarios: 20
+
+Gaps (2):
+  - Receipt requirements [HIGH] (0% coverage, 0 scenarios)
+  - Travel booking rules [MEDIUM] (partial: 40% coverage)
+
+Suggestions:
+  1. Add 3+ scenarios for 'Receipt requirements' testing R008, R009
+  2. Add edge_case scenarios for 'Travel booking rules'
+```
+
+### Coverage Report Formats
+
+```python
+# Print to console (default)
+synkro.coverage_report(result)
+
+# Get as dictionary for programmatic use
+report = synkro.coverage_report(result, format="dict")
+print(f"Coverage: {report['overall_coverage_percent']}%")
+print(f"Gaps: {len(report['gaps'])}")
+
+# Get as JSON string
+json_str = synkro.coverage_report(result, format="json")
+
+# Get raw CoverageReport object
+report = synkro.coverage_report(result, format="report")
+for gap in report.gaps:
+    print(f"Gap: {gap}")
+```
+
+### Interactive Coverage Commands
+
+In interactive mode, use natural language to view and improve coverage:
+
+| Command | Action |
+|---------|--------|
+| `"show coverage"` | Display coverage summary |
+| `"show coverage gaps"` | Show uncovered sub-categories |
+| `"show heatmap"` | Visual coverage by category |
+| `"increase coverage for refunds by 20%"` | Add scenarios for a sub-category |
+| `"get amount thresholds to 80%"` | Target specific coverage percentage |
+| `"add more negative scenarios for time eligibility"` | Add specific scenario types |
+
+### Coverage Metrics
+
+Each sub-category is tracked with:
+
+| Metric | Description |
+|--------|-------------|
+| `coverage_percent` | % of expected coverage achieved |
+| `coverage_status` | `covered` (80%+), `partial` (30-80%), `uncovered` (<30%) |
+| `scenario_count` | Number of scenarios testing this sub-category |
+| `type_distribution` | Breakdown by positive/negative/edge_case |
 
 ## Cost & Performance
 

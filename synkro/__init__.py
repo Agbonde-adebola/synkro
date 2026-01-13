@@ -49,7 +49,7 @@ try:
     from importlib.metadata import version as _get_version
     __version__ = _get_version("synkro")
 except Exception:
-    __version__ = "0.4.43"  # Fallback
+    __version__ = "0.4.44"  # Fallback
 
 # =============================================================================
 # PRIMARY API - What most developers need
