@@ -71,6 +71,7 @@ CURRENT STATE:
 - Conversation turns: {current_turns} ({complexity_level} complexity)
 - Logic Map has {rule_count} rules
 - Scenarios: {scenario_count} total
+- Coverage: {coverage_summary}
 
 PREVIOUS FEEDBACK IN THIS SESSION:
 {conversation_history}
@@ -112,16 +113,29 @@ CLASSIFY THE INTENT:
    → Set intent_type="compound", rule_feedback (the rule part), AND scenario_feedback (the scenario part)
    → The system will execute rules first, then scenarios, so scenarios can reference newly added rules
 
-5. "command" - User typed a built-in command (done, undo, reset, help, show Rxxx, show Sxxx)
+5. "coverage" - User wants to view or improve coverage metrics
+   Examples:
+   - "show coverage" → coverage_operation="view", coverage_view_mode="summary"
+   - "show coverage gaps" / "what's missing" → coverage_operation="view", coverage_view_mode="gaps"
+   - "show heatmap" → coverage_operation="view", coverage_view_mode="heatmap"
+   - "increase coverage for refunds by 20%" → coverage_operation="increase", coverage_target_sub_category="refunds", coverage_increase_amount=20
+   - "add more negative scenarios for time eligibility" → coverage_operation="increase", coverage_target_sub_category="time eligibility", coverage_scenario_type="negative"
+   - "improve coverage of amount thresholds" → coverage_operation="increase", coverage_target_sub_category="amount thresholds"
+   - "get amount thresholds to 80%" → coverage_operation="target", coverage_target_sub_category="amount thresholds", coverage_target_percent=80
+   - "fully cover time rules" / "100% coverage for X" → coverage_operation="target", coverage_target_sub_category="X", coverage_target_percent=100
+   → Set intent_type="coverage" and the appropriate coverage_* fields
+
+6. "command" - User typed a built-in command (done, undo, reset, help, show Rxxx, show Sxxx)
    → Set intent_type="command", leave other fields null
    Note: Commands are handled separately, but classify them if they appear
 
-6. "unclear" - Cannot determine intent
+7. "unclear" - Cannot determine intent
    → Set intent_type="unclear"
 
 IMPORTANT:
 - Set confidence based on how clear the intent is (0.0 to 1.0)
 - Use "compound" when the user explicitly wants BOTH rule AND scenario changes in ONE request
+- Use "coverage" for any requests about viewing or improving coverage metrics
 - Default to "rules" if ambiguous between rules and unclear
 - Default to "scenarios" if ambiguous between scenarios and unclear"""
 

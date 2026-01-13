@@ -49,7 +49,7 @@ try:
     from importlib.metadata import version as _get_version
     __version__ = _get_version("synkro")
 except Exception:
-    __version__ = "0.4.42"  # Fallback
+    __version__ = "0.4.43"  # Fallback
 
 # =============================================================================
 # PRIMARY API - What most developers need
@@ -77,12 +77,16 @@ from synkro.reporting import ProgressReporter
 # GenerationResult for return_logic_map=True
 from synkro.pipeline.runner import GenerationResult, ScenariosResult
 
+# Coverage tracking types
+from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
+
 __all__ = [
     # Primary API
     "create_pipeline",
     "generate",
     "generate_scenarios",
     "grade",
+    "coverage_report",
     "DatasetType",
     "Policy",
     "Dataset",
@@ -103,6 +107,8 @@ __all__ = [
     # Result types
     "GenerationResult",
     "ScenariosResult",
+    "CoverageReport",
+    "SubCategoryTaxonomy",
     # Data types (less common)
     "Trace",
     "Scenario",
@@ -330,3 +336,74 @@ def grade(
         return await grader.grade(trace, policy_text)
 
     return asyncio.run(_grade())
+
+
+def coverage_report(
+    result: GenerationResult | ScenariosResult,
+    format: str = "console",
+) -> CoverageReport | str | dict | None:
+    """
+    Get or display the coverage report for a generation result.
+
+    Coverage tracking provides insights into how well your generated scenarios
+    cover different aspects (sub-categories) of your policy, similar to
+    code coverage for tests.
+
+    Args:
+        result: Result from synkro.generate() or synkro.generate_scenarios()
+                (must have been generated with return_logic_map=True)
+        format: Output format:
+            - "console": Print formatted report to console (returns CoverageReport)
+            - "json": Return JSON string
+            - "dict": Return dictionary
+            - "report": Return CoverageReport object without printing
+
+    Returns:
+        CoverageReport, JSON string, or dict based on format.
+        Returns None if no coverage data is available.
+
+    Example:
+        >>> result = synkro.generate(policy, return_logic_map=True)
+        >>> synkro.coverage_report(result)  # Prints to console
+
+        >>> # Get as dict for programmatic use
+        >>> report = synkro.coverage_report(result, format="dict")
+        >>> print(f"Overall coverage: {report['overall_coverage_percent']}%")
+
+        >>> # Get raw CoverageReport object
+        >>> report = synkro.coverage_report(result, format="report")
+        >>> for gap in report.gaps:
+        ...     print(f"Gap: {gap}")
+    """
+    import json
+    from rich.console import Console
+
+    # Extract coverage report from result
+    report = None
+    if isinstance(result, GenerationResult):
+        report = result.coverage_report
+    elif hasattr(result, 'coverage_report'):
+        report = result.coverage_report
+
+    if report is None:
+        console = Console()
+        console.print(
+            "[yellow]No coverage data available.[/yellow]\n"
+            "[dim]Coverage tracking requires generating scenarios with coverage enabled.[/dim]"
+        )
+        return None
+
+    if format == "console":
+        # Print formatted report using RichReporter's coverage display
+        from synkro.reporting import RichReporter
+        reporter = RichReporter()
+        reporter.on_coverage_calculated(report)
+        return report
+    elif format == "json":
+        return json.dumps(report.model_dump(), indent=2)
+    elif format == "dict":
+        return report.model_dump()
+    elif format == "report":
+        return report
+    else:
+        raise ValueError(f"Unknown format: {format}. Use 'console', 'json', 'dict', or 'report'.")

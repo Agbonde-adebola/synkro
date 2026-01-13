@@ -56,6 +56,7 @@ class HITLIntentClassifier:
         rule_count: int,
         scenario_count: int = 0,
         conversation_history: str = "No previous feedback in this session.",
+        coverage_summary: str = "Not available",
     ) -> HITLIntent:
         """
         Classify user input and extract structured intent.
@@ -67,6 +68,7 @@ class HITLIntentClassifier:
             rule_count: Number of rules in the Logic Map
             scenario_count: Number of scenarios generated
             conversation_history: Formatted history of previous feedback in this session
+            coverage_summary: Summary of coverage metrics (e.g., "75% overall, 3 gaps")
 
         Returns:
             HITLIntent with classified intent_type and relevant fields populated
@@ -78,6 +80,7 @@ class HITLIntentClassifier:
             rule_count=rule_count,
             scenario_count=scenario_count,
             conversation_history=conversation_history,
+            coverage_summary=coverage_summary,
         )
 
         try:

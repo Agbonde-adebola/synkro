@@ -38,6 +38,10 @@ if TYPE_CHECKING:
     from synkro.quality.golden_refiner import GoldenRefiner
     from synkro.interactive.logic_map_editor import LogicMapEditor
     from synkro.interactive.scenario_editor import ScenarioEditor
+    from synkro.coverage.taxonomy_extractor import TaxonomyExtractor
+    from synkro.coverage.scenario_tagger import ScenarioTagger
+    from synkro.coverage.calculator import CoverageCalculator
+    from synkro.coverage.improver import CoverageImprover
 
 
 class ComponentFactory:
@@ -285,6 +289,46 @@ class ComponentFactory:
         """
         from synkro.interactive.scenario_editor import ScenarioEditor
         return ScenarioEditor(llm=self.grading_llm)
+
+    # =========================================================================
+    # COVERAGE TRACKING COMPONENTS
+    # =========================================================================
+
+    def create_taxonomy_extractor(self) -> "TaxonomyExtractor":
+        """
+        Create a TaxonomyExtractor for sub-category extraction.
+
+        Uses the grading LLM (stronger model) for accurate taxonomy extraction.
+        """
+        from synkro.coverage.taxonomy_extractor import TaxonomyExtractor
+        return TaxonomyExtractor(llm=self.grading_llm)
+
+    def create_scenario_tagger(self) -> "ScenarioTagger":
+        """
+        Create a ScenarioTagger for tagging scenarios with sub-categories.
+
+        Uses the generation LLM (faster) for batch tagging operations.
+        """
+        from synkro.coverage.scenario_tagger import ScenarioTagger
+        return ScenarioTagger(llm=self.generation_llm)
+
+    def create_coverage_calculator(self) -> "CoverageCalculator":
+        """
+        Create a CoverageCalculator for computing coverage metrics.
+
+        Uses the generation LLM for generating improvement suggestions.
+        """
+        from synkro.coverage.calculator import CoverageCalculator
+        return CoverageCalculator(llm=self.generation_llm)
+
+    def create_coverage_improver(self) -> "CoverageImprover":
+        """
+        Create a CoverageImprover for generating gap-filling scenarios.
+
+        Uses the generation LLM for creating new scenarios.
+        """
+        from synkro.coverage.improver import CoverageImprover
+        return CoverageImprover(llm=self.generation_llm)
 
 
 __all__ = ["ComponentFactory"]

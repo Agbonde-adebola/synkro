@@ -1,7 +1,12 @@
 """Core Pydantic models for Synkro."""
 
-from typing import Literal, Any
+from __future__ import annotations
+
+from typing import Literal, Any, TYPE_CHECKING
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from synkro.types.coverage import SubCategoryTaxonomy
 
 
 Role = Literal["system", "user", "assistant", "tool"]
@@ -150,4 +155,8 @@ class Plan(BaseModel):
     complexity_level: Literal["simple", "conditional", "complex"] = Field(
         default="simple",
         description="Policy complexity level: simple (1-2 turns), conditional (3 turns), complex (5+ turns)"
+    )
+    taxonomy: "SubCategoryTaxonomy | None" = Field(
+        default=None,
+        description="Sub-category taxonomy for coverage tracking"
     )

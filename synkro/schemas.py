@@ -392,8 +392,8 @@ class RefinedLogicMapOutput(BaseModel):
 class HITLIntent(BaseModel):
     """Classified user intent in unified HITL session."""
 
-    intent_type: Literal["turns", "rules", "scenarios", "compound", "command", "unclear"] = Field(
-        description="Type of user intent: turns adjustment, rule modification, scenario editing, compound (rules + scenarios together), command, or unclear"
+    intent_type: Literal["turns", "rules", "scenarios", "compound", "coverage", "command", "unclear"] = Field(
+        description="Type of user intent: turns adjustment, rule modification, scenario editing, compound (rules + scenarios together), coverage operations, command, or unclear"
     )
     confidence: float = Field(
         ge=0, le=1, description="Confidence score for the classification"
@@ -421,6 +421,26 @@ class HITLIntent(BaseModel):
     )
     scenario_feedback: str | None = Field(
         default=None, description="Original user feedback for scenario modification"
+    )
+
+    # For coverage operations
+    coverage_operation: Literal["view", "increase", "target"] | None = Field(
+        default=None, description="Type of coverage operation"
+    )
+    coverage_target_sub_category: str | None = Field(
+        default=None, description="Target sub-category name or ID"
+    )
+    coverage_target_percent: int | None = Field(
+        default=None, ge=0, le=100, description="Target coverage percentage"
+    )
+    coverage_increase_amount: int | None = Field(
+        default=None, ge=1, le=100, description="Percentage points to increase coverage"
+    )
+    coverage_scenario_type: str | None = Field(
+        default=None, description="Specific scenario type to add (positive/negative/edge_case)"
+    )
+    coverage_view_mode: Literal["summary", "gaps", "heatmap", "detail"] | None = Field(
+        default=None, description="What to display for coverage view commands"
     )
 
 
@@ -517,5 +537,66 @@ class VerificationOutput(BaseModel):
     )
     feedback: str = Field(
         description="Summary of verification result"
+    )
+
+
+# =============================================================================
+# COVERAGE SCHEMAS
+# =============================================================================
+
+
+class SubCategoryOutput(BaseModel):
+    """Output schema for a single sub-category extraction."""
+
+    id: str = Field(description="Unique identifier (e.g., 'SC001')")
+    name: str = Field(description="Short, descriptive name")
+    description: str = Field(description="What this sub-category covers")
+    parent_category: str = Field(description="Name of the parent category")
+    related_rule_ids: list[str] = Field(
+        default_factory=list,
+        description="Rule IDs from LogicMap that relate to this sub-category"
+    )
+    priority: Literal["high", "medium", "low"] = Field(
+        default="medium",
+        description="Coverage priority based on policy importance"
+    )
+
+
+class TaxonomyOutput(BaseModel):
+    """Output schema for sub-category taxonomy extraction."""
+
+    sub_categories: list[SubCategoryOutput] = Field(
+        description="All extracted sub-categories"
+    )
+    reasoning: str = Field(
+        description="Explanation of how the taxonomy was organized"
+    )
+
+
+class ScenarioTaggingOutput(BaseModel):
+    """Output schema for tagging a scenario with sub-categories."""
+
+    scenario_index: int = Field(description="Index of the scenario being tagged")
+    sub_category_ids: list[str] = Field(
+        description="Sub-category IDs this scenario covers"
+    )
+
+
+class BatchedScenarioTagging(BaseModel):
+    """Batch output for scenario tagging."""
+
+    taggings: list[ScenarioTaggingOutput] = Field(
+        description="Tagging results for each scenario"
+    )
+
+
+class CoverageSuggestionsOutput(BaseModel):
+    """Output schema for coverage improvement suggestions."""
+
+    suggestions: list[str] = Field(
+        description="Actionable suggestions to improve coverage"
+    )
+    reasoning: str = Field(
+        description="Explanation of how suggestions were prioritized"
     )
 

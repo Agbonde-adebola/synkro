@@ -266,6 +266,7 @@ class GoldenScenario(BaseModel):
     - Explicit scenario type (positive, negative, edge_case, irrelevant)
     - Target rule IDs that this scenario is designed to test
     - Expected outcome based on the rules
+    - Sub-category IDs for coverage tracking
     """
 
     description: str = Field(
@@ -289,6 +290,10 @@ class GoldenScenario(BaseModel):
     expected_outcome: str = Field(
         default="",
         description="Expected response behavior based on rules"
+    )
+    sub_category_ids: list[str] = Field(
+        default_factory=list,
+        description="Sub-category IDs this scenario covers (for coverage tracking)"
     )
 
     def to_base_scenario(self) -> "Scenario":

@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from synkro.interactive.scenario_editor import ScenarioEditor
     from synkro.types.core import Plan
     from synkro.types.logic_map import GoldenScenario
+    from synkro.types.coverage import CoverageReport
 
 
 class GenerationResult:
@@ -44,6 +45,7 @@ class GenerationResult:
         >>> result = await pipeline.run(policy, traces=50, ...)
         >>> dataset = result.dataset
         >>> logic_map = result.logic_map  # Inspect extracted rules
+        >>> coverage = result.coverage_report  # View coverage metrics
     """
 
     def __init__(
@@ -52,11 +54,13 @@ class GenerationResult:
         logic_map: LogicMap | None = None,
         scenarios: list | None = None,
         distribution: dict[str, int] | None = None,
+        coverage_report: "CoverageReport | None" = None,
     ):
         self.dataset = dataset
         self.logic_map = logic_map
         self.scenarios = scenarios or []
         self.distribution = distribution or {}
+        self.coverage_report = coverage_report
 
     # Allow unpacking: dataset, logic_map = result
     def __iter__(self):

@@ -15,6 +15,7 @@ from synkro.types.core import Plan, Scenario, Trace, GradeResult
 
 if TYPE_CHECKING:
     from synkro.types.logic_map import LogicMap, GoldenScenario
+    from synkro.types.coverage import SubCategoryTaxonomy, CoverageReport
 
 
 class ProgressReporter(Protocol):
@@ -93,6 +94,22 @@ class ProgressReporter(Protocol):
         """Called when golden scenarios are generated (Stage 2)."""
         ...
 
+    def on_taxonomy_extracted(self, taxonomy: "SubCategoryTaxonomy") -> None:
+        """Called when sub-category taxonomy is extracted for coverage tracking."""
+        ...
+
+    def on_coverage_calculated(self, report: "CoverageReport") -> None:
+        """Called when coverage metrics are calculated."""
+        ...
+
+    def on_coverage_improved(
+        self,
+        before: "CoverageReport",
+        after: "CoverageReport",
+        added_scenarios: int,
+    ) -> None:
+        """Called when coverage is improved via HITL commands."""
+        ...
 
 
 class _NoOpContextManager:
@@ -166,6 +183,14 @@ class SilentReporter:
     def on_golden_scenarios_complete(self, scenarios, distribution) -> None:
         pass
 
+    def on_taxonomy_extracted(self, taxonomy) -> None:
+        pass
+
+    def on_coverage_calculated(self, report) -> None:
+        pass
+
+    def on_coverage_improved(self, before, after, added_scenarios) -> None:
+        pass
 
 
 class RichReporter:
@@ -324,6 +349,75 @@ class RichReporter:
             if len(cat_traces) > 3:
                 self.console.print(f"    [dim]... and {len(cat_traces) - 3} more[/dim]")
 
+    def on_taxonomy_extracted(self, taxonomy) -> None:
+        """Display extracted sub-category taxonomy."""
+        self.console.print(f"\n[green]🏷️  Taxonomy[/green] [dim]{len(taxonomy.sub_categories)} sub-categories[/dim]")
+
+    def on_coverage_calculated(self, report) -> None:
+        """Display coverage report summary."""
+        from rich.table import Table
+        from rich.panel import Panel
+
+        # Summary
+        status_colors = {
+            "covered": "green",
+            "partial": "yellow",
+            "uncovered": "red",
+        }
+
+        self.console.print(f"\n[green]📊 Coverage[/green] [dim]{report.overall_coverage_percent:.0f}% overall[/dim]")
+
+        # Coverage table
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Sub-Category")
+        table.add_column("Coverage", justify="right")
+        table.add_column("Status")
+
+        for cov in report.sub_category_coverage[:10]:
+            status_icon = {
+                "covered": "[green]✓[/green]",
+                "partial": "[yellow]~[/yellow]",
+                "uncovered": "[red]✗[/red]",
+            }.get(cov.coverage_status, "?")
+
+            status_color = status_colors.get(cov.coverage_status, "white")
+            table.add_row(
+                cov.sub_category_name,
+                f"{cov.coverage_percent:.0f}% ({cov.scenario_count})",
+                status_icon,
+            )
+
+        if len(report.sub_category_coverage) > 10:
+            table.add_row(
+                f"[dim]... {len(report.sub_category_coverage) - 10} more[/dim]",
+                "",
+                "",
+            )
+
+        self.console.print(table)
+
+        # Show gaps and suggestions
+        if report.gaps:
+            self.console.print(f"\n[yellow]Gaps:[/yellow]")
+            for gap in report.gaps[:3]:
+                self.console.print(f"  • {gap}")
+            if len(report.gaps) > 3:
+                self.console.print(f"  [dim]... {len(report.gaps) - 3} more[/dim]")
+
+        if report.suggestions:
+            self.console.print(f"\n[cyan]Suggestions:[/cyan]")
+            for i, sugg in enumerate(report.suggestions[:3], 1):
+                self.console.print(f"  {i}. {sugg}")
+
+    def on_coverage_improved(self, before, after, added_scenarios) -> None:
+        """Display coverage improvement."""
+        improvement = after.overall_coverage_percent - before.overall_coverage_percent
+        self.console.print(
+            f"\n[green]📈 Coverage Improved[/green] "
+            f"[dim]{before.overall_coverage_percent:.0f}% → {after.overall_coverage_percent:.0f}% "
+            f"(+{improvement:.0f}%, {added_scenarios} scenarios added)[/dim]"
+        )
+
 
 class CallbackReporter:
     """
@@ -473,6 +567,25 @@ class CallbackReporter:
 
     def on_golden_scenarios_complete(self, scenarios, distribution) -> None:
         self._emit("golden_scenarios_complete", {"count": len(scenarios), "distribution": distribution})
+
+    def on_taxonomy_extracted(self, taxonomy) -> None:
+        self._emit("taxonomy_extracted", {"sub_categories_count": len(taxonomy.sub_categories)})
+
+    def on_coverage_calculated(self, report) -> None:
+        self._emit("coverage_calculated", {
+            "overall_coverage_percent": report.overall_coverage_percent,
+            "covered_count": report.covered_count,
+            "partial_count": report.partial_count,
+            "uncovered_count": report.uncovered_count,
+            "gaps_count": len(report.gaps),
+        })
+
+    def on_coverage_improved(self, before, after, added_scenarios) -> None:
+        self._emit("coverage_improved", {
+            "before_percent": before.overall_coverage_percent,
+            "after_percent": after.overall_coverage_percent,
+            "added_scenarios": added_scenarios,
+        })
 
 
 class FileLoggingReporter:
