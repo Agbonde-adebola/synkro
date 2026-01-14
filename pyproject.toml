@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synkro"
-version = "0.4.57"
-description = "Generate training datasets from any document"
+version = "0.4.58"
+description = "Framework for turning unstructured policies into training data for LLMs"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
