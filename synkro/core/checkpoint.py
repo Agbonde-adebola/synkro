@@ -1,5 +1,6 @@
 """Checkpoint manager for resumable generation."""
 
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +14,9 @@ if TYPE_CHECKING:
     from synkro.types.logic_map import LogicMap, GoldenScenario
 
 console = Console()
+
+# Hash length for policy matching (first 16 chars of SHA256)
+HASH_LENGTH = 16
 
 
 class CheckpointData(BaseModel):
@@ -179,21 +183,25 @@ class CheckpointManager:
         from synkro.types.logic_map import GoldenScenario
 
         data = self._load_or_create()
-        return [GoldenScenario.model_validate(s) for s in data.scenarios_data]
+        return self._validate_list(data.scenarios_data, GoldenScenario)
 
     def get_traces(self) -> list["Trace"]:
         """Retrieve traces from checkpoint."""
         from synkro.types.core import Trace
 
         data = self._load_or_create()
-        return [Trace.model_validate(t) for t in data.traces_data]
+        return self._validate_list(data.traces_data, Trace)
 
     def get_verified_traces(self) -> list["Trace"]:
         """Retrieve verified traces from checkpoint."""
         from synkro.types.core import Trace
 
         data = self._load_or_create()
-        return [Trace.model_validate(t) for t in data.verified_traces_data]
+        return self._validate_list(data.verified_traces_data, Trace)
+
+    def _validate_list(self, data_list: list[dict], model_class: type) -> list:
+        """Helper to validate a list of dicts into model instances."""
+        return [model_class.model_validate(item) for item in data_list]
 
     def get_pending_scenario_indices(self, total: int) -> list[int]:
         """Get indices of scenarios that haven't been processed yet."""
@@ -243,8 +251,7 @@ class CheckpointManager:
 
 def hash_policy(policy_text: str) -> str:
     """Create a hash of policy text for checkpoint matching."""
-    import hashlib
-    return hashlib.sha256(policy_text.encode()).hexdigest()[:16]
+    return hashlib.sha256(policy_text.encode()).hexdigest()[:HASH_LENGTH]
 
 
 __all__ = ["CheckpointManager", "CheckpointData", "hash_policy"]

@@ -13,6 +13,13 @@ PROVIDER_RATE_LIMITS = {
 # Target 80% of rate limit to avoid hitting caps
 UTILIZATION_TARGET = 0.8
 
+# Average number of LLM calls per trace (generate, grade, maybe refine)
+AVG_CALLS_PER_TRACE = 3
+
+# Worker count bounds
+MIN_WORKERS = 5
+MAX_WORKERS = 100
+
 # Default workers per provider (pre-computed for convenience)
 DEFAULT_WORKERS = {
     "openai": 15,  # ~60 RPM / 3 calls = 20, use 15 to be safe
@@ -73,13 +80,10 @@ def auto_workers(model: str) -> int:
     rpm = PROVIDER_RATE_LIMITS.get(provider, 60)
 
     # Workers = RPM * utilization / avg_calls_per_trace
-    # Each trace needs ~3 calls (generate, grade, maybe refine)
-    avg_calls_per_trace = 3
-
-    workers = int((rpm * UTILIZATION_TARGET) / avg_calls_per_trace)
+    workers = int((rpm * UTILIZATION_TARGET) / AVG_CALLS_PER_TRACE)
 
     # Clamp to reasonable bounds
-    return max(5, min(workers, 100))
+    return max(MIN_WORKERS, min(workers, MAX_WORKERS))
 
 
 def get_default_workers(model: str) -> int:
