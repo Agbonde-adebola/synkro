@@ -59,12 +59,43 @@
       "pages": ["datasets/conversation", "datasets/instruction", "datasets/evaluation", "datasets/tool-call"]
     },
     {
-      "group": "API Reference",
-      "pages": ["api-reference/overview"]
+      "group": "Guides",
+      "pages": [
+        "guides/cost-tracking",
+        "guides/checkpointing",
+        "guides/hitl-workflow",
+        "guides/coverage-improvement",
+        "guides/tool-calling",
+        "guides/huggingface-integration"
+      ]
     },
     {
-      "group": "Functions",
-      "pages": ["api-reference/generate", "api-reference/generate-scenarios", "api-reference/grade", "api-reference/create-pipeline"]
+      "group": "API Reference",
+      "pages": [
+        "api-reference/overview",
+        "api-reference/generate",
+        "api-reference/generate-scenarios",
+        "api-reference/grade",
+        "api-reference/create-pipeline",
+        "api-reference/dataset",
+        "api-reference/policy",
+        "api-reference/types",
+        "api-reference/reporters",
+        "api-reference/models",
+        "api-reference/formatters"
+      ]
+    },
+    {
+      "group": "Advanced",
+      "pages": ["advanced/index"]
+    },
+    {
+      "group": "Examples",
+      "pages": ["examples/index"]
+    },
+    {
+      "group": "Reference",
+      "pages": ["reference/cheatsheet", "reference/parameters"]
     }
   ],
   "footerSocials": {
