@@ -1,0 +1,322 @@
+---
+title: Examples
+description: "Copy-paste ready code examples for common workflows"
+---
+
+## Basic Generation
+
+```python
+import synkro
+
+# Simple generation
+policy = """
+All refund requests must be processed within 30 days of purchase.
+Refunds over $100 require manager approval.
+Final sale items cannot be refunded.
+"""
+
+dataset = synkro.generate(policy, traces=100)
+dataset.save("training.jsonl")
+```
+
+---
+
+## Custom Pipeline
+
+```python
+from synkro import create_pipeline, DatasetType
+from synkro.models import OpenAI
+
+pipeline = create_pipeline(
+    model=OpenAI.GPT_5_MINI,
+    grading_model=OpenAI.GPT_52,
+    dataset_type=DatasetType.CONVERSATION,
+    max_iterations=3,
+    skip_grading=False,
+    temperature=0.7,
+    enable_hitl=True,
+)
+
+dataset = pipeline.generate(policy, traces=100)
+```
+
+---
+
+## Evaluation Workflow
+
+```python
+import synkro
+
+# Generate test scenarios (no synthetic responses)
+result = synkro.generate_scenarios(policy, count=100)
+
+# Evaluate your model
+passed = 0
+failed = 0
+
+for scenario in result.scenarios:
+    # Run YOUR model
+    response = my_model(scenario.user_message)
+
+    # Grade the response
+    grade = synkro.grade(response, scenario, policy)
+
+    if grade.passed:
+        passed += 1
+    else:
+        failed += 1
+        print(f"FAILED: {scenario.user_message[:50]}...")
+        print(f"  Issues: {grade.issues}")
+
+print(f"\nPass rate: {passed}/{passed+failed} ({passed/(passed+failed)*100:.1f}%)")
+```
+
+---
+
+## Coverage Optimization
+
+```python
+import synkro
+
+# Generate with coverage tracking
+result = synkro.generate(policy, traces=100, return_logic_map=True)
+
+# Check coverage
+report = result.coverage_report
+print(f"Overall coverage: {report.overall_coverage_percent}%")
+
+# Identify gaps
+for gap in report.gaps:
+    print(f"Gap: {gap}")
+
+# View suggestions
+for suggestion in report.suggestions:
+    print(f"Suggestion: {suggestion}")
+
+# Export coverage report
+with open("coverage.json", "w") as f:
+    f.write(report.to_json())
+```
+
+---
+
+## Multi-Format Export
+
+```python
+import synkro
+
+dataset = synkro.generate(policy, traces=100)
+
+# OpenAI format
+dataset.save("openai_training.jsonl", format="messages")
+
+# ChatML format
+dataset.save("chatml_training.jsonl", format="chatml")
+
+# Evaluation format
+dataset.save("eval.jsonl", format="qa")
+
+# LangSmith format
+dataset.save("langsmith_eval.jsonl", format="langsmith")
+
+# BERT classification
+dataset.save("bert_classifier.jsonl", format="bert")
+```
+
+---
+
+## Silent Batch Processing
+
+```python
+from synkro import SilentReporter, FileLoggingReporter
+
+# Silent mode (no console output)
+dataset = synkro.generate(
+    policy,
+    traces=1000,
+    reporter=SilentReporter(),
+    enable_hitl=False,
+)
+
+# Log to file only
+reporter = FileLoggingReporter(
+    delegate=SilentReporter(),
+    log_dir="./logs"
+)
+dataset = synkro.generate(policy, traces=1000, reporter=reporter)
+print(f"Log saved: {reporter.log_path}")
+```
+
+---
+
+## Tool Calling Dataset
+
+```python
+from synkro import create_pipeline, ToolDefinition, DatasetType
+
+# Define tools
+tools = [
+    ToolDefinition(
+        name="search_orders",
+        description="Search customer orders by order ID or email",
+        parameters={
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string", "description": "Order ID"},
+                "email": {"type": "string", "description": "Customer email"}
+            }
+        },
+        mock_responses=["Order #12345: Shipped, arriving tomorrow"]
+    ),
+    ToolDefinition(
+        name="process_refund",
+        description="Process a refund for an order",
+        parameters={
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string", "description": "Order ID"},
+                "amount": {"type": "number", "description": "Refund amount"},
+                "reason": {"type": "string", "description": "Refund reason"}
+            },
+            "required": ["order_id", "amount"]
+        },
+        mock_responses=["Refund of $50.00 processed successfully"]
+    )
+]
+
+# Create pipeline
+pipeline = create_pipeline(
+    dataset_type=DatasetType.TOOL_CALL,
+    tools=tools,
+)
+
+# Generate
+dataset = pipeline.generate(policy, traces=50)
+dataset.save("tool_training.jsonl", format="tool_call")
+```
+
+---
+
+## HuggingFace Upload
+
+```python
+import synkro
+
+# Generate dataset
+dataset = synkro.generate(policy, traces=500)
+
+# Push directly to Hub
+url = dataset.push_to_hub("my-org/policy-training-data", private=True)
+print(f"Dataset: {url}")
+
+# Or with train/test split
+hf_dataset = dataset.to_hf_dataset()
+split = hf_dataset.train_test_split(test_size=0.1)
+split.push_to_hub("my-org/policy-training-data")
+```
+
+---
+
+## Local Model (Ollama)
+
+```python
+from synkro import create_pipeline
+from synkro.models import Local
+
+pipeline = create_pipeline(
+    model=Local.llama("llama3.2:latest"),
+    grading_model=Local.llama("llama3.2:70b"),
+    base_url="http://localhost:11434/v1",
+)
+
+dataset = pipeline.generate(policy, traces=100)
+```
+
+---
+
+## From Policy File
+
+```python
+import synkro
+from synkro import Policy
+
+# Load policy from file
+policy = Policy.from_file("customer_service_policy.md")
+
+# Or from string
+policy = Policy(text=open("policy.txt").read())
+
+# Generate
+dataset = synkro.generate(policy, traces=100)
+```
+
+---
+
+## Using Built-in Policies
+
+```python
+import synkro
+from synkro.policies import customer_support, expense_approval
+
+# Generate from built-in policy
+dataset = synkro.generate(customer_support, traces=100)
+
+# Or combine with custom rules
+custom_policy = f"""
+{customer_support.text}
+
+Additional Rules:
+- All VIP customers get priority handling
+- Escalate security concerns immediately
+"""
+
+dataset = synkro.generate(custom_policy, traces=100)
+```
+
+---
+
+## Filtering and Deduplication
+
+```python
+import synkro
+
+dataset = synkro.generate(policy, traces=200)
+
+# Filter to passing traces only
+high_quality = dataset.filter(passed=True)
+
+# Remove duplicates
+deduped = high_quality.dedupe(method="semantic", threshold=0.9)
+
+# Filter by category
+refunds_only = deduped.filter(category="Refunds")
+
+# Chain operations
+final = (dataset
+    .filter(passed=True)
+    .dedupe(method="exact")
+    .filter(min_length=100))
+
+final.save("curated_training.jsonl")
+print(f"Final dataset: {len(final)} traces")
+```
+
+---
+
+## Progress Callbacks
+
+```python
+from synkro import CallbackReporter
+
+# Track progress programmatically
+def on_progress(event: str, data: dict):
+    if event == "scenario_progress":
+        print(f"Scenarios: {data['completed']}/{data['total']}")
+    elif event == "response_progress":
+        print(f"Responses: {data['completed']}/{data['total']}")
+    elif event == "complete":
+        print(f"Done! Cost: ${data.get('total_cost', 0):.4f}")
+
+reporter = CallbackReporter(on_progress=on_progress)
+dataset = synkro.generate(policy, traces=100, reporter=reporter)
+```

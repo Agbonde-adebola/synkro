@@ -1,0 +1,203 @@
+---
+title: Coverage Improvement
+description: "Optimize scenario coverage across policy sub-categories"
+---
+
+Synkro's coverage system tracks how well your generated scenarios cover the policy's sub-categories, similar to code coverage for tests.
+
+## Enabling Coverage Tracking
+
+```python
+import synkro
+
+# Enable coverage by requesting logic map
+result = synkro.generate(policy, return_logic_map=True)
+
+# Access coverage report
+report = result.coverage_report
+print(f"Overall coverage: {report.overall_coverage_percent}%")
+```
+
+## Understanding Coverage
+
+### Sub-Categories
+
+Each policy category is broken down into testable sub-categories. For example:
+
+**Category: Refund Policy**
+- Time-based eligibility (30-day window rules)
+- Amount thresholds (refund limits)
+- Method restrictions (cash vs. credit)
+- Exception handling (final sale items)
+
+### Coverage Status
+
+| Status | Icon | Description |
+|--------|------|-------------|
+| Covered | | 80%+ of expected scenarios |
+| Partial | ~ | 30-80% of expected scenarios |
+| Uncovered | | Less than 30% of expected scenarios |
+
+## Viewing Coverage
+
+### Console Output
+
+With `RichReporter` (default), coverage is displayed automatically:
+
+```
+Coverage
+Sub-Category              Coverage    Status
+Time-based eligibility    100% (5)
+Amount thresholds         80% (4)
+Method restrictions       40% (2)     ~
+Exception handling        0% (0)
+
+Suggestions:
+  1. Add 3 negative scenarios for Exception handling
+  2. Add 2 edge_case scenarios for Method restrictions
+```
+
+### Programmatic Access
+
+```python
+report = result.coverage_report
+
+# Overall metrics
+print(f"Total scenarios: {report.total_scenarios}")
+print(f"Coverage: {report.overall_coverage_percent}%")
+print(f"Covered: {report.covered_count}")
+print(f"Partial: {report.partial_count}")
+print(f"Uncovered: {report.uncovered_count}")
+
+# Gaps and suggestions
+for gap in report.gaps:
+    print(f"Gap: {gap}")
+
+for suggestion in report.suggestions:
+    print(f"Suggestion: {suggestion}")
+
+# Per sub-category details
+for cov in report.sub_category_coverage:
+    print(f"{cov.sub_category_name}: {cov.coverage_percent}%")
+    print(f"  Scenarios: {cov.scenario_count}")
+    print(f"  Types: {cov.type_distribution}")
+```
+
+## Improving Coverage
+
+### During HITL Session
+
+In an interactive session, use coverage commands:
+
+```
+[HITL] show coverage
+
+Coverage Report:
+  Method restrictions: 0% (uncovered)
+  Exception handling: 40% (partial)
+
+[HITL] increase coverage for Method restrictions by 50%
+
+Generating scenarios for Method restrictions...
+Added 3 scenarios.
+
+[HITL] target Exception handling to 80%
+
+Generating scenarios for Exception handling...
+Added 2 scenarios.
+```
+
+### Programmatic Coverage Improvement
+
+```python
+from synkro.advanced import CoverageImprover, CoverageCalculator
+
+# Calculate current coverage
+calculator = CoverageCalculator(llm)
+report = await calculator.calculate(scenarios, taxonomy)
+
+# Improve coverage
+improver = CoverageImprover(llm)
+new_scenarios = await improver.improve(
+    report,
+    taxonomy,
+    logic_map,
+    policy.text,
+    existing_scenarios=scenarios,
+)
+
+# Combine and recalculate
+all_scenarios = scenarios + new_scenarios
+new_report = await calculator.calculate(all_scenarios, taxonomy)
+```
+
+## Coverage Report Export
+
+```python
+report = result.coverage_report
+
+# Pretty print to console
+report.print()
+
+# As dictionary
+d = report.to_dict()
+
+# As JSON
+json_str = report.to_json(indent=2)
+
+# Save to file
+import json
+with open("coverage.json", "w") as f:
+    f.write(report.to_json())
+```
+
+## Coverage Strategies
+
+### Balanced Coverage
+
+Generate scenarios evenly across all sub-categories:
+
+```python
+# Synkro automatically balances coverage during generation
+result = synkro.generate(policy, traces=100, return_logic_map=True)
+```
+
+### Priority-Based Coverage
+
+Focus on high-priority sub-categories:
+
+```python
+# During HITL, prioritize specific areas
+# [HITL] increase coverage for "Payment Processing" by 40%
+# [HITL] target "Security Violations" to 100%
+```
+
+### Type-Balanced Coverage
+
+Ensure each sub-category has all scenario types:
+
+```python
+# Coverage report shows type distribution
+for cov in report.sub_category_coverage:
+    types = cov.type_distribution
+    # {"positive": 2, "negative": 2, "edge_case": 1}
+```
+
+## Best Practices
+
+1. **Target 80%+ overall coverage** for production datasets
+2. **Check type distribution** - ensure positive, negative, and edge cases
+3. **Review uncovered areas** - they may indicate policy gaps
+4. **Iterate on coverage** - generate small batches and review
+5. **Export coverage reports** - track coverage over time
+
+## Coverage Thresholds
+
+Default thresholds:
+
+| Threshold | Value |
+|-----------|-------|
+| Covered | ≥ 80% |
+| Partial | ≥ 30% |
+| Uncovered | < 30% |
+| Min scenarios per sub-category | 2 |

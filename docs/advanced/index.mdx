@@ -1,0 +1,334 @@
+---
+title: Advanced Module
+description: "Direct access to internal components for power users"
+---
+
+The `synkro.advanced` module exposes internal components for power users who need fine-grained control over the generation pipeline.
+
+## Import
+
+```python
+from synkro.advanced import (
+    # Pipeline components
+    LogicMapGenerator,
+    ScenarioGenerator,
+    ResponseGenerator,
+    ResponseGrader,
+
+    # Coverage
+    CoverageCalculator,
+    CoverageImprover,
+    TaxonomyExtractor,
+
+    # Types
+    LogicMap,
+    GoldenScenario,
+    SubCategoryTaxonomy,
+
+    # Factory
+    ComponentFactory,
+
+    # Quality
+    QualityChecker,
+)
+```
+
+<Warning>
+The advanced API is less stable than the public API. Components may change between minor versions.
+</Warning>
+
+---
+
+## LogicMapGenerator
+
+Extract a structured Logic Map from policy text.
+
+```python
+from synkro.advanced import LogicMapGenerator
+from synkro.llm import LLM
+
+llm = LLM(model="gpt-5-mini")
+generator = LogicMapGenerator(llm)
+
+logic_map = await generator.generate(policy_text)
+
+# Access extracted rules
+for rule in logic_map.rules:
+    print(f"{rule.rule_id}: {rule.text}")
+    print(f"  Category: {rule.category}")
+    print(f"  Conditions: {rule.conditions}")
+```
+
+### LogicMap Structure
+
+```python
+class LogicMap:
+    rules: list[Rule]           # Extracted rules
+    categories: list[str]       # Unique categories
+
+class Rule:
+    rule_id: str               # e.g., "R001"
+    text: str                  # Rule text
+    category: str              # Rule category
+    conditions: list[str]      # Trigger conditions
+    actions: list[str]         # Required actions
+    exceptions: list[str]      # Exception cases
+```
+
+---
+
+## ScenarioGenerator
+
+Generate test scenarios from a Logic Map.
+
+```python
+from synkro.advanced import ScenarioGenerator
+
+generator = ScenarioGenerator(llm)
+
+scenarios = await generator.generate(
+    logic_map=logic_map,
+    count=100,
+    distribution={
+        "positive": 0.4,
+        "negative": 0.3,
+        "edge_case": 0.2,
+        "irrelevant": 0.1,
+    },
+)
+
+for scenario in scenarios:
+    print(f"[{scenario.scenario_type}] {scenario.user_message}")
+```
+
+---
+
+## ResponseGenerator
+
+Generate assistant responses for scenarios.
+
+```python
+from synkro.advanced import ResponseGenerator
+
+generator = ResponseGenerator(
+    llm=llm,
+    system_prompt="You are a customer service agent...",
+    thinking=False,  # Enable <think> tags
+)
+
+traces = await generator.generate(
+    scenarios=scenarios,
+    logic_map=logic_map,
+)
+```
+
+---
+
+## ResponseGrader
+
+Verify response quality against policy.
+
+```python
+from synkro.advanced import ResponseGrader
+
+grader = ResponseGrader(llm)
+
+for trace in traces:
+    grade = await grader.grade(trace, policy_text)
+    if not grade.passed:
+        print(f"Failed: {grade.feedback}")
+        print(f"Issues: {grade.issues}")
+```
+
+---
+
+## CoverageCalculator
+
+Calculate coverage metrics for scenarios.
+
+```python
+from synkro.advanced import CoverageCalculator, TaxonomyExtractor
+
+# Extract taxonomy
+extractor = TaxonomyExtractor(llm)
+taxonomy = await extractor.extract(logic_map)
+
+# Calculate coverage
+calculator = CoverageCalculator(llm)
+report = await calculator.calculate(
+    scenarios=scenarios,
+    taxonomy=taxonomy,
+    generate_suggestions=True,
+)
+
+print(f"Coverage: {report.overall_coverage_percent}%")
+print(f"Gaps: {report.gaps}")
+```
+
+---
+
+## CoverageImprover
+
+Generate scenarios to improve coverage.
+
+```python
+from synkro.advanced import CoverageImprover
+
+improver = CoverageImprover(llm)
+
+new_scenarios = await improver.improve(
+    coverage_report=report,
+    taxonomy=taxonomy,
+    logic_map=logic_map,
+    policy_text=policy.text,
+    existing_scenarios=scenarios,
+    target_coverage=0.8,
+)
+
+# Combine with existing
+all_scenarios = scenarios + new_scenarios
+```
+
+---
+
+## ComponentFactory
+
+Factory for creating pipeline components with shared configuration.
+
+```python
+from synkro.advanced import ComponentFactory
+from synkro.llm import LLM
+
+generation_llm = LLM(model="gpt-5-mini", temperature=0.7)
+grading_llm = LLM(model="gpt-5.2", temperature=0.1)
+
+factory = ComponentFactory(
+    generation_llm=generation_llm,
+    grading_llm=grading_llm,
+)
+
+# Create components
+logic_generator = factory.create_logic_map_generator()
+scenario_generator = factory.create_scenario_generator()
+response_generator = factory.create_response_generator()
+grader = factory.create_grader()
+coverage_calculator = factory.create_coverage_calculator()
+```
+
+---
+
+## QualityChecker
+
+Check trace quality with custom criteria.
+
+```python
+from synkro.advanced import QualityChecker
+
+checker = QualityChecker(llm)
+
+# Check single trace
+result = await checker.check(trace, policy_text, criteria=[
+    "Response addresses user's question",
+    "Response follows policy guidelines",
+    "Response is professional and helpful",
+])
+
+# Batch check
+results = await checker.check_batch(traces, policy_text)
+```
+
+---
+
+## Custom Pipeline
+
+Build a completely custom pipeline:
+
+```python
+from synkro.advanced import (
+    LogicMapGenerator,
+    ScenarioGenerator,
+    ResponseGenerator,
+    ResponseGrader,
+    CoverageCalculator,
+    TaxonomyExtractor,
+)
+from synkro.llm import LLM
+from synkro.core import Policy, Dataset
+
+async def custom_pipeline(policy_text: str, num_traces: int = 100):
+    # Initialize LLMs
+    gen_llm = LLM(model="gpt-5-mini")
+    grade_llm = LLM(model="gpt-5.2")
+
+    # Stage 1: Extract Logic Map
+    logic_gen = LogicMapGenerator(gen_llm)
+    logic_map = await logic_gen.generate(policy_text)
+
+    # Optional: Extract taxonomy for coverage
+    tax_extractor = TaxonomyExtractor(gen_llm)
+    taxonomy = await tax_extractor.extract(logic_map)
+
+    # Stage 2: Generate Scenarios
+    scenario_gen = ScenarioGenerator(gen_llm)
+    scenarios = await scenario_gen.generate(logic_map, count=num_traces)
+
+    # Stage 3: Generate Responses
+    response_gen = ResponseGenerator(gen_llm)
+    traces = await response_gen.generate(scenarios, logic_map)
+
+    # Stage 4: Grade Responses
+    grader = ResponseGrader(grade_llm)
+    for trace in traces:
+        trace.grade = await grader.grade(trace, policy_text)
+
+    # Calculate coverage
+    cov_calc = CoverageCalculator(gen_llm)
+    coverage = await cov_calc.calculate(scenarios, taxonomy)
+
+    return Dataset(traces=traces), logic_map, coverage
+
+# Run
+import asyncio
+dataset, logic_map, coverage = asyncio.run(
+    custom_pipeline(policy.text, num_traces=100)
+)
+```
+
+---
+
+## LLM Client
+
+Direct access to the LLM client:
+
+```python
+from synkro.llm import LLM
+
+llm = LLM(
+    model="gpt-5-mini",
+    temperature=0.7,
+    base_url=None,  # For local models
+)
+
+# Track usage
+print(f"Calls: {llm.call_count}")
+print(f"Cost: ${llm.total_cost:.4f}")
+
+# Make direct calls
+response = await llm.generate(
+    messages=[
+        {"role": "user", "content": "Hello"}
+    ]
+)
+```
+
+---
+
+## Use Cases
+
+| Use Case | Components |
+|----------|------------|
+| Custom logic extraction | `LogicMapGenerator` |
+| Scenario templating | `ScenarioGenerator` |
+| Custom grading criteria | `ResponseGrader`, `QualityChecker` |
+| Coverage optimization | `CoverageCalculator`, `CoverageImprover` |
+| Full custom pipeline | All components via `ComponentFactory` |

@@ -1,0 +1,145 @@
+---
+title: Human-in-the-Loop Workflow
+description: "Interactive editing of Logic Maps and scenarios"
+---
+
+Human-in-the-Loop (HITL) mode allows you to interactively review and edit the generated Logic Map and scenarios before trace generation.
+
+## Enabling HITL
+
+```python
+import synkro
+
+# HITL is enabled by default
+dataset = synkro.generate(policy, traces=100)
+
+# Explicitly enable
+dataset = synkro.generate(policy, traces=100, enable_hitl=True)
+
+# Disable for batch runs
+dataset = synkro.generate(policy, traces=100, enable_hitl=False)
+```
+
+## HITL Session Flow
+
+1. **Logic Map Review**: View extracted rules and categories
+2. **Scenario Review**: View generated scenarios with coverage
+3. **Interactive Editing**: Modify rules, scenarios, or coverage
+4. **Confirmation**: Approve to proceed with trace generation
+
+## Available Commands
+
+During a HITL session, you can use these commands:
+
+### Logic Map Commands
+
+| Command | Description |
+|---------|-------------|
+| `edit rule R001` | Edit a specific rule |
+| `add rule` | Add a new rule |
+| `remove rule R001` | Remove a rule |
+| `show rules` | Display all rules |
+
+### Scenario Commands
+
+| Command | Description |
+|---------|-------------|
+| `edit scenario 1` | Edit scenario #1 |
+| `add scenario` | Add a new scenario |
+| `remove scenario 1` | Remove scenario #1 |
+| `regenerate scenarios` | Regenerate all scenarios |
+| `add 5 more scenarios` | Generate 5 additional scenarios |
+
+### Coverage Commands
+
+| Command | Description |
+|---------|-------------|
+| `show coverage` | Display coverage report |
+| `increase coverage for [sub-category] by 20%` | Add scenarios to improve coverage |
+| `target [sub-category] to 80%` | Generate scenarios to reach target coverage |
+
+### Session Commands
+
+| Command | Description |
+|---------|-------------|
+| `continue` / `ok` / `done` | Proceed to next phase |
+| `quit` / `exit` | Cancel generation |
+| `help` | Show available commands |
+
+## Example Session
+
+```
+Generating 100 traces | CONVERSATION | gpt-5-mini
+
+Logic Map extracted with 12 rules:
+  R001: [approval] Refunds over $100 require manager approval
+  R002: [eligibility] 30-day return window for all items
+  R003: [exception] Final sale items cannot be returned
+  ...
+
+[HITL] Review Logic Map (type 'help' for commands): edit rule R001
+
+Editing R001: "Refunds over $100 require manager approval"
+New text: Refunds over $50 require manager approval
+
+[HITL] Review Logic Map: continue
+
+Generating scenarios...
+
+Coverage Report:
+  Sub-Category                Coverage    Status
+  Time-based eligibility      80% (4)
+  Amount thresholds           60% (3)     ~
+  Method restrictions         0% (0)
+
+[HITL] Review Scenarios: increase coverage for Method restrictions by 40%
+
+Generating 2 scenarios for Method restrictions...
+Added 2 scenarios.
+
+[HITL] Review Scenarios: continue
+
+Generating traces...
+```
+
+## Programmatic HITL
+
+For custom HITL flows, use the lower-level components:
+
+```python
+from synkro.advanced import LogicExtractor, ScenarioGenerator
+
+# Extract logic map
+extractor = LogicExtractor(llm)
+logic_map = await extractor.extract(policy)
+
+# Manual editing
+logic_map.rules[0].text = "Modified rule text"
+
+# Generate scenarios from edited logic map
+generator = ScenarioGenerator(llm)
+scenarios = await generator.generate(logic_map, count=100)
+```
+
+## Disabling HITL for CI/CD
+
+In automated pipelines, disable HITL:
+
+```python
+from synkro import create_pipeline, SilentReporter
+
+pipeline = create_pipeline(
+    enable_hitl=False,
+    reporter=SilentReporter(),
+)
+
+dataset = pipeline.generate(policy, traces=1000)
+```
+
+## Best Practices
+
+1. **Review Logic Map First**: Ensure rules are correctly extracted before generating scenarios
+2. **Check Coverage**: Use coverage report to identify gaps before proceeding
+3. **Start Small**: Review with 10-20 scenarios before scaling up
+4. **Save Checkpoints**: Use `checkpoint_dir` to save progress during long sessions
+5. **Disable for Production**: Use `enable_hitl=False` for batch/automated runs

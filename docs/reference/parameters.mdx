@@ -1,0 +1,283 @@
+---
+title: Parameter Reference
+description: "Complete parameter reference for all functions"
+---
+
+## synkro.generate()
+
+Generate training traces from a policy document.
+
+```python
+synkro.generate(
+    policy: str | Policy,
+    traces: int = 20,
+    turns: int | str = "auto",
+    dataset_type: DatasetType = DatasetType.CONVERSATION,
+    generation_model: str = "gpt-5-mini",
+    grading_model: str = "gpt-5.2",
+    max_iterations: int = 3,
+    skip_grading: bool = False,
+    reporter: ProgressReporter | None = None,
+    return_logic_map: bool = False,
+    enable_hitl: bool = True,
+    base_url: str | None = None,
+    temperature: float = 0.7,
+) -> Dataset | GenerationResult
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `policy` | `str \| Policy` | required | Policy text or Policy object |
+| `traces` | `int` | `20` | Number of traces to generate |
+| `turns` | `int \| str` | `"auto"` | Conversation turns. `"auto"` for policy complexity-driven |
+| `dataset_type` | `DatasetType` | `CONVERSATION` | Type of dataset |
+| `generation_model` | `str` | `"gpt-5-mini"` | Model for generating responses |
+| `grading_model` | `str` | `"gpt-5.2"` | Model for grading (use stronger model) |
+| `max_iterations` | `int` | `3` | Max refinement iterations per trace |
+| `skip_grading` | `bool` | `False` | Skip grading phase for faster generation |
+| `reporter` | `ProgressReporter` | `None` | Progress reporter (default: RichReporter) |
+| `return_logic_map` | `bool` | `False` | Return GenerationResult with Logic Map |
+| `enable_hitl` | `bool` | `True` | Enable Human-in-the-Loop editing |
+| `base_url` | `str` | `None` | API base URL for local LLM providers |
+| `temperature` | `float` | `0.7` | Sampling temperature (0.0-2.0) |
+
+---
+
+## synkro.generate_scenarios()
+
+Generate eval scenarios without synthetic responses.
+
+```python
+synkro.generate_scenarios(
+    policy: str | Policy,
+    count: int = 100,
+    generation_model: str = "gpt-4o-mini",
+    temperature: float = 0.8,
+    reporter: ProgressReporter | None = None,
+    enable_hitl: bool = False,
+    base_url: str | None = None,
+) -> ScenariosResult
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `policy` | `str \| Policy` | required | Policy text or Policy object |
+| `count` | `int` | `100` | Number of scenarios to generate |
+| `generation_model` | `str` | `"gpt-4o-mini"` | Model for generation |
+| `temperature` | `float` | `0.8` | Sampling temperature |
+| `reporter` | `ProgressReporter` | `None` | Progress reporter |
+| `enable_hitl` | `bool` | `False` | Enable Human-in-the-Loop editing |
+| `base_url` | `str` | `None` | API base URL |
+
+---
+
+## synkro.grade()
+
+Grade a response against a scenario and policy.
+
+```python
+synkro.grade(
+    response: str,
+    scenario: EvalScenario,
+    policy: str | Policy,
+    model: str = "gpt-4o",
+    base_url: str | None = None,
+) -> GradeResult
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `response` | `str` | required | Model response to grade |
+| `scenario` | `EvalScenario` | required | Eval scenario with expected outcome |
+| `policy` | `str \| Policy` | required | Policy for grading context |
+| `model` | `str` | `"gpt-4o"` | LLM for grading |
+| `base_url` | `str` | `None` | API base URL |
+
+---
+
+## synkro.create_pipeline()
+
+Create a customized generation pipeline.
+
+```python
+synkro.create_pipeline(
+    model: str = "gpt-4o-mini",
+    grading_model: str = "gpt-4o",
+    dataset_type: DatasetType = DatasetType.CONVERSATION,
+    max_iterations: int = 3,
+    skip_grading: bool = False,
+    reporter: ProgressReporter | None = None,
+    tools: list[ToolDefinition] | None = None,
+    checkpoint_dir: str | None = None,
+    enable_hitl: bool = True,
+    base_url: str | None = None,
+    temperature: float = 0.7,
+    thinking: bool = False,
+) -> Pipeline
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | `str` | `"gpt-4o-mini"` | Model for generating responses |
+| `grading_model` | `str` | `"gpt-4o"` | Model for grading |
+| `dataset_type` | `DatasetType` | `CONVERSATION` | Type of dataset |
+| `max_iterations` | `int` | `3` | Max refinement iterations |
+| `skip_grading` | `bool` | `False` | Skip grading phase |
+| `reporter` | `ProgressReporter` | `None` | Progress reporter |
+| `tools` | `list[ToolDefinition]` | `None` | Tool definitions for TOOL_CALL |
+| `checkpoint_dir` | `str` | `None` | Directory for checkpointing |
+| `enable_hitl` | `bool` | `True` | Enable Human-in-the-Loop |
+| `base_url` | `str` | `None` | API base URL |
+| `temperature` | `float` | `0.7` | Sampling temperature |
+| `thinking` | `bool` | `False` | Enable `<think>` tags |
+
+---
+
+## Dataset.save()
+
+Save dataset to a JSONL file.
+
+```python
+dataset.save(
+    path: str | Path | None = None,
+    format: str = "messages",
+    pretty_print: bool = False,
+) -> Dataset
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | `str \| Path` | `None` | Output path (auto-generated if None) |
+| `format` | `str` | `"messages"` | Output format |
+| `pretty_print` | `bool` | `False` | Format with indentation |
+
+**Format options:** `"messages"`, `"qa"`, `"langsmith"`, `"langfuse"`, `"tool_call"`, `"chatml"`, `"bert"`, `"bert:<task>"`
+
+---
+
+## Dataset.filter()
+
+Filter traces by criteria.
+
+```python
+dataset.filter(
+    passed: bool | None = None,
+    category: str | None = None,
+    min_length: int | None = None,
+) -> Dataset
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `passed` | `bool` | `None` | Filter by grade status |
+| `category` | `str` | `None` | Filter by category |
+| `min_length` | `int` | `None` | Minimum response length |
+
+---
+
+## Dataset.dedupe()
+
+Remove duplicates.
+
+```python
+dataset.dedupe(
+    threshold: float = 0.85,
+    method: str = "semantic",
+    field: str = "user",
+) -> Dataset
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `threshold` | `float` | `0.85` | Similarity threshold (0-1) |
+| `method` | `str` | `"semantic"` | Method: `"exact"` or `"semantic"` |
+| `field` | `str` | `"user"` | Field: `"user"`, `"assistant"`, or `"both"` |
+
+---
+
+## Dataset.push_to_hub()
+
+Push to HuggingFace Hub.
+
+```python
+dataset.push_to_hub(
+    repo_id: str,
+    format: str = "messages",
+    private: bool = False,
+    split: str = "train",
+    token: str | None = None,
+) -> str
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `repo_id` | `str` | required | HuggingFace repo ID |
+| `format` | `str` | `"messages"` | Output format |
+| `private` | `bool` | `False` | Private repo |
+| `split` | `str` | `"train"` | Dataset split |
+| `token` | `str` | `None` | HuggingFace token |
+
+---
+
+## ToolDefinition
+
+Define a tool for TOOL_CALL datasets.
+
+```python
+ToolDefinition(
+    name: str,
+    description: str,
+    parameters: dict = {"type": "object", "properties": {}},
+    examples: list[dict] = [],
+    mock_responses: list[str] = [],
+)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str` | required | Tool name |
+| `description` | `str` | required | Tool description |
+| `parameters` | `dict` | `{}` | JSON Schema for parameters |
+| `examples` | `list[dict]` | `[]` | Example tool calls |
+| `mock_responses` | `list[str]` | `[]` | Mock responses for simulation |
+
+---
+
+## FileLoggingReporter
+
+Log to file with optional console output.
+
+```python
+FileLoggingReporter(
+    delegate: ProgressReporter | None = None,
+    log_dir: str = ".",
+    log_filename: str | None = None,
+)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `delegate` | `ProgressReporter` | `RichReporter()` | Reporter for display |
+| `log_dir` | `str` | `"."` | Log directory |
+| `log_filename` | `str` | `None` | Custom filename (auto if None) |
+
+---
+
+## CallbackReporter
+
+Custom callbacks for progress events.
+
+```python
+CallbackReporter(
+    on_progress: Callable[[str, dict], None] | None = None,
+    on_start: Callable[[int, str, str], None] | None = None,
+    on_plan_complete: Callable[[Plan], None] | None = None,
+    on_scenario_progress: Callable[[int, int], None] | None = None,
+    on_scenarios_complete: Callable[[list[Scenario]], None] | None = None,
+    on_response_progress: Callable[[int, int], None] | None = None,
+    on_responses_complete: Callable[[list[Trace]], None] | None = None,
+    on_grading_progress: Callable[[int, int], None] | None = None,
+    on_grading_complete: Callable[[list[Trace], float], None] | None = None,
+    on_complete: Callable[[int, float, float | None], None] | None = None,
+)
+```

@@ -1,0 +1,204 @@
+---
+title: Policy
+description: "Policy class for managing policy documents"
+---
+
+The `Policy` class represents a policy document used for dataset generation.
+
+## Import
+
+```python
+from synkro import Policy
+```
+
+---
+
+## Creating a Policy
+
+### From String
+
+```python
+policy = Policy(text="""
+All refund requests must be processed within 30 days.
+Refunds over $100 require manager approval.
+""")
+
+dataset = synkro.generate(policy, traces=100)
+```
+
+### From File
+
+```python
+policy = Policy.from_file("customer_service_policy.md")
+
+# Supports various formats
+policy = Policy.from_file("policy.txt")
+policy = Policy.from_file("policy.md")
+policy = Policy.from_file("policy.json")
+```
+
+### Direct String (Shorthand)
+
+```python
+# synkro.generate() accepts string directly
+dataset = synkro.generate("Your policy text...", traces=100)
+```
+
+---
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `text` | `str` | The policy text content |
+
+---
+
+## Methods
+
+### from_file()
+
+Load policy from a file.
+
+```python
+Policy.from_file(path: str | Path) -> Policy
+```
+
+<ParamField path="path" type="str | Path" required>
+  Path to the policy file
+</ParamField>
+
+```python
+policy = Policy.from_file("policies/customer_service.md")
+```
+
+---
+
+## Built-in Policies
+
+Synkro includes example policies for testing and development:
+
+```python
+from synkro.policies import (
+    customer_support,
+    expense_approval,
+    content_moderation,
+)
+
+# Use directly
+dataset = synkro.generate(customer_support, traces=100)
+
+# Access text
+print(customer_support.text)
+```
+
+### customer_support
+
+Customer service guidelines including:
+- Response tone and professionalism
+- Refund and return policies
+- Escalation procedures
+- Privacy handling
+
+### expense_approval
+
+Expense reimbursement rules including:
+- Approval thresholds
+- Receipt requirements
+- Category restrictions
+- Documentation rules
+
+### content_moderation
+
+Content policy rules including:
+- Prohibited content types
+- Age restrictions
+- Copyright handling
+- Community guidelines
+
+---
+
+## Custom Policy Tips
+
+### Structure
+
+Organize policies with clear sections:
+
+```markdown
+# Customer Service Policy
+
+## Refunds
+- All refund requests must be processed within 30 days
+- Refunds over $100 require manager approval
+- Final sale items cannot be refunded
+
+## Returns
+- Items must be in original condition
+- Include original packaging when possible
+- Return shipping is customer responsibility
+
+## Exceptions
+- VIP customers get extended return windows
+- Damaged items are always eligible for refund
+```
+
+### Best Practices
+
+1. **Be explicit**: State rules clearly, avoid ambiguity
+2. **Include examples**: "For example, if a customer requests..."
+3. **Define exceptions**: Clearly state when rules don't apply
+4. **Use consistent terminology**: Pick terms and use them throughout
+5. **Organize by topic**: Group related rules together
+
+---
+
+## Usage Examples
+
+### Basic Generation
+
+```python
+from synkro import Policy
+
+policy = Policy(text="""
+All customer inquiries must be responded to within 24 hours.
+Sensitive information (SSN, credit cards) must never be requested via chat.
+Escalate any complaints about service quality to a supervisor.
+""")
+
+dataset = synkro.generate(policy, traces=50)
+```
+
+### Combining Policies
+
+```python
+from synkro import Policy
+from synkro.policies import customer_support
+
+# Extend built-in policy
+custom_policy = Policy(text=f"""
+{customer_support.text}
+
+## Additional Rules
+- VIP customers get priority handling
+- All security concerns are escalated immediately
+- Offer 10% discount for service failures
+""")
+
+dataset = synkro.generate(custom_policy, traces=100)
+```
+
+### Multi-File Policy
+
+```python
+from pathlib import Path
+
+# Load and combine multiple policy files
+policy_dir = Path("policies")
+combined_text = "\n\n".join(
+    (policy_dir / f).read_text()
+    for f in ["general.md", "refunds.md", "security.md"]
+)
+
+policy = Policy(text=combined_text)
+dataset = synkro.generate(policy, traces=200)
+```

@@ -1,0 +1,310 @@
+---
+title: Formatters
+description: "Export formats for training datasets"
+---
+
+Synkro supports multiple export formats for different training frameworks and platforms.
+
+## Quick Reference
+
+```python
+# All formats via Dataset.save()
+dataset.save("output.jsonl", format="messages")    # OpenAI (default)
+dataset.save("output.jsonl", format="chatml")      # ChatML
+dataset.save("output.jsonl", format="qa")          # Q&A
+dataset.save("output.jsonl", format="langsmith")   # LangSmith
+dataset.save("output.jsonl", format="langfuse")    # Langfuse
+dataset.save("output.jsonl", format="tool_call")   # Tool calling
+dataset.save("output.jsonl", format="bert")        # BERT classification
+dataset.save("output.jsonl", format="bert:qa")     # BERT QA
+```
+
+---
+
+## Messages Format (Default)
+
+OpenAI-compatible messages format for fine-tuning GPT models.
+
+```python
+dataset.save("training.jsonl", format="messages")
+```
+
+**Output:**
+```json
+{
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant..."},
+    {"role": "user", "content": "Can I get a refund?"},
+    {"role": "assistant", "content": "I'd be happy to help..."}
+  ]
+}
+```
+
+---
+
+## ChatML Format
+
+ChatML format with special tokens.
+
+```python
+dataset.save("training.jsonl", format="chatml")
+```
+
+**Output:**
+```json
+{
+  "text": "<|im_start|>system\nYou are a helpful assistant...<|im_end|>\n<|im_start|>user\nCan I get a refund?<|im_end|>\n<|im_start|>assistant\nI'd be happy to help...<|im_end|>"
+}
+```
+
+---
+
+## Q&A Format
+
+Question-answer format with ground truth labels for evaluation.
+
+```python
+dataset.save("eval.jsonl", format="qa")
+```
+
+**Output:**
+```json
+{
+  "question": "Can I get a refund after 45 days?",
+  "answer": "Unfortunately, our refund policy allows returns within 30 days...",
+  "expected_outcome": "Politely decline - outside refund window",
+  "category": "Refund Policy",
+  "scenario_type": "negative"
+}
+```
+
+---
+
+## LangSmith Format
+
+Format compatible with LangSmith evaluation datasets.
+
+```python
+dataset.save("langsmith.jsonl", format="langsmith")
+```
+
+**Output:**
+```json
+{
+  "inputs": {
+    "question": "Can I get a refund?"
+  },
+  "outputs": {
+    "answer": "I'd be happy to help with your refund request..."
+  },
+  "metadata": {
+    "category": "Refund Policy",
+    "scenario_type": "positive"
+  }
+}
+```
+
+---
+
+## Langfuse Format
+
+Format compatible with Langfuse evaluation datasets.
+
+```python
+dataset.save("langfuse.jsonl", format="langfuse")
+```
+
+**Output:**
+```json
+{
+  "input": "Can I get a refund?",
+  "expected_output": "I'd be happy to help with your refund request...",
+  "metadata": {
+    "category": "Refund Policy",
+    "scenario_type": "positive"
+  }
+}
+```
+
+---
+
+## Tool Call Format
+
+Format for function/tool calling training.
+
+```python
+dataset.save("tools.jsonl", format="tool_call")
+```
+
+**Output:**
+```json
+{
+  "messages": [
+    {"role": "user", "content": "What's the weather in NYC?"},
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [{
+        "id": "call_abc123",
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "arguments": "{\"location\": \"NYC\"}"
+        }
+      }]
+    },
+    {
+      "role": "tool",
+      "content": "72F, sunny",
+      "tool_call_id": "call_abc123"
+    },
+    {"role": "assistant", "content": "The weather in NYC is 72F and sunny."}
+  ]
+}
+```
+
+---
+
+## BERT Format
+
+Format for BERT and encoder models.
+
+### Classification
+
+```python
+dataset.save("bert.jsonl", format="bert")
+# or explicitly:
+dataset.save("bert.jsonl", format="bert:classification")
+```
+
+**Output:**
+```json
+{
+  "text": "Can I get a refund after 45 days?",
+  "label": "negative",
+  "category": "Refund Policy"
+}
+```
+
+### Extractive QA
+
+```python
+dataset.save("bert_qa.jsonl", format="bert:qa")
+```
+
+**Output:**
+```json
+{
+  "question": "What is the refund window?",
+  "context": "Our policy allows returns within 30 days of purchase...",
+  "answer_text": "30 days",
+  "answer_start": 35
+}
+```
+
+### Custom Tasks
+
+Register custom BERT task formatters:
+
+```python
+from synkro.formatters import BERTFormatter
+
+# Define custom formatter
+def my_formatter(trace):
+    return {
+        "input_text": trace.user_message,
+        "target_text": trace.assistant_message,
+        "custom_field": trace.scenario.category,
+    }
+
+# Register
+BERTFormatter.register_task("my_task", my_formatter)
+
+# Use
+dataset.save("custom.jsonl", format="bert:my_task")
+```
+
+---
+
+## Pretty Print
+
+Add indentation for human-readable output:
+
+```python
+dataset.save("readable.jsonl", pretty_print=True)
+```
+
+**Output:**
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Can I get a refund?"
+    },
+    {
+      "role": "assistant",
+      "content": "I'd be happy to help with your refund request."
+    }
+  ]
+}
+```
+
+---
+
+## Direct Formatter Usage
+
+For advanced use cases, use formatters directly:
+
+```python
+from synkro.formatters import (
+    MessagesFormatter,
+    ChatMLFormatter,
+    QAFormatter,
+    LangSmithFormatter,
+    LangfuseFormatter,
+    ToolCallFormatter,
+    BERTFormatter,
+)
+
+# Format traces
+formatter = MessagesFormatter(include_metadata=True)
+examples = formatter.format(dataset.traces)
+
+# Save with custom path
+formatter.save(dataset.traces, "output.jsonl", pretty_print=True)
+
+# Get JSONL string
+jsonl_str = formatter.to_jsonl(dataset.traces)
+```
+
+---
+
+## HuggingFace Export
+
+All formats work with HuggingFace export:
+
+```python
+# Convert to HF Dataset with specific format
+hf_dataset = dataset.to_hf_dataset(format="bert:classification")
+hf_dataset.push_to_hub("my-org/bert-policy-classifier")
+
+# Messages format for fine-tuning
+hf_dataset = dataset.to_hf_dataset(format="messages")
+hf_dataset.push_to_hub("my-org/policy-sft-data")
+```
+
+---
+
+## Format Comparison
+
+| Format | Use Case | Structure |
+|--------|----------|-----------|
+| `messages` | OpenAI fine-tuning | Chat messages array |
+| `chatml` | Alternative chat format | Single text with tokens |
+| `qa` | Evaluation datasets | Question/answer pairs |
+| `langsmith` | LangSmith integration | Inputs/outputs/metadata |
+| `langfuse` | Langfuse integration | Input/expected_output |
+| `tool_call` | Function calling | Messages with tool_calls |
+| `bert` | Encoder classification | Text/label pairs |
+| `bert:qa` | Extractive QA | Question/context/answer |

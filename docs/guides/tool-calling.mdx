@@ -1,0 +1,331 @@
+---
+title: Tool Calling Datasets
+description: "Generate training data for function calling models"
+---
+
+Synkro can generate datasets for training function/tool calling capabilities in LLMs.
+
+## Quick Start
+
+```python
+from synkro import create_pipeline, ToolDefinition, DatasetType
+
+# Define your tools
+tools = [
+    ToolDefinition(
+        name="search_orders",
+        description="Search customer orders",
+        parameters={
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string"},
+                "email": {"type": "string"}
+            }
+        }
+    )
+]
+
+# Create pipeline
+pipeline = create_pipeline(
+    dataset_type=DatasetType.TOOL_CALL,
+    tools=tools,
+)
+
+# Generate
+dataset = pipeline.generate(policy, traces=100)
+dataset.save("tool_training.jsonl", format="tool_call")
+```
+
+---
+
+## ToolDefinition
+
+Define tools your agent can use:
+
+```python
+from synkro import ToolDefinition
+
+search_tool = ToolDefinition(
+    name="web_search",
+    description="Search the web for current information",
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Search query"
+            },
+            "num_results": {
+                "type": "integer",
+                "description": "Number of results",
+                "default": 5
+            }
+        },
+        "required": ["query"]
+    },
+    examples=[
+        {"query": "weather in NYC", "num_results": 3}
+    ],
+    mock_responses=[
+        "NYC weather: 72F, sunny, humidity 45%"
+    ]
+)
+```
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `str` | Tool name (function name) |
+| `description` | `str` | What the tool does |
+| `parameters` | `dict` | JSON Schema for parameters |
+| `examples` | `list[dict]` | Example tool calls for few-shot learning |
+| `mock_responses` | `list[str]` | Simulated responses for trace generation |
+
+---
+
+## Multiple Tools
+
+```python
+tools = [
+    ToolDefinition(
+        name="search_orders",
+        description="Search customer orders by order ID or email",
+        parameters={
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string"},
+                "email": {"type": "string"}
+            }
+        },
+        mock_responses=["Order #12345: Shipped, ETA tomorrow"]
+    ),
+    ToolDefinition(
+        name="process_refund",
+        description="Process a refund for an order",
+        parameters={
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string", "description": "Order ID"},
+                "amount": {"type": "number", "description": "Refund amount"},
+                "reason": {"type": "string", "description": "Refund reason"}
+            },
+            "required": ["order_id", "amount"]
+        },
+        mock_responses=["Refund of $50.00 processed successfully"]
+    ),
+    ToolDefinition(
+        name="update_shipping",
+        description="Update shipping address for an order",
+        parameters={
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string"},
+                "address": {"type": "string"}
+            },
+            "required": ["order_id", "address"]
+        },
+        mock_responses=["Shipping address updated"]
+    )
+]
+
+pipeline = create_pipeline(
+    dataset_type=DatasetType.TOOL_CALL,
+    tools=tools,
+)
+```
+
+---
+
+## Output Format
+
+The tool_call format produces OpenAI-compatible training data:
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Can you check the status of order #12345?"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [{
+        "id": "call_abc123",
+        "type": "function",
+        "function": {
+          "name": "search_orders",
+          "arguments": "{\"order_id\": \"12345\"}"
+        }
+      }]
+    },
+    {
+      "role": "tool",
+      "content": "Order #12345: Shipped, arriving tomorrow",
+      "tool_call_id": "call_abc123"
+    },
+    {
+      "role": "assistant",
+      "content": "Your order #12345 has been shipped and is expected to arrive tomorrow."
+    }
+  ]
+}
+```
+
+---
+
+## Multi-Tool Conversations
+
+Synkro can generate traces where the assistant uses multiple tools:
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "I want to return order #12345 and get a refund"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [{
+        "id": "call_1",
+        "type": "function",
+        "function": {
+          "name": "search_orders",
+          "arguments": "{\"order_id\": \"12345\"}"
+        }
+      }]
+    },
+    {
+      "role": "tool",
+      "content": "Order #12345: $79.99, delivered 2 days ago",
+      "tool_call_id": "call_1"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [{
+        "id": "call_2",
+        "type": "function",
+        "function": {
+          "name": "process_refund",
+          "arguments": "{\"order_id\": \"12345\", \"amount\": 79.99, \"reason\": \"customer return\"}"
+        }
+      }]
+    },
+    {
+      "role": "tool",
+      "content": "Refund of $79.99 processed successfully",
+      "tool_call_id": "call_2"
+    },
+    {
+      "role": "assistant",
+      "content": "I've processed a full refund of $79.99 for order #12345."
+    }
+  ]
+}
+```
+
+---
+
+## Best Practices
+
+### 1. Provide Good Descriptions
+
+Clear descriptions help generate appropriate tool usage:
+
+```python
+# Good
+ToolDefinition(
+    name="get_weather",
+    description="Get current weather conditions for a location. Returns temperature, conditions, and humidity.",
+    ...
+)
+
+# Less helpful
+ToolDefinition(
+    name="get_weather",
+    description="Weather",
+    ...
+)
+```
+
+### 2. Include Mock Responses
+
+Mock responses make traces more realistic:
+
+```python
+ToolDefinition(
+    name="search_products",
+    description="Search product catalog",
+    parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+    mock_responses=[
+        "Found 3 products: Nike Air Max ($129), Adidas Ultra ($159), Puma RS-X ($89)",
+        "No products found matching your search",
+        "Found 1 product: Apple AirPods Pro ($249)"
+    ]
+)
+```
+
+### 3. Use Examples for Complex Tools
+
+```python
+ToolDefinition(
+    name="create_ticket",
+    description="Create a support ticket",
+    parameters={
+        "type": "object",
+        "properties": {
+            "priority": {"type": "string", "enum": ["low", "medium", "high"]},
+            "category": {"type": "string"},
+            "description": {"type": "string"}
+        }
+    },
+    examples=[
+        {"priority": "high", "category": "billing", "description": "Incorrect charge"},
+        {"priority": "low", "category": "feature", "description": "Request dark mode"}
+    ]
+)
+```
+
+---
+
+## Converting to OpenAI Format
+
+The `to_openai_format()` method converts tool definitions to OpenAI's format:
+
+```python
+tool = ToolDefinition(
+    name="search",
+    description="Search the web",
+    parameters={...}
+)
+
+openai_tool = tool.to_openai_format()
+# {
+#   "type": "function",
+#   "function": {
+#     "name": "search",
+#     "description": "Search the web",
+#     "parameters": {...}
+#   }
+# }
+```
+
+---
+
+## Checking for Tool Calls
+
+```python
+dataset = pipeline.generate(policy, traces=100)
+
+for trace in dataset:
+    if trace.has_tool_calls:
+        print(f"Trace uses tools")
+        for msg in trace.messages:
+            if msg.tool_calls:
+                for tc in msg.tool_calls:
+                    print(f"  - {tc.function.name}")
+```
