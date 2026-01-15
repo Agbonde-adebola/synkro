@@ -3,9 +3,15 @@
   "name": "Synkro",
   "favicon": "https://mintlify.s3.us-west-1.amazonaws.com/mintlify/logo/light.svg",
   "colors": {
-    "primary": "#0ea5e9",
-    "light": "#38bdf8",
-    "dark": "#0284c7"
+    "primary": "#a855f7",
+    "light": "#c084fc",
+    "dark": "#9333ea",
+    "background": {
+      "dark": "#0a0a0f"
+    }
+  },
+  "modeToggle": {
+    "default": "dark"
   },
   "topbarLinks": [
     {
