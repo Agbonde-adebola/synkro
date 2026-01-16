@@ -10,6 +10,10 @@ Generate high-quality chat fine-tuning datasets:
 
 Dataset types: CONVERSATION (multi-turn), INSTRUCTION (single-turn), TOOL_CALL (with function calling)
 
+For production use, consider the two-step workflow:
+  1. synkro ingest policy.pdf  # Extract rules once, review if needed
+  2. synkro generate --config policy_config.json  # Fast generation, reusable
+
 See other examples for advanced features.
 """
 

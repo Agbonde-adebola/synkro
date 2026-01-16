@@ -10,16 +10,16 @@ Usage:
         dataset_type=DatasetType.CONVERSATION,
     )
     dataset = pipeline.generate("policy text", traces=50)
-    
+
     # Tool calling pipeline
     from synkro import ToolDefinition
-    
+
     web_search = ToolDefinition(
         name="web_search",
         description="Search the web",
         parameters={"type": "object", "properties": {"query": {"type": "string"}}}
     )
-    
+
     pipeline = create_pipeline(
         dataset_type=DatasetType.TOOL_CALL,
         tools=[web_search],
@@ -27,6 +27,9 @@ Usage:
     dataset = pipeline.generate("Search guidelines", traces=50)
 """
 
+from __future__ import annotations
+
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from synkro.generation.generator import Generator
@@ -36,6 +39,7 @@ from synkro.reporting import ProgressReporter
 
 if TYPE_CHECKING:
     from synkro.types.tool import ToolDefinition
+    from synkro.ingestion import PolicyConfig
 
 
 def create_pipeline(
@@ -52,6 +56,8 @@ def create_pipeline(
     base_url: str | None = None,
     thinking: bool = False,
     temperature: float = 0.7,
+    logic_map: str | Path | "PolicyConfig" | None = None,
+    skip_coverage: bool = False,
 ) -> Generator:
     """
     Create a pipeline for generating training datasets.
@@ -75,6 +81,12 @@ def create_pipeline(
         temperature: Sampling temperature for generation (0.0-2.0, default: 0.7).
             Lower values (0.1-0.3) produce more deterministic outputs for eval datasets.
             Higher values (0.7-1.0) produce more diverse outputs for training data.
+        logic_map: Pre-computed Logic Map from synkro.ingest(). Can be a file path
+            (str or Path) or a PolicyConfig object. When provided, skips the
+            planning and logic extraction phases for faster generation.
+        skip_coverage: Skip coverage tracking for faster generation (default: False).
+            Coverage tracking adds taxonomy extraction and scenario tagging which
+            requires additional LLM calls.
 
     Returns:
         Generator instance ready to use
@@ -130,6 +142,8 @@ def create_pipeline(
         base_url=base_url,
         thinking=thinking,
         temperature=temperature,
+        logic_map=logic_map,
+        skip_coverage=skip_coverage,
     )
 
 

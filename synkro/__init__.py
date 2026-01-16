@@ -6,6 +6,14 @@ Quick Start:
     >>> dataset = synkro.generate("Your policy text...")
     >>> dataset.save("training.jsonl")
 
+Fast Generation (recommended for production):
+    >>> # Step 1: Ingest policy once (extracts rules, allows review)
+    >>> config = synkro.ingest(policy_text, output="./policy.json", review=True)
+
+    >>> # Step 2: Use pre-computed config for fast generation
+    >>> pipeline = synkro.create_pipeline(logic_map="./policy.json")
+    >>> dataset = pipeline.generate(traces=20)  # Skips extraction!
+
 Pipeline Usage (more control):
     >>> from synkro import create_pipeline, DatasetType
     >>> pipeline = create_pipeline(dataset_type=DatasetType.CONVERSATION)
@@ -62,6 +70,7 @@ from synkro.types import DatasetType
 from synkro.core.policy import Policy
 from synkro.core.dataset import Dataset
 from synkro.reporting import SilentReporter, RichReporter, CallbackReporter, FileLoggingReporter
+from synkro.ingestion import ingest, load_config, PolicyConfig
 
 # Tool types (needed for TOOL_CALL dataset type)
 from synkro.types import ToolDefinition
@@ -86,6 +95,9 @@ __all__ = [
     "generate",
     "generate_scenarios",
     "grade",
+    "ingest",
+    "load_config",
+    "PolicyConfig",
     "DatasetType",
     "Policy",
     "Dataset",

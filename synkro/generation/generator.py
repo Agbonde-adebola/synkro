@@ -1,5 +1,7 @@
 """Main Generator class orchestrating the full trace generation pipeline."""
 
+from __future__ import annotations
+
 import asyncio
 from enum import Enum
 from pathlib import Path
@@ -20,6 +22,7 @@ from synkro.pipeline.runner import GenerationPipeline, GenerationResult, Scenari
 
 if TYPE_CHECKING:
     from synkro.types.tool import ToolDefinition
+    from synkro.ingestion import PolicyConfig
 
 
 class Generator:
@@ -76,6 +79,8 @@ class Generator:
         base_url: str | None = None,
         thinking: bool = False,
         temperature: float = 0.7,
+        logic_map: str | Path | "PolicyConfig" | None = None,
+        skip_coverage: bool = False,
     ):
         """
         Initialize the Generator.
@@ -101,15 +106,27 @@ class Generator:
             temperature: Sampling temperature for generation (0.0-2.0, default: 0.7).
                 Lower values (0.1-0.3) produce more deterministic outputs for eval datasets.
                 Higher values (0.7-1.0) produce more diverse outputs for training data.
+            logic_map: Pre-computed Logic Map from synkro.ingest(). Can be a file path
+                or PolicyConfig object. Skips planning and extraction phases when provided.
+            skip_coverage: Skip coverage tracking for faster generation (default: False).
         """
         self.dataset_type = dataset_type
         self.mode_config = get_mode_config(dataset_type)
         self.max_iterations = max_iterations
         self.skip_grading = skip_grading
+        self.skip_coverage = skip_coverage
         self.tools = tools
         self.turns = turns
         self.thinking = thinking
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
+
+        # Load policy config if logic_map provided
+        self.policy_config = None
+        if logic_map is not None:
+            self.policy_config = self._load_policy_config(logic_map)
+            # Use turns from config if not explicitly set
+            if turns == "auto" and self.policy_config:
+                self.turns = self.policy_config.complexity.recommended_turns
 
         # Create checkpoint manager if checkpointing enabled
         self.checkpoint_manager = (
@@ -166,12 +183,24 @@ class Generator:
             enable_hitl=enable_hitl,
             hitl_editor=hitl_editor,
             scenario_editor=scenario_editor,
+            skip_coverage=skip_coverage,
         )
+
+    def _load_policy_config(
+        self,
+        logic_map: str | Path | "PolicyConfig",
+    ) -> "PolicyConfig":
+        """Load PolicyConfig from file path or return as-is."""
+        from synkro.ingestion import PolicyConfig
+
+        if isinstance(logic_map, (str, Path)):
+            return PolicyConfig.load(logic_map)
+        return logic_map
 
     @handle_error
     def generate(
         self,
-        policy: Policy | str,
+        policy: Policy | str | None = None,
         traces: int = 20,
         return_logic_map: bool = False,
     ) -> Dataset | GenerationResult:
@@ -179,7 +208,8 @@ class Generator:
         Generate a training dataset from a policy.
 
         Args:
-            policy: Policy object or text string
+            policy: Policy object or text string. Optional if a logic_map
+                was provided to create_pipeline() (policy text is stored in config).
             traces: Target number of traces to generate (default: 20)
             return_logic_map: If True, return GenerationResult with access to
                 the Logic Map, scenarios, and distribution (default: False)
@@ -191,13 +221,25 @@ class Generator:
             >>> # Standard usage
             >>> dataset = generator.generate(policy, traces=50)
 
+            >>> # With pre-computed logic_map, policy is optional
+            >>> pipeline = create_pipeline(logic_map="./policy_config.json")
+            >>> dataset = pipeline.generate(traces=50)
+
             >>> # Access Logic Map for inspection
             >>> result = generator.generate(policy, return_logic_map=True)
             >>> print(result.logic_map.rules)  # See extracted rules
             >>> print(result.distribution)     # See scenario type counts
             >>> dataset = result.dataset       # Get the dataset
         """
-        if isinstance(policy, str):
+        # If no policy provided, try to use policy from config
+        if policy is None:
+            if self.policy_config is not None:
+                policy = Policy(text=self.policy_config.policy_text)
+            else:
+                raise ValueError(
+                    "policy is required when no logic_map was provided to create_pipeline()"
+                )
+        elif isinstance(policy, str):
             policy = Policy(text=policy)
 
         # Validate policy has enough content
@@ -221,6 +263,7 @@ class Generator:
             dataset_type=self.dataset_type.value,
             turns=self.turns,
             return_result=return_logic_map,
+            policy_config=self.policy_config,
         )
 
     async def generate_async(

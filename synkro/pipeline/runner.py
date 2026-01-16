@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from synkro.types.core import Plan
     from synkro.types.logic_map import GoldenScenario
     from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
+    from synkro.ingestion import PolicyConfig
 
 
 class GenerationResult:
@@ -231,6 +232,7 @@ class GenerationPipeline:
         enable_hitl: bool = False,
         hitl_editor: "LogicMapEditor | None" = None,
         scenario_editor: "ScenarioEditor | None" = None,
+        skip_coverage: bool = False,
     ):
         """
         Initialize the pipeline.
@@ -245,12 +247,14 @@ class GenerationPipeline:
             enable_hitl: Whether to enable Human-in-the-Loop editing (rules + scenarios)
             hitl_editor: Optional LogicMapEditor for HITL sessions
             scenario_editor: Optional ScenarioEditor for scenario editing
+            skip_coverage: Whether to skip coverage tracking (faster generation)
         """
         self.factory = factory
         self.reporter = reporter
         self.workers = workers
         self.max_iterations = max_iterations
         self.skip_grading = skip_grading
+        self.skip_coverage = skip_coverage
         self.checkpoint_manager = checkpoint_manager
         self.enable_hitl = enable_hitl
         self.hitl_editor = hitl_editor
@@ -272,6 +276,7 @@ class GenerationPipeline:
         dataset_type: str,
         turns: int | str = "auto",
         return_result: bool = False,
+        policy_config: "PolicyConfig | None" = None,
     ) -> Dataset | GenerationResult:
         """
         Run the Golden Trace generation pipeline.
@@ -287,6 +292,8 @@ class GenerationPipeline:
             turns: Conversation turns per trace. Use int for fixed turns, or "auto"
                 for policy complexity-driven turns
             return_result: If True, return GenerationResult with logic_map access
+            policy_config: Pre-computed PolicyConfig from synkro.ingest(). When provided,
+                skips planning and logic extraction phases for faster generation.
 
         Returns:
             Dataset (default) or GenerationResult if return_result=True
@@ -314,9 +321,7 @@ class GenerationPipeline:
         # Report start
         self.reporter.on_start(traces, model, dataset_type)
 
-        # Create components via factory
-        planner = self.factory.create_planner()
-        logic_extractor = self.factory.create_logic_extractor()
+        # Create components via factory (only what's needed)
         golden_scenario_gen = self.factory.create_golden_scenario_generator()
         verifier = self.factory.create_verifier()
         golden_refiner = self.factory.create_golden_refiner()
@@ -327,31 +332,66 @@ class GenerationPipeline:
         else:
             golden_response_gen = self.factory.create_golden_response_generator()
 
-        # Phase 0: Planning (for category distribution)
-        analyze_turns = turns == "auto"
-        plan = await self.plan_phase.execute(policy, traces, planner, analyze_turns=analyze_turns)
-        self.reporter.on_plan_complete(plan)
-
-        # Determine target turns
-        if isinstance(turns, int):
-            target_turns = turns
-        else:
-            target_turns = plan.recommended_turns
-
         # =====================================================================
-        # STAGE 1: Logic Extraction (The Cartographer)
+        # FAST PATH: Use pre-computed PolicyConfig (skips planning + extraction)
         # =====================================================================
-        if resuming and cm and cm.stage in ("logic_map", "scenarios", "traces", "complete"):
-            logic_map = cm.get_logic_map()
+        if policy_config is not None:
             from rich.console import Console
-            Console().print("[dim]📂 Loaded Logic Map from checkpoint[/dim]")
-        else:
-            with self.reporter.spinner("Extracting rules..."):
-                logic_map = await self.logic_extraction_phase.execute(policy, logic_extractor)
-            if cm:
-                cm.save_logic_map(logic_map, policy_hash, traces, dataset_type)
+            from synkro.types.core import Plan
 
-        self.reporter.on_logic_map_complete(logic_map)
+            console = Console()
+            console.print("[green]⚡ Using pre-computed Logic Map (fast path)[/green]")
+
+            # Use pre-computed logic map and categories
+            logic_map = policy_config.logic_map
+            plan = Plan(
+                categories=policy_config.categories,
+                reasoning="Loaded from pre-computed PolicyConfig",
+                recommended_turns=policy_config.complexity.recommended_turns,
+                complexity_level=policy_config.complexity.level,
+            )
+
+            # Determine target turns
+            if isinstance(turns, int):
+                target_turns = turns
+            else:
+                target_turns = policy_config.complexity.recommended_turns
+
+            self.reporter.on_plan_complete(plan)
+            self.reporter.on_logic_map_complete(logic_map)
+
+        else:
+            # =====================================================================
+            # STANDARD PATH: Run planning and extraction phases
+            # =====================================================================
+            planner = self.factory.create_planner()
+            logic_extractor = self.factory.create_logic_extractor()
+
+            # Phase 0: Planning (for category distribution)
+            analyze_turns = turns == "auto"
+            plan = await self.plan_phase.execute(policy, traces, planner, analyze_turns=analyze_turns)
+            self.reporter.on_plan_complete(plan)
+
+            # Determine target turns
+            if isinstance(turns, int):
+                target_turns = turns
+            else:
+                target_turns = plan.recommended_turns
+
+            # =====================================================================
+            # STAGE 1: Logic Extraction (The Cartographer)
+            # =====================================================================
+            if resuming and cm and cm.stage in ("logic_map", "scenarios", "traces", "complete"):
+                logic_map = cm.get_logic_map()
+                from rich.console import Console
+                Console().print("[dim]📂 Loaded Logic Map from checkpoint[/dim]")
+            else:
+                with self.reporter.spinner("Extracting rules..."):
+                    logic_map = await self.logic_extraction_phase.execute(policy, logic_extractor)
+                if cm:
+                    cm.save_logic_map(logic_map, policy_hash, traces, dataset_type)
+
+            self.reporter.on_logic_map_complete(logic_map)
 
         # Reset grading LLM call counter after setup phases
         # (planner and logic extractor use grading_llm but aren't "grading" calls)
@@ -386,51 +426,55 @@ class GenerationPipeline:
         taxonomy = None
         coverage_calls_start = self.factory.generation_llm.call_count
 
-        try:
-            taxonomy_extractor = self.factory.create_taxonomy_extractor()
-            scenario_tagger = self.factory.create_scenario_tagger()
-            coverage_calculator = self.factory.create_coverage_calculator()
+        if self.skip_coverage:
+            # Skip coverage tracking for faster generation
+            pass
+        else:
+            try:
+                taxonomy_extractor = self.factory.create_taxonomy_extractor()
+                scenario_tagger = self.factory.create_scenario_tagger()
+                coverage_calculator = self.factory.create_coverage_calculator()
 
-            # Extract sub-category taxonomy from policy
-            # Handle both Category objects and strings
-            category_names = [
-                cat.name if hasattr(cat, 'name') else str(cat)
-                for cat in plan.categories
-            ]
-            with self.reporter.spinner("Extracting coverage taxonomy..."):
-                taxonomy = await taxonomy_extractor.extract(
-                    policy.text,
-                    logic_map,
-                    category_names,
-                )
-
-            if taxonomy and taxonomy.sub_categories:
-                self.reporter.on_taxonomy_extracted(taxonomy)
-
-                # Tag scenarios with sub-category IDs
-                with self.reporter.spinner("Tagging scenarios..."):
-                    golden_scenarios = await scenario_tagger.tag(
-                        golden_scenarios,
-                        taxonomy,
+                # Extract sub-category taxonomy from policy
+                # Handle both Category objects and strings
+                category_names = [
+                    cat.name if hasattr(cat, 'name') else str(cat)
+                    for cat in plan.categories
+                ]
+                with self.reporter.spinner("Extracting coverage taxonomy..."):
+                    taxonomy = await taxonomy_extractor.extract(
+                        policy.text,
                         logic_map,
+                        category_names,
                     )
 
-                # Calculate coverage report
-                with self.reporter.spinner("Calculating coverage..."):
-                    coverage_report = await coverage_calculator.calculate(
-                        golden_scenarios,
-                        taxonomy,
-                        generate_suggestions=True,
-                    )
+                if taxonomy and taxonomy.sub_categories:
+                    self.reporter.on_taxonomy_extracted(taxonomy)
 
-                # Only show coverage here if HITL is disabled (HITL shows it in session)
-                if not self.enable_hitl:
-                    self.reporter.on_coverage_calculated(coverage_report)
-        except Exception as e:
-            # Coverage tracking is optional - don't fail the whole pipeline
-            # But log the error for debugging
-            import sys
-            print(f"[Coverage tracking error: {e}]", file=sys.stderr)
+                    # Tag scenarios with sub-category IDs
+                    with self.reporter.spinner("Tagging scenarios..."):
+                        golden_scenarios = await scenario_tagger.tag(
+                            golden_scenarios,
+                            taxonomy,
+                            logic_map,
+                        )
+
+                    # Calculate coverage report
+                    with self.reporter.spinner("Calculating coverage..."):
+                        coverage_report = await coverage_calculator.calculate(
+                            golden_scenarios,
+                            taxonomy,
+                            generate_suggestions=True,
+                        )
+
+                    # Only show coverage here if HITL is disabled (HITL shows it in session)
+                    if not self.enable_hitl:
+                        self.reporter.on_coverage_calculated(coverage_report)
+            except Exception as e:
+                # Coverage tracking is optional - don't fail the whole pipeline
+                # But log the error for debugging
+                import sys
+                print(f"[Coverage tracking error: {e}]", file=sys.stderr)
 
         coverage_calls = self.factory.generation_llm.call_count - coverage_calls_start
 
