@@ -15,6 +15,21 @@ from synkro.schemas import (
 )
 from synkro.prompts.templates import SYSTEM_PROMPT
 
+# Default fallback values for parsing failures
+DEFAULT_SCENARIO_PREFIX = "Policy compliance scenario"
+DEFAULT_SCENARIO_CONTEXT = "General policy application context"
+DEFAULT_COMPLEXITY_VARIABLE_COUNT = 2
+DEFAULT_COMPLEXITY_LEVEL = "conditional"
+DEFAULT_RECOMMENDED_TURNS = 3
+DEFAULT_COMPLEXITY_REASONING = "Unable to analyze policy, defaulting to conditional complexity with 3 turns"
+DEFAULT_PLAN_CATEGORIES = ["Happy Path", "Edge Cases", "Violations"]
+DEFAULT_PLAN_DESCRIPTIONS = [
+    "Clear success cases",
+    "Ambiguous situations",
+    "Clear failure cases",
+]
+DEFAULT_PLAN_REASONING = "Default plan - unable to parse LLM response"
+
 
 def strip_markdown_fences(content: str) -> str:
     """Strip markdown code fences from content."""
@@ -145,8 +160,8 @@ def parse_scenarios(response: Any, expected_count: int) -> list[ScenarioOutput]:
     # Fallback: generate placeholder scenarios
     return [
         ScenarioOutput(
-            scenario=f"Policy compliance scenario {i + 1}",
-            context="General policy application context",
+            scenario=f"{DEFAULT_SCENARIO_PREFIX} {i + 1}",
+            context=DEFAULT_SCENARIO_CONTEXT,
         )
         for i in range(expected_count)
     ]
@@ -381,10 +396,10 @@ def parse_policy_complexity(response: Any) -> PolicyComplexity:
 
     # Default fallback
     return PolicyComplexity(
-        variable_count=2,
-        complexity_level="conditional",
-        recommended_turns=3,
-        reasoning="Unable to analyze policy, defaulting to conditional complexity with 3 turns",
+        variable_count=DEFAULT_COMPLEXITY_VARIABLE_COUNT,
+        complexity_level=DEFAULT_COMPLEXITY_LEVEL,
+        recommended_turns=DEFAULT_RECOMMENDED_TURNS,
+        reasoning=DEFAULT_COMPLEXITY_REASONING,
     )
 
 
@@ -429,14 +444,14 @@ def parse_policy_plan(response: Any, target_traces: int) -> PolicyPlan:
     remainder = target_traces - (third * 3)
     return PolicyPlan(
         categories=[
-            {"name": "Happy Path", "description": "Clear success cases", "traces": third},
-            {"name": "Edge Cases", "description": "Ambiguous situations", "traces": third},
+            {"name": DEFAULT_PLAN_CATEGORIES[0], "description": DEFAULT_PLAN_DESCRIPTIONS[0], "traces": third},
+            {"name": DEFAULT_PLAN_CATEGORIES[1], "description": DEFAULT_PLAN_DESCRIPTIONS[1], "traces": third},
             {
-                "name": "Violations",
-                "description": "Clear failure cases",
+                "name": DEFAULT_PLAN_CATEGORIES[2],
+                "description": DEFAULT_PLAN_DESCRIPTIONS[2],
                 "traces": third + remainder,
             },
         ],
-        reasoning="Default plan - unable to parse LLM response",
+        reasoning=DEFAULT_PLAN_REASONING,
     )
 

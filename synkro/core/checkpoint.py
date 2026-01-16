@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, Field
 from rich.console import Console
 
@@ -199,8 +201,19 @@ class CheckpointManager:
         data = self._load_or_create()
         return self._validate_list(data.verified_traces_data, Trace)
 
-    def _validate_list(self, data_list: list[dict], model_class: type) -> list:
-        """Helper to validate a list of dicts into model instances."""
+    def _validate_list(
+        self, data_list: list[dict], model_class: type[BaseModel]
+    ) -> list:
+        """
+        Helper to validate a list of dicts into model instances.
+        
+        Args:
+            data_list: List of dictionaries to validate
+            model_class: Pydantic model class to validate against
+            
+        Returns:
+            List of validated model instances
+        """
         return [model_class.model_validate(item) for item in data_list]
 
     def get_pending_scenario_indices(self, total: int) -> list[int]:

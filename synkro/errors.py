@@ -1,5 +1,7 @@
 """Friendly error messages with fix suggestions."""
 
+import sys
+
 from rich.console import Console
 from rich.panel import Panel
 
@@ -141,8 +143,6 @@ def _detect_provider(error_str: str) -> str:
 
 def handle_error(func):
     """Decorator to catch and display friendly errors."""
-    import sys
-    
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
