@@ -1,7 +1,10 @@
 """Type-safe LLM wrapper using LiteLLM."""
 
 import warnings
-from typing import TypeVar, Type, overload
+from typing import TypeVar, Type, overload, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from synkro.types.metrics import Metrics, TrackedLLM
 
 import litellm
 from litellm import acompletion, supports_response_schema, completion_cost
@@ -311,3 +314,25 @@ class LLM:
     def reset_call_count(self) -> None:
         """Reset only the call count, preserving cost tracking."""
         self._call_count = 0
+
+    def with_metrics(self, metrics: "Metrics", phase: str) -> "TrackedLLM":
+        """Create a tracked wrapper that records to an external Metrics object.
+
+        Use this to track costs across multiple LLM clients into a unified
+        Metrics instance.
+
+        Args:
+            metrics: External Metrics object to track to
+            phase: Phase name for tracking (e.g., "extraction", "scenarios")
+
+        Returns:
+            TrackedLLM wrapper that proxies calls and records metrics
+
+        Examples:
+            >>> metrics = Metrics()
+            >>> tracked = llm.with_metrics(metrics, phase="extraction")
+            >>> result = await tracked.generate("Hello")
+            >>> print(metrics.get_phase("extraction").cost)
+        """
+        from synkro.types.metrics import TrackedLLM
+        return TrackedLLM(self, metrics, phase)

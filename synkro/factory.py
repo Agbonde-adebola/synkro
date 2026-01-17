@@ -9,11 +9,14 @@ Supports both legacy components and Golden Trace components:
 - Golden Response Generator (The Thinker)
 - Trace Verifier (The Auditor)
 - Golden Refiner
+
+Also supports external Metrics tracking for cost visibility.
 """
 
 from typing import TYPE_CHECKING
 
 from synkro.llm.client import LLM
+from synkro.types.metrics import Metrics
 from synkro.modes.config import ModeConfig
 from synkro.generation.planner import Planner
 from synkro.generation.scenarios import ScenarioGenerator
@@ -47,20 +50,25 @@ if TYPE_CHECKING:
 class ComponentFactory:
     """
     Factory for creating pipeline components with shared LLM clients.
-    
+
     This centralizes component creation and ensures consistent configuration
     across the pipeline.
-    
+
     Examples:
         >>> factory = ComponentFactory(gen_llm, grade_llm, mode_config)
         >>> planner = factory.create_planner()
         >>> grader = factory.create_grader()
-        
+
         >>> # With tools for tool_call dataset type
         >>> factory = ComponentFactory(gen_llm, grade_llm, mode_config, tools=[...])
         >>> simulator = factory.create_tool_simulator()
+
+        >>> # With external metrics tracking
+        >>> metrics = Metrics()
+        >>> factory = ComponentFactory(gen_llm, grade_llm, mode_config, metrics=metrics)
+        >>> # All component operations will track to `metrics`
     """
-    
+
     def __init__(
         self,
         generation_llm: LLM,
@@ -68,6 +76,7 @@ class ComponentFactory:
         mode_config: ModeConfig,
         tools: list["ToolDefinition"] | None = None,
         thinking: bool = False,
+        metrics: Metrics | None = None,
     ):
         """
         Initialize the factory.
@@ -78,12 +87,33 @@ class ComponentFactory:
             mode_config: Configuration for the dataset type (prompts, etc.)
             tools: Optional list of tool definitions for tool_call dataset type
             thinking: Enable thinking mode with <think> tags in responses
+            metrics: Optional Metrics object for external cost tracking
         """
         self.generation_llm = generation_llm
         self.grading_llm = grading_llm
         self.mode_config = mode_config
         self.tools = tools or []
         self.thinking = thinking
+        self._metrics = metrics
+
+    @property
+    def metrics(self) -> Metrics | None:
+        """Get the external Metrics object if configured."""
+        return self._metrics
+
+    def get_tracked_llm(self, llm: LLM, phase: str) -> LLM:
+        """Get a tracked LLM wrapper if metrics are configured.
+
+        Args:
+            llm: The LLM client to wrap
+            phase: Phase name for tracking
+
+        Returns:
+            TrackedLLM wrapper if metrics configured, otherwise original LLM
+        """
+        if self._metrics is not None:
+            return llm.with_metrics(self._metrics, phase)
+        return llm
     
     def create_planner(self) -> Planner:
         """Create a Planner instance."""

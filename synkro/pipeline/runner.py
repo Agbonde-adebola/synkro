@@ -9,6 +9,7 @@ Uses the Golden Trace 4-stage pipeline for all dataset types:
 
 import asyncio
 from datetime import datetime
+from typing import Callable
 
 from synkro.core.policy import Policy
 from synkro.core.dataset import Dataset
@@ -24,6 +25,15 @@ from synkro.pipeline.phases import (
     VerificationPhase,
 )
 from synkro.types.logic_map import LogicMap
+from synkro.types.state import PipelinePhase, PipelineState
+from synkro.types.metrics import Metrics, PhaseMetrics
+from synkro.types.results import (
+    ExtractionResult,
+    ScenariosResult as ScenariosResultNew,
+    TracesResult,
+    VerificationResult,
+    PipelineResult,
+)
 
 # Type hints for HITL components (imported dynamically to avoid circular imports)
 from typing import TYPE_CHECKING
@@ -34,6 +44,9 @@ if TYPE_CHECKING:
     from synkro.types.logic_map import GoldenScenario
     from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
     from synkro.ingestion import PolicyConfig
+
+# Type for state callback
+StateCallback = Callable[[PipelineState], None]
 
 
 class GenerationResult:
@@ -233,6 +246,8 @@ class GenerationPipeline:
         hitl_editor: "LogicMapEditor | None" = None,
         scenario_editor: "ScenarioEditor | None" = None,
         skip_coverage: bool = False,
+        state_callback: StateCallback | None = None,
+        metrics: Metrics | None = None,
     ):
         """
         Initialize the pipeline.
@@ -248,6 +263,8 @@ class GenerationPipeline:
             hitl_editor: Optional LogicMapEditor for HITL sessions
             scenario_editor: Optional ScenarioEditor for scenario editing
             skip_coverage: Whether to skip coverage tracking (faster generation)
+            state_callback: Optional callback for state updates
+            metrics: Optional Metrics object for centralized cost tracking
         """
         self.factory = factory
         self.reporter = reporter
@@ -259,6 +276,11 @@ class GenerationPipeline:
         self.enable_hitl = enable_hitl
         self.hitl_editor = hitl_editor
         self.scenario_editor = scenario_editor
+        self._state_callback = state_callback
+        self._metrics = metrics or Metrics()
+
+        # Pipeline state for tracking progress
+        self._state = PipelineState(metrics=self._metrics)
 
         # Golden Trace phases
         self.plan_phase = PlanPhase()
@@ -267,6 +289,29 @@ class GenerationPipeline:
         self.golden_trace_phase = GoldenTracePhase()
         self.golden_tool_call_phase = GoldenToolCallPhase()
         self.verification_phase = VerificationPhase()
+
+    @property
+    def state(self) -> PipelineState:
+        """Get current pipeline state."""
+        return self._state
+
+    def _transition_phase(self, phase: PipelinePhase, message: str = "") -> None:
+        """Transition to a new pipeline phase and notify callbacks."""
+        self._state.transition_to(phase, message)
+        if self._state_callback:
+            self._state_callback(self._state)
+
+    def _update_progress(self, progress: float, message: str = "") -> None:
+        """Update progress within current phase and notify callbacks."""
+        self._state.update_progress(progress, message)
+        if self._state_callback:
+            self._state_callback(self._state)
+
+    def _complete_phase(self) -> None:
+        """Mark current phase as complete and notify callbacks."""
+        self._state.complete_phase()
+        if self._state_callback:
+            self._state_callback(self._state)
 
     async def run(
         self,
@@ -301,6 +346,9 @@ class GenerationPipeline:
         start_time = datetime.now()
         semaphore = asyncio.Semaphore(self.workers)
 
+        # Reset state for new run
+        self._state = PipelineState(metrics=self._metrics)
+
         # Check if this is a tool_call dataset
         is_tool_call = dataset_type == "tool_call"
 
@@ -320,6 +368,7 @@ class GenerationPipeline:
 
         # Report start
         self.reporter.on_start(traces, model, dataset_type)
+        self._transition_phase(PipelinePhase.PLANNING, "Analyzing policy...")
 
         # Create components via factory (only what's needed)
         golden_scenario_gen = self.factory.create_golden_scenario_generator()
@@ -359,6 +408,8 @@ class GenerationPipeline:
 
             self.reporter.on_plan_complete(plan)
             self.reporter.on_logic_map_complete(logic_map)
+            self._state.set_artifact(logic_map=logic_map)
+            self._complete_phase()
 
         else:
             # =====================================================================
@@ -371,6 +422,7 @@ class GenerationPipeline:
             analyze_turns = turns == "auto"
             plan = await self.plan_phase.execute(policy, traces, planner, analyze_turns=analyze_turns)
             self.reporter.on_plan_complete(plan)
+            self._complete_phase()
 
             # Determine target turns
             if isinstance(turns, int):
@@ -381,6 +433,8 @@ class GenerationPipeline:
             # =====================================================================
             # STAGE 1: Logic Extraction (The Cartographer)
             # =====================================================================
+            self._transition_phase(PipelinePhase.EXTRACTION, "Extracting rules...")
+
             if resuming and cm and cm.stage in ("logic_map", "scenarios", "traces", "complete"):
                 logic_map = cm.get_logic_map()
                 from rich.console import Console
@@ -392,6 +446,8 @@ class GenerationPipeline:
                     cm.save_logic_map(logic_map, policy_hash, traces, dataset_type)
 
             self.reporter.on_logic_map_complete(logic_map)
+            self._state.set_artifact(logic_map=logic_map)
+            self._complete_phase()
 
         # Reset grading LLM call counter after setup phases
         # (planner and logic extractor use grading_llm but aren't "grading" calls)
@@ -400,6 +456,8 @@ class GenerationPipeline:
         # =====================================================================
         # STAGE 2: Scenario Synthesis (The Adversary)
         # =====================================================================
+        self._transition_phase(PipelinePhase.SCENARIOS, "Generating scenarios...")
+
         # Track scenario generation calls
         scenario_calls_start = self.factory.generation_llm.call_count
 
@@ -418,6 +476,8 @@ class GenerationPipeline:
 
         scenario_calls = self.factory.generation_llm.call_count - scenario_calls_start
         self.reporter.on_golden_scenarios_complete(golden_scenarios, distribution)
+        self._state.set_artifact(scenarios=golden_scenarios)
+        self._complete_phase()
 
         # =====================================================================
         # COVERAGE TRACKING: Extract taxonomy and calculate coverage
@@ -430,6 +490,7 @@ class GenerationPipeline:
             # Skip coverage tracking for faster generation
             pass
         else:
+            self._transition_phase(PipelinePhase.COVERAGE, "Analyzing coverage...")
             try:
                 taxonomy_extractor = self.factory.create_taxonomy_extractor()
                 scenario_tagger = self.factory.create_scenario_tagger()
@@ -470,11 +531,14 @@ class GenerationPipeline:
                     # Only show coverage here if HITL is disabled (HITL shows it in session)
                     if not self.enable_hitl:
                         self.reporter.on_coverage_calculated(coverage_report)
+
+                self._complete_phase()
             except Exception as e:
                 # Coverage tracking is optional - don't fail the whole pipeline
                 # But log the error for debugging
                 import sys
                 print(f"[Coverage tracking error: {e}]", file=sys.stderr)
+                self._complete_phase()
 
         coverage_calls = self.factory.generation_llm.call_count - coverage_calls_start
 
@@ -485,6 +549,7 @@ class GenerationPipeline:
         # LogicMapEditor and ScenarioEditor use grading_llm)
         hitl_calls = 0
         if self.enable_hitl and self.hitl_editor:
+            self._transition_phase(PipelinePhase.HITL, "Interactive editing...")
             hitl_calls_start = self.factory.generation_llm.call_count
             logic_map, golden_scenarios, distribution, target_turns, coverage_report = await self._run_hitl_session(
                 logic_map, golden_scenarios, distribution, policy, plan, target_turns,
@@ -495,10 +560,14 @@ class GenerationPipeline:
             # Reset grading_llm after HITL so only verification calls count as "grading"
             # (LogicMapEditor and ScenarioEditor use grading_llm but aren't grading)
             self.factory.grading_llm.reset_call_count()
+            self._state.set_artifact(logic_map=logic_map, scenarios=golden_scenarios)
+            self._complete_phase()
 
         # =====================================================================
         # STAGE 3: Trace Synthesis (The Thinker)
         # =====================================================================
+        self._transition_phase(PipelinePhase.TRACES, "Synthesizing traces...")
+
         # Track response generation calls
         response_calls_start = self.factory.generation_llm.call_count
 
@@ -548,10 +617,14 @@ class GenerationPipeline:
 
         response_calls = self.factory.generation_llm.call_count - response_calls_start
         self.reporter.on_responses_complete(list(all_traces))
+        self._state.set_artifact(traces=list(all_traces))
+        self._complete_phase()
 
         # =====================================================================
         # STAGE 4: Verification (The Auditor)
         # =====================================================================
+        self._transition_phase(PipelinePhase.VERIFICATION, "Verifying traces...")
+
         pass_rate: float | None = None
         # Track refinement calls (GoldenRefiner uses generation_llm during verification)
         refinement_calls_start = self.factory.generation_llm.call_count
@@ -584,6 +657,10 @@ class GenerationPipeline:
 
         # Calculate refinement calls (generation_llm calls during verification phase)
         refinement_calls = self.factory.generation_llm.call_count - refinement_calls_start
+        self._complete_phase()
+
+        # Transition to complete state
+        self._transition_phase(PipelinePhase.COMPLETE, "Pipeline complete")
 
         # Report completion with cost tracking
         elapsed = (datetime.now() - start_time).total_seconds()
@@ -608,12 +685,43 @@ class GenerationPipeline:
         dataset = Dataset(traces=final_traces)
 
         if return_result:
-            return GenerationResult(
-                dataset=dataset,
+            # Build stage-specific results for PipelineResult
+            extraction_result = ExtractionResult(
                 logic_map=logic_map,
+                metrics=self._metrics.get_phase("extraction") or PhaseMetrics(phase="extraction"),
+            )
+
+            scenarios_result = ScenariosResultNew(
                 scenarios=golden_scenarios,
+                logic_map=logic_map,
                 distribution=distribution,
                 coverage_report=coverage_report,
+                metrics=self._metrics.get_phase("scenarios") or PhaseMetrics(phase="scenarios"),
+            )
+
+            traces_result = TracesResult(
+                traces=list(all_traces),
+                logic_map=logic_map,
+                scenarios=golden_scenarios,
+                metrics=self._metrics.get_phase("traces") or PhaseMetrics(phase="traces"),
+            )
+
+            verification_result = VerificationResult(
+                verified_traces=final_traces,
+                pass_rate=pass_rate or 0.0,
+                refinement_count=refinement_calls,
+                refinement_history=[],
+                metrics=self._metrics.get_phase("verification") or PhaseMetrics(phase="verification"),
+            )
+
+            # Return PipelineResult with all stage results
+            return PipelineResult(
+                dataset=dataset,
+                metrics=self._metrics,
+                extraction=extraction_result,
+                scenarios=scenarios_result,
+                traces=traces_result,
+                verification=verification_result if not self.skip_grading else None,
             )
 
         return dataset

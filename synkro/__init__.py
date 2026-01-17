@@ -83,11 +83,58 @@ from synkro.types import Message, Scenario, EvalScenario, Trace, GradeResult, Pl
 from synkro.types import ToolCall, ToolFunction, ToolResult
 from synkro.reporting import ProgressReporter
 
-# GenerationResult for return_logic_map=True
+# GenerationResult for return_logic_map=True (backward compatibility)
 from synkro.pipeline.runner import GenerationResult, ScenariosResult
+
+# New result types with metrics
+from synkro.types.results import PipelineResult, ExtractionResult
+from synkro.types.results import ScenariosResult as ScenariosResultNew
+from synkro.types.results import TracesResult, VerificationResult
+from synkro.types.metrics import Metrics, PhaseMetrics
+from synkro.types.state import PipelinePhase, PipelineState
+from synkro.types.events import Event, ProgressEvent, CompleteEvent
 
 # Coverage tracking types
 from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
+
+# Step-by-step API functions
+from synkro.api import (
+    extract_rules,
+    extract_rules_async,
+    generate_scenarios_async,
+    synthesize_traces,
+    synthesize_traces_async,
+    verify_traces,
+    verify_traces_async,
+    # Streaming variants
+    extract_rules_stream,
+    generate_scenarios_stream,
+    synthesize_traces_stream,
+    verify_traces_stream,
+)
+
+# HITL editing functions
+from synkro.interactive.standalone import (
+    edit_rules,
+    edit_rules_async,
+    edit_scenarios,
+    edit_scenarios_async,
+)
+
+# Session class
+from synkro.session import Session
+
+# Tool definitions for LLM agents
+from synkro.tools import TOOL_DEFINITIONS
+
+# Model detection utilities
+from synkro.utils.model_detection import (
+    detect_available_provider,
+    get_default_models,
+    get_default_model,
+    get_default_grading_model,
+    get_provider_info,
+)
 
 __all__ = [
     # Primary API
@@ -102,6 +149,34 @@ __all__ = [
     "Policy",
     "Dataset",
     "ToolDefinition",
+    # Step-by-step API
+    "extract_rules",
+    "extract_rules_async",
+    "generate_scenarios_async",
+    "synthesize_traces",
+    "synthesize_traces_async",
+    "verify_traces",
+    "verify_traces_async",
+    # HITL editing functions
+    "edit_rules",
+    "edit_rules_async",
+    "edit_scenarios",
+    "edit_scenarios_async",
+    # Streaming API
+    "extract_rules_stream",
+    "generate_scenarios_stream",
+    "synthesize_traces_stream",
+    "verify_traces_stream",
+    # Session class
+    "Session",
+    # Tool definitions
+    "TOOL_DEFINITIONS",
+    # Model detection
+    "detect_available_provider",
+    "get_default_models",
+    "get_default_model",
+    "get_default_grading_model",
+    "get_provider_info",
     # Reporters
     "SilentReporter",
     "RichReporter",
@@ -115,11 +190,25 @@ __all__ = [
     "Local",
     "LocalModel",
     "LLM",
-    # Result types
+    # Result types (new)
+    "PipelineResult",
+    "ExtractionResult",
+    "TracesResult",
+    "VerificationResult",
+    # Result types (backward compatibility)
     "GenerationResult",
     "ScenariosResult",
     "CoverageReport",
     "SubCategoryTaxonomy",
+    # Metrics and state types
+    "Metrics",
+    "PhaseMetrics",
+    "PipelinePhase",
+    "PipelineState",
+    # Event types
+    "Event",
+    "ProgressEvent",
+    "CompleteEvent",
     # Data types (less common)
     "Trace",
     "Scenario",
@@ -143,16 +232,17 @@ def generate(
     traces: int = 20,
     turns: int | str = "auto",
     dataset_type: DatasetType = DatasetType.CONVERSATION,
-    generation_model: OpenAI | Anthropic | Google | LocalModel | str = OpenAI.GPT_5_MINI,
-    grading_model: OpenAI | Anthropic | Google | LocalModel | str = OpenAI.GPT_52,
+    generation_model: OpenAI | Anthropic | Google | LocalModel | str | None = None,
+    grading_model: OpenAI | Anthropic | Google | LocalModel | str | None = None,
     max_iterations: int = 3,
     skip_grading: bool = False,
     reporter: ProgressReporter | None = None,
     return_logic_map: bool = False,
+    return_result: bool = False,
     enable_hitl: bool = True,
     base_url: str | None = None,
     temperature: float = 0.7,
-) -> Dataset | GenerationResult:
+) -> Dataset | GenerationResult | PipelineResult:
     """
     Generate training traces from a policy document.
 
@@ -164,12 +254,13 @@ def generate(
         turns: Conversation turns per trace. Use int for fixed turns, or "auto"
             for policy complexity-driven turns (Simple=1-2, Conditional=3, Complex=5+)
         dataset_type: Type of dataset - CONVERSATION (default), INSTRUCTION, or TOOL_CALL
-        generation_model: Model for generating (default: gpt-5-mini)
-        grading_model: Model for grading (default: gpt-5.2)
+        generation_model: Model for generating (auto-detected if not specified)
+        grading_model: Model for grading (auto-detected if not specified)
         max_iterations: Max refinement iterations per trace (default: 3)
         skip_grading: Skip grading phase for faster generation (default: False)
         reporter: Progress reporter (default: RichReporter for console output)
-        return_logic_map: If True, return GenerationResult with Logic Map access
+        return_logic_map: If True, return GenerationResult with Logic Map access (deprecated, use return_result)
+        return_result: If True, return PipelineResult with full stage results and metrics
         enable_hitl: Enable Human-in-the-Loop Logic Map editing (default: False)
         base_url: Optional API base URL for local LLM providers (Ollama, vLLM, etc.)
         temperature: Sampling temperature for generation (0.0-2.0, default: 0.7).
@@ -177,14 +268,21 @@ def generate(
             Higher values (0.7-1.0) produce more diverse outputs for training data.
 
     Returns:
-        Dataset (default) or GenerationResult if return_logic_map=True
+        Dataset (default), GenerationResult if return_logic_map=True,
+        or PipelineResult if return_result=True
 
     Example:
         >>> import synkro
         >>> dataset = synkro.generate("All expenses over $50 require approval")
         >>> dataset.save("training.jsonl")
 
-        >>> # Access Logic Map
+        >>> # Access full results with metrics (recommended)
+        >>> result = synkro.generate(policy, return_result=True)
+        >>> print(f"Cost: ${result.metrics.total_cost:.4f}")
+        >>> print(f"Pass rate: {result.pass_rate:.1%}")
+        >>> dataset = result.dataset
+
+        >>> # Access Logic Map (deprecated, use return_result)
         >>> result = synkro.generate(policy, return_logic_map=True)
         >>> print(result.logic_map.rules)
         >>> dataset = result.dataset
@@ -200,9 +298,36 @@ def generate(
         >>> dataset = synkro.generate(policy, reporter=SilentReporter())
     """
     from synkro.generation.generator import Generator
+    import warnings
 
     if isinstance(policy, str):
         policy = Policy(text=policy)
+
+    # Auto-detect models if not specified
+    if generation_model is None or grading_model is None:
+        gen_model, grade_model = get_default_models()
+        if generation_model is None:
+            generation_model = gen_model
+        if grading_model is None:
+            grading_model = grade_model
+
+    # Handle deprecation: return_logic_map -> return_result
+    if return_logic_map and not return_result:
+        warnings.warn(
+            "return_logic_map is deprecated, use return_result=True instead. "
+            "return_result provides PipelineResult with full metrics.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        # For backward compat, still return GenerationResult
+        should_return_result = True
+        return_pipeline_result = False
+    elif return_result:
+        should_return_result = True
+        return_pipeline_result = True
+    else:
+        should_return_result = False
+        return_pipeline_result = False
 
     generator = Generator(
         dataset_type=dataset_type,
@@ -217,13 +342,25 @@ def generate(
         temperature=temperature,
     )
 
-    return generator.generate(policy, traces=traces, return_logic_map=return_logic_map)
+    result = generator.generate(policy, traces=traces, return_logic_map=should_return_result)
+
+    # Convert to GenerationResult for backward compat if return_logic_map was used
+    if return_logic_map and not return_result and isinstance(result, PipelineResult):
+        return GenerationResult(
+            dataset=result.dataset,
+            logic_map=result.logic_map,
+            scenarios=result.scenarios.scenarios if result.scenarios else [],
+            distribution=result.scenarios.distribution if result.scenarios else {},
+            coverage_report=result.coverage_report,
+        )
+
+    return result
 
 
 def generate_scenarios(
     policy: str | Policy,
     count: int = 100,
-    generation_model: OpenAI | Anthropic | Google | LocalModel | str = OpenAI.GPT_4O_MINI,
+    generation_model: OpenAI | Anthropic | Google | LocalModel | str | None = None,
     temperature: float = 0.8,
     reporter: ProgressReporter | None = None,
     enable_hitl: bool = False,
@@ -239,7 +376,7 @@ def generate_scenarios(
     Args:
         policy: Policy text or Policy object
         count: Number of scenarios to generate (default: 100)
-        generation_model: Model for generation (default: gpt-4o-mini)
+        generation_model: Model for generation (auto-detected if not specified)
         temperature: Sampling temperature (default: 0.8 for scenario diversity)
         reporter: Progress reporter (default: RichReporter for console output)
         enable_hitl: Enable Human-in-the-Loop editing (default: False)
@@ -265,6 +402,10 @@ def generate_scenarios(
     if isinstance(policy, str):
         policy = Policy(text=policy)
 
+    # Auto-detect model if not specified
+    if generation_model is None:
+        generation_model = get_default_model()
+
     generator = Generator(
         dataset_type=DatasetType.CONVERSATION,  # Type doesn't matter for scenarios-only
         generation_model=generation_model,
@@ -283,7 +424,7 @@ def grade(
     response: str,
     scenario: EvalScenario,
     policy: str | Policy,
-    model: OpenAI | Anthropic | Google | LocalModel | str = OpenAI.GPT_4O,
+    model: OpenAI | Anthropic | Google | LocalModel | str | None = None,
     base_url: str | None = None,
 ) -> GradeResult:
     """
@@ -296,7 +437,7 @@ def grade(
         response: The response from the model being evaluated
         scenario: The eval scenario with expected_outcome and target_rules
         policy: The policy document for grading context
-        model: LLM to use for grading (default: gpt-4o, stronger = better)
+        model: LLM to use for grading (auto-detected if not specified, stronger = better)
         base_url: Optional API base URL for local LLM providers
 
     Returns:
@@ -319,6 +460,10 @@ def grade(
         policy_text = policy
     else:
         policy_text = policy.text
+
+    # Auto-detect model if not specified
+    if model is None:
+        model = get_default_grading_model()
 
     # Create grader with specified model
     grading_llm = LLM(model=model, base_url=base_url, temperature=0.1)
