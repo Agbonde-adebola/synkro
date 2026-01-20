@@ -118,7 +118,7 @@ class LiveProgressDisplay:
 
         # Header: subtitle with model name
         if s.model:
-            subtitle = Text(f"Creating synthetic traces with {s.model}", style="dim")
+            subtitle = Text(f"Creating traces with {s.model}", style="dim")
             content_parts.append(subtitle)
             content_parts.append(Text(""))
 
@@ -142,16 +142,16 @@ class LiveProgressDisplay:
         s = self._state
         content_parts: list = []
 
-        # Create main grid table (2 columns)
+        # Create main grid table (2 columns) - Status on RIGHT, Content on LEFT
         grid = Table.grid(padding=(0, 2))
-        grid.add_column("left", ratio=2)
-        grid.add_column("right", ratio=1)
+        grid.add_column("left", ratio=3)  # Rules + Scenarios + Coverage
+        grid.add_column("right", ratio=1)  # Status box (prominent)
 
-        # Build left column content (Rules + Scenarios)
-        left_content = self._render_left_column()
+        # Build left column content (Rules + Scenarios + Coverage combined)
+        left_content = self._render_content_column()
 
-        # Build right column content (Status + Coverage boxes)
-        right_content = self._render_right_column()
+        # Build right column content (Status box - bigger and more visible)
+        right_content = self._render_status_box()
 
         grid.add_row(left_content, right_content)
         content_parts.append(grid)
@@ -163,8 +163,8 @@ class LiveProgressDisplay:
 
         return content_parts
 
-    def _render_left_column(self) -> Group:
-        """Render Rules + Scenarios sections for left column."""
+    def _render_content_column(self) -> Group:
+        """Render Rules + Scenarios + Coverage as a single unified content area."""
         s = self._state
         lines: list = []
 
@@ -183,10 +183,10 @@ class LiveProgressDisplay:
                 line = Text()
                 line.append(f"{cat} ", style="cyan")
                 line.append(f"({len(ids)}): ", style="dim")
-                ids_display = ", ".join(ids[:4])
+                ids_display = ", ".join(ids[:5])
                 line.append(ids_display, style="white")
-                if len(ids) > 4:
-                    line.append(f" (+{len(ids) - 4})", style="dim")
+                if len(ids) > 5:
+                    line.append(f" (+{len(ids) - 5})", style="dim")
                 lines.append(line)
 
             lines.append(Text(""))
@@ -206,57 +206,63 @@ class LiveProgressDisplay:
             dist2.append(f"[o] {s.irrelevant_count} irrelevant", style="dim")
             lines.append(dist2)
 
+            lines.append(Text(""))
+
+        # Coverage section (integrated into content, not separate box)
+        if s.coverage_percent is not None:
+            cov_header = Text("─── Coverage ───", style="bold white")
+            lines.append(cov_header)
+
+            cov_style = "green" if s.coverage_percent >= 70 else "yellow"
+            cov_line = Text()
+            cov_line.append(f"{s.coverage_percent:.0f}%", style=f"bold {cov_style}")
+            cov_line.append(" overall  ", style="dim")
+            cov_line.append(f"{s.covered_count}", style="green")
+            cov_line.append(" covered  ", style="dim")
+            cov_line.append(f"{s.partial_count}", style="yellow")
+            cov_line.append(" partial  ", style="dim")
+            cov_line.append(f"{s.uncovered_count}", style="red")
+            cov_line.append(" uncovered", style="dim")
+            lines.append(cov_line)
+
         # If nothing to show yet, display placeholder
         if not lines:
             lines.append(Text("Initializing...", style="dim"))
 
         return Group(*lines)
 
-    def _render_right_column(self) -> Group:
-        """Render Status + Coverage boxes for right column."""
+    def _render_status_box(self) -> Panel:
+        """Render prominent Status box for right column."""
         s = self._state
-        panels: list = []
 
-        # Status box
-        status_table = Table.grid(padding=(0, 1))
-        status_table.add_column("label", style="dim")
-        status_table.add_column("value", style="cyan")
+        # Create status table with bigger, more visible styling
+        status_table = Table.grid(padding=(0, 2))
+        status_table.add_column("label", style="bold white")
+        status_table.add_column("value", style="bold cyan")
 
-        status_table.add_row("Phase:", s.phase)
+        # Phase with emphasis
+        phase_style = "bold yellow" if "Awaiting" in s.phase else "bold cyan"
+        status_table.add_row("Phase", Text(s.phase, style=phase_style))
+
+        # Progress (if applicable)
         if s.progress_total > 0:
-            status_table.add_row("Progress:", f"{s.progress_current}/{s.progress_total}")
-        status_table.add_row("Elapsed:", self._format_time(s.elapsed_seconds))
-        status_table.add_row("Cost:", f"${s.cost:.4f}")
+            progress_text = f"{s.progress_current}/{s.progress_total}"
+            status_table.add_row("Progress", Text(progress_text, style="bold white"))
 
-        status_panel = Panel(
-            status_table,
-            title="[dim]Status[/dim]",
-            border_style="dim",
-            padding=(0, 1),
+        # Elapsed time
+        status_table.add_row(
+            "Elapsed", Text(self._format_time(s.elapsed_seconds), style="bold white")
         )
-        panels.append(status_panel)
 
-        # Coverage box (if available)
-        if s.coverage_percent is not None:
-            cov_table = Table.grid(padding=(0, 1))
-            cov_table.add_column("label", style="dim")
-            cov_table.add_column("value")
+        # Cost
+        status_table.add_row("Cost", Text(f"${s.cost:.4f}", style="bold white"))
 
-            cov_style = "green" if s.coverage_percent >= 70 else "yellow"
-            cov_table.add_row("Overall:", Text(f"{s.coverage_percent:.0f}%", style=cov_style))
-            cov_table.add_row("Covered:", str(s.covered_count))
-            cov_table.add_row("Partial:", str(s.partial_count))
-            cov_table.add_row("Uncovered:", str(s.uncovered_count))
-
-            coverage_panel = Panel(
-                cov_table,
-                title="[dim]Coverage[/dim]",
-                border_style="dim",
-                padding=(0, 1),
-            )
-            panels.append(coverage_panel)
-
-        return Group(*panels)
+        return Panel(
+            status_table,
+            title="[bold cyan]STATUS[/bold cyan]",
+            border_style="cyan",
+            padding=(1, 2),
+        )
 
     def _render_events(self) -> Panel:
         """Render scrolling events log."""

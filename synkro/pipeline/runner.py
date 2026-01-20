@@ -543,9 +543,8 @@ class GenerationPipeline:
                             generate_suggestions=True,
                         )
 
-                    # Only show coverage here if HITL is disabled (HITL shows it in session)
-                    if not self.enable_hitl:
-                        self.reporter.on_coverage_calculated(coverage_report)
+                    # Always report coverage (HITL will also display it in session)
+                    self.reporter.on_coverage_calculated(coverage_report)
 
                 self._complete_phase()
             except Exception as e:
@@ -565,7 +564,8 @@ class GenerationPipeline:
         # LogicMapEditor and ScenarioEditor use grading_llm)
         hitl_calls = 0
         if self.enable_hitl and self.hitl_editor:
-            self._transition_phase(PipelinePhase.HITL, "Interactive editing...")
+            # Update phase to show we're ready for user input
+            self._transition_phase(PipelinePhase.HITL, "Awaiting feedback")
             hitl_calls_start = self.factory.generation_llm.call_count
             (
                 logic_map,
