@@ -1,6 +1,6 @@
 # Synkro
 
-[![PyPI version](https://img.shields.io/pypi/v/synkro.svg)](https://pypi.org/project/synkro/)
+[![PyPI version](https://img.shields.io/pypi/v/synkro.svg?cacheSeconds=3600)](https://pypi.org/project/synkro/)
 [![Downloads](https://static.pepy.tech/badge/synkro)](https://pepy.tech/project/synkro)
 [![Downloads/Week](https://static.pepy.tech/badge/synkro/week)](https://pepy.tech/project/synkro)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
