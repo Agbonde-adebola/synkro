@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 
 if TYPE_CHECKING:
@@ -126,35 +125,48 @@ class LiveProgressDisplay:
             # Completion view - simple summary
             content_parts.extend(self._render_complete_view())
         else:
-            # Active view - grid layout
+            # Active view - content only (status in title)
             content_parts.extend(self._render_active_view())
+
+        # Build title with status info: SYNKRO | Phase | Elapsed | Cost
+        title = self._render_title_with_status()
 
         return Panel(
             Group(*content_parts),
-            title="[bold cyan]SYNKRO[/bold cyan]",
+            title=title,
             subtitle=self._render_status_bar(),
             border_style="green" if s.is_complete else "cyan",
             padding=(0, 1),
         )
 
+    def _render_title_with_status(self) -> Text:
+        """Render title line with SYNKRO and status info."""
+        s = self._state
+        title = Text()
+        title.append("SYNKRO", style="bold cyan")
+        title.append("  │  ", style="dim")
+
+        # Phase with appropriate color
+        phase_style = "bold yellow" if "Awaiting" in s.phase else "bold white"
+        title.append(s.phase, style=phase_style)
+        title.append("  │  ", style="dim")
+
+        # Elapsed time
+        title.append(self._format_time(s.elapsed_seconds), style="white")
+        title.append("  │  ", style="dim")
+
+        # Cost
+        title.append(f"${s.cost:.4f}", style="white")
+
+        return title
+
     def _render_active_view(self) -> list:
-        """Render the active (non-complete) view with grid layout."""
+        """Render the active (non-complete) view - content only, status is in title."""
         s = self._state
         content_parts: list = []
 
-        # Create main grid table (2 columns) - Status on RIGHT, Content on LEFT
-        grid = Table.grid(padding=(0, 2))
-        grid.add_column("left", ratio=3)  # Rules + Scenarios + Coverage
-        grid.add_column("right", ratio=1)  # Status box (prominent)
-
-        # Build left column content (Rules + Scenarios + Coverage combined)
-        left_content = self._render_content_column()
-
-        # Build right column content (Status box - bigger and more visible)
-        right_content = self._render_status_box()
-
-        grid.add_row(left_content, right_content)
-        content_parts.append(grid)
+        # Content area (Rules + Scenarios + Coverage) - full width, no status box
+        content_parts.append(self._render_content_column())
 
         # Events section (full width)
         if s.events:
@@ -230,39 +242,6 @@ class LiveProgressDisplay:
             lines.append(Text("Initializing...", style="dim"))
 
         return Group(*lines)
-
-    def _render_status_box(self) -> Panel:
-        """Render prominent Status box for right column."""
-        s = self._state
-
-        # Create status table with bigger, more visible styling
-        status_table = Table.grid(padding=(0, 2))
-        status_table.add_column("label", style="bold white")
-        status_table.add_column("value", style="bold cyan")
-
-        # Phase with emphasis
-        phase_style = "bold yellow" if "Awaiting" in s.phase else "bold cyan"
-        status_table.add_row("Phase", Text(s.phase, style=phase_style))
-
-        # Progress (if applicable)
-        if s.progress_total > 0:
-            progress_text = f"{s.progress_current}/{s.progress_total}"
-            status_table.add_row("Progress", Text(progress_text, style="bold white"))
-
-        # Elapsed time
-        status_table.add_row(
-            "Elapsed", Text(self._format_time(s.elapsed_seconds), style="bold white")
-        )
-
-        # Cost
-        status_table.add_row("Cost", Text(f"${s.cost:.4f}", style="bold white"))
-
-        return Panel(
-            status_table,
-            title="[bold cyan]STATUS[/bold cyan]",
-            border_style="cyan",
-            padding=(1, 2),
-        )
 
     def _render_events(self) -> Panel:
         """Render scrolling events log."""
