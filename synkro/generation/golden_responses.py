@@ -5,20 +5,18 @@ This is Stage 3 of the Golden Trace pipeline for CONVERSATION/INSTRUCTION datase
 """
 
 import asyncio
-from typing import TYPE_CHECKING
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.schemas import GoldenTraceOutput
-from synkro.types.core import Trace, Message, Scenario
-from synkro.types.logic_map import (
-    LogicMap,
-    GoldenScenario,
-    ReasoningStep,
-)
 from synkro.prompts.golden_templates import (
-    GOLDEN_TRACE_PROMPT,
     GOLDEN_TRACE_MULTI_TURN_PROMPT,
+    GOLDEN_TRACE_PROMPT,
+)
+from synkro.schemas import GoldenTraceOutput
+from synkro.types.core import Message, Trace
+from synkro.types.logic_map import (
+    GoldenScenario,
+    LogicMap,
 )
 
 
@@ -93,9 +91,7 @@ Format:
             Trace with messages and reasoning metadata
         """
         if target_turns > 1:
-            return await self._generate_multi_turn(
-                policy_text, logic_map, scenario, target_turns
-            )
+            return await self._generate_multi_turn(policy_text, logic_map, scenario, target_turns)
 
         return await self._generate_single_turn(policy_text, logic_map, scenario)
 
@@ -128,10 +124,7 @@ Format:
         result = await self.llm.generate_structured(prompt, GoldenTraceOutput)
 
         # Convert to Trace
-        messages = [
-            Message(role=m.role, content=m.content)
-            for m in result.messages
-        ]
+        messages = [Message(role=m.role, content=m.content) for m in result.messages]
 
         # Convert GoldenScenario to base Scenario for Trace
         base_scenario = scenario.to_base_scenario()
@@ -188,10 +181,7 @@ Format:
         result = await self.llm.generate_structured(prompt, GoldenTraceOutput)
 
         # Convert to Trace
-        messages = [
-            Message(role=m.role, content=m.content)
-            for m in result.messages
-        ]
+        messages = [Message(role=m.role, content=m.content) for m in result.messages]
 
         # Convert GoldenScenario to base Scenario for Trace
         base_scenario = scenario.to_base_scenario()
@@ -224,9 +214,7 @@ Format:
         lines.append("RULES:")
         for rule in logic_map.rules:
             deps = f" [depends on: {', '.join(rule.dependencies)}]" if rule.dependencies else ""
-            lines.append(
-                f"  {rule.rule_id} ({rule.category.value}): {rule.text}{deps}"
-            )
+            lines.append(f"  {rule.rule_id} ({rule.category.value}): {rule.text}{deps}")
             lines.append(f"    IF: {rule.condition}")
             lines.append(f"    THEN: {rule.action}")
 
@@ -259,10 +247,7 @@ Format:
         Returns:
             List of traces with grounded reasoning
         """
-        tasks = [
-            self.generate_single(policy_text, logic_map, s, target_turns)
-            for s in scenarios
-        ]
+        tasks = [self.generate_single(policy_text, logic_map, s, target_turns) for s in scenarios]
         return await asyncio.gather(*tasks)
 
 

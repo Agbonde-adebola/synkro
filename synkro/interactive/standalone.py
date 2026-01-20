@@ -30,7 +30,7 @@ from synkro.llm.client import LLM
 from synkro.models import OpenAI
 
 if TYPE_CHECKING:
-    from synkro.types.logic_map import LogicMap, GoldenScenario
+    from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 async def edit_rules_async(
@@ -187,7 +187,9 @@ async def edit_scenarios_async(
     if distribution is None:
         distribution = {}
         for s in scenarios:
-            stype = s.scenario_type.value if hasattr(s.scenario_type, "value") else str(s.scenario_type)
+            stype = (
+                s.scenario_type.value if hasattr(s.scenario_type, "value") else str(s.scenario_type)
+            )
             distribution[stype] = distribution.get(stype, 0) + 1
 
     # Create editor with specified model
@@ -224,8 +226,14 @@ def edit_scenarios(
     """
     return asyncio.run(
         edit_scenarios_async(
-            scenarios, instruction, policy_text, logic_map, distribution,
-            model, base_url, conversation_history
+            scenarios,
+            instruction,
+            policy_text,
+            logic_map,
+            distribution,
+            model,
+            base_url,
+            conversation_history,
         )
     )
 

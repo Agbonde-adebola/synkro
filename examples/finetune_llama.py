@@ -10,19 +10,22 @@ Prerequisites:
     Set TINKER_API_KEY environment variable
 """
 
-import os
 from pathlib import Path
+
+import tinker
+from datasets import load_dataset
 from dotenv import load_dotenv
+from tinker import types
+
+from synkro.core.policy import Policy
+from synkro.models.google import Google
+from synkro.pipelines import create_pipeline
+from synkro.reporting import FileLoggingReporter
+from synkro.types import DatasetType
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
-
-from synkro.pipelines import create_pipeline
-from synkro.models.google import Google
-from synkro.types import DatasetType
-from synkro.core.policy import Policy
-from synkro.reporting import FileLoggingReporter
 
 # =============================================================================
 # STEP 1: Generate Training Data (skip if already exists)
@@ -40,13 +43,13 @@ else:
     print("🔄 Step 2: Generating training data...")
     # Use FileLoggingReporter for both CLI output and file logging
     reporter = FileLoggingReporter(log_dir="./logs")
-    
+
     pipeline = create_pipeline(
-        model=Google.GEMINI_25_FLASH,       # Fast generation
-        grading_model=Google.GEMINI_25_PRO, # Quality grading
-        dataset_type=DatasetType.CONVERSATION,       # Chat format
-        max_iterations=3,                   # Up to 3 refinement attempts
-        reporter=reporter,                  # Log to both CLI and file
+        model=Google.GEMINI_25_FLASH,  # Fast generation
+        grading_model=Google.GEMINI_25_PRO,  # Quality grading
+        dataset_type=DatasetType.CONVERSATION,  # Chat format
+        max_iterations=3,  # Up to 3 refinement attempts
+        reporter=reporter,  # Log to both CLI and file
     )
 
     dataset = pipeline.generate(policy, traces=100)
@@ -61,10 +64,6 @@ else:
 # =============================================================================
 
 print("\n🔧 Step 3: Fine-tuning with Tinker...")
-
-from datasets import load_dataset
-import tinker
-from tinker import types
 
 # Load our generated dataset
 train_data = load_dataset("json", data_files="train.jsonl", split="train")
@@ -165,17 +164,13 @@ for epoch in range(num_epochs):
         ).result()
 
         # Update model weights
-        training_client.optim_step(
-            types.AdamParams(learning_rate=learning_rate)
-        ).result()
+        training_client.optim_step(types.AdamParams(learning_rate=learning_rate)).result()
 
         if (i // batch_size) % 10 == 0:
             print(f"  Processed {batch_end}/{len(train_data)} examples")
 
 # Save trained model and get sampling client
-sampling_client = training_client.save_weights_and_get_sampling_client(
-    name="policy-llama"
-)
+sampling_client = training_client.save_weights_and_get_sampling_client(name="policy-llama")
 
 print("✅ Fine-tuning complete! Model saved to Tinker as 'policy-llama'")
 
@@ -226,7 +221,7 @@ with open(output_file, "w") as f:
     f.write("Fine-tuned Model Evaluation Output\n")
     f.write("=" * 80 + "\n\n")
     f.write(f"Model: {BASE_MODEL}\n")
-    f.write(f"LoRA Rank: 16\n")
+    f.write("LoRA Rank: 16\n")
     f.write(f"Training Epochs: {num_epochs}\n")
     f.write(f"Training Examples: {len(train_data)}\n\n")
     f.write("-" * 80 + "\n")

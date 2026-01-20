@@ -42,11 +42,7 @@ class MessagesFormatter:
         examples = []
 
         for trace in traces:
-            example = {
-                "messages": [
-                    {"role": m.role, "content": m.content} for m in trace.messages
-                ]
-            }
+            example = {"messages": [{"role": m.role, "content": m.content} for m in trace.messages]}
 
             if self.include_metadata:
                 example["metadata"] = {

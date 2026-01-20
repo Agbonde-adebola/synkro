@@ -9,10 +9,10 @@ Refines traces with Logic Map context to fix:
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.schemas import GoldenTraceOutput
-from synkro.types.core import Trace, Message
-from synkro.types.logic_map import LogicMap, GoldenScenario, VerificationResult
 from synkro.prompts.golden_templates import GOLDEN_REFINE_PROMPT
+from synkro.schemas import GoldenTraceOutput
+from synkro.types.core import Message, Trace
+from synkro.types.logic_map import GoldenScenario, LogicMap, VerificationResult
 
 
 class GoldenRefiner:
@@ -74,19 +74,22 @@ class GoldenRefiner:
             verification_result=verification_str,
             logic_map=logic_map_str,
             scenario_description=scenario.description,
-            skipped_rules=", ".join(verification.skipped_rules) if verification.skipped_rules else "None",
-            hallucinated_rules=", ".join(verification.hallucinated_rules) if verification.hallucinated_rules else "None",
-            contradictions="; ".join(verification.contradictions) if verification.contradictions else "None",
+            skipped_rules=", ".join(verification.skipped_rules)
+            if verification.skipped_rules
+            else "None",
+            hallucinated_rules=", ".join(verification.hallucinated_rules)
+            if verification.hallucinated_rules
+            else "None",
+            contradictions="; ".join(verification.contradictions)
+            if verification.contradictions
+            else "None",
         )
 
         # Generate refined trace
         result = await self.llm.generate_structured(prompt, GoldenTraceOutput)
 
         # Convert to Trace
-        messages = [
-            Message(role=m.role, content=m.content)
-            for m in result.messages
-        ]
+        messages = [Message(role=m.role, content=m.content) for m in result.messages]
 
         # Preserve scenario from original trace
         return Trace(
@@ -100,9 +103,7 @@ class GoldenRefiner:
         lines.append("RULES:")
         for rule in logic_map.rules:
             deps = f" [depends on: {', '.join(rule.dependencies)}]" if rule.dependencies else ""
-            lines.append(
-                f"  {rule.rule_id} ({rule.category.value}): {rule.text}{deps}"
-            )
+            lines.append(f"  {rule.rule_id} ({rule.category.value}): {rule.text}{deps}")
             lines.append(f"    IF: {rule.condition}")
             lines.append(f"    THEN: {rule.action}")
 
@@ -126,11 +127,13 @@ class GoldenRefiner:
             if msg.tool_calls:
                 tool_info = []
                 for tc in msg.tool_calls:
-                    if hasattr(tc, 'function'):
+                    if hasattr(tc, "function"):
                         tool_info.append(f"  - {tc.function.name}({tc.function.arguments})")
                     elif isinstance(tc, dict):
-                        func = tc.get('function', {})
-                        tool_info.append(f"  - {func.get('name', 'unknown')}({func.get('arguments', '{}')})")
+                        func = tc.get("function", {})
+                        tool_info.append(
+                            f"  - {func.get('name', 'unknown')}({func.get('arguments', '{}')})"
+                        )
                 content = "Tool calls:\n" + "\n".join(tool_info)
 
             lines.append(f"[{role}]: {content}")

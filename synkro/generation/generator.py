@@ -7,22 +7,22 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from synkro.core.checkpoint import CheckpointManager
+from synkro.core.dataset import Dataset
+from synkro.core.policy import Policy
+from synkro.errors import handle_error
+from synkro.factory import ComponentFactory
 from synkro.llm.client import LLM
 from synkro.llm.rate_limits import auto_workers
 from synkro.models import Model, OpenAI
-from synkro.types.dataset_type import DatasetType
-from synkro.core.policy import Policy
-from synkro.core.dataset import Dataset
-from synkro.core.checkpoint import CheckpointManager
 from synkro.modes.config import get_mode_config
-from synkro.errors import handle_error
-from synkro.factory import ComponentFactory
-from synkro.reporting import ProgressReporter, RichReporter
 from synkro.pipeline.runner import GenerationPipeline, GenerationResult, ScenariosResult
+from synkro.reporting import ProgressReporter, RichReporter
+from synkro.types.dataset_type import DatasetType
 
 if TYPE_CHECKING:
-    from synkro.types.tool import ToolDefinition
     from synkro.ingestion import PolicyConfig
+    from synkro.types.tool import ToolDefinition
 
 
 class Generator:
@@ -52,7 +52,7 @@ class Generator:
         >>> from synkro.reporting import SilentReporter
         >>> generator = Generator(reporter=SilentReporter())
         >>> dataset = generator.generate(policy)
-        
+
         >>> # Tool call dataset
         >>> from synkro import ToolDefinition
         >>> tools = [ToolDefinition(name="search", description="...", parameters={})]
@@ -149,9 +149,11 @@ class Generator:
         self.grading_model = grading_model
 
         # Create LLM clients
-        self.generation_llm = LLM(model=generation_model, base_url=base_url, temperature=temperature)
+        self.generation_llm = LLM(
+            model=generation_model, base_url=base_url, temperature=temperature
+        )
         self.grading_llm = LLM(model=grading_model, base_url=base_url)
-        
+
         # Create factory for component creation
         self.factory = ComponentFactory(
             generation_llm=self.generation_llm,
@@ -165,7 +167,9 @@ class Generator:
         self.reporter = reporter or RichReporter()
 
         # Auto-scale workers based on provider
-        model_str = generation_model.value if isinstance(generation_model, Enum) else str(generation_model)
+        model_str = (
+            generation_model.value if isinstance(generation_model, Enum) else str(generation_model)
+        )
         self.workers = auto_workers(model_str)
 
         # Create HITL editors if enabled
@@ -254,7 +258,11 @@ class Generator:
         return_logic_map: bool = False,
     ) -> Dataset | GenerationResult:
         """Async implementation of generation pipeline."""
-        model_str = self.generation_model.value if isinstance(self.generation_model, Enum) else str(self.generation_model)
+        model_str = (
+            self.generation_model.value
+            if isinstance(self.generation_model, Enum)
+            else str(self.generation_model)
+        )
 
         return await self.pipeline.run(
             policy=policy,
@@ -328,7 +336,11 @@ class Generator:
         count: int,
     ) -> ScenariosResult:
         """Async implementation of scenario-only generation."""
-        model_str = self.generation_model.value if isinstance(self.generation_model, Enum) else str(self.generation_model)
+        model_str = (
+            self.generation_model.value
+            if isinstance(self.generation_model, Enum)
+            else str(self.generation_model)
+        )
 
         return await self.pipeline.run_scenarios_only(
             policy=policy,

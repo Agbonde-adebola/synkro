@@ -4,10 +4,9 @@ from typing import Literal
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.core import Message
 from synkro.prompts.multiturn_templates import FOLLOW_UP_GENERATION_PROMPT
 from synkro.schemas import FollowUpQuestion
-
+from synkro.types.core import Message
 
 QuestionType = Literal["clarification", "edge_case", "what_if", "specificity", "challenge"]
 

@@ -23,4 +23,3 @@ class Anthropic(str, Enum):
     # Claude 3.5 (legacy)
     CLAUDE_35_SONNET = "claude-3-5-sonnet-20241022"
     CLAUDE_35_HAIKU = "claude-3-5-haiku-20241022"
-

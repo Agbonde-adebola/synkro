@@ -1,13 +1,14 @@
 """Customizable prompt classes for building your own generation pipelines."""
 
 from pydantic import BaseModel, Field
+
 from synkro.prompts.templates import (
-    SYSTEM_PROMPT,
-    SCENARIO_GENERATOR_PROMPT,
-    BATCHED_RESPONSE_PROMPT,
     BATCHED_GRADER_PROMPT,
     BATCHED_REFINER_PROMPT,
+    BATCHED_RESPONSE_PROMPT,
     POLICY_PLANNING_PROMPT,
+    SCENARIO_GENERATOR_PROMPT,
+    SYSTEM_PROMPT,
 )
 
 
@@ -164,4 +165,3 @@ TARGET TRACES: {target_traces}
 Respond with a JSON object containing:
 - "categories": array of category objects with "name", "description", and "traces"
 - "reasoning": explanation of your analysis and category choices"""
-

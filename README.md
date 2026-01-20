@@ -552,3 +552,16 @@ for rule in result.logic_map.rules:
 # Get the dataset
 dataset = result.dataset
 ```
+
+## Development
+
+```bash
+# install dev dependencies
+pip install -e ".[dev]"
+
+# install git hooks
+pre-commit install
+
+# (optional) run on entire repo once
+pre-commit run --all-files
+```

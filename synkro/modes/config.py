@@ -1,7 +1,7 @@
 """Mode configuration that bundles prompts, schema, and formatter per dataset type."""
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from synkro.types.dataset_type import DatasetType
@@ -48,7 +48,7 @@ def get_mode_config(dataset_type: "DatasetType") -> ModeConfig:
         >>> from synkro import DatasetType
         >>> config = get_mode_config(DatasetType.CONVERSATION)
     """
-    from synkro.modes.conversation import CONVERSATION_CONFIG, INSTRUCTION_CONFIG, EVALUATION_CONFIG
+    from synkro.modes.conversation import CONVERSATION_CONFIG, EVALUATION_CONFIG, INSTRUCTION_CONFIG
     from synkro.modes.tool_call import TOOL_CALL_CONFIG
 
     configs = {
@@ -58,7 +58,7 @@ def get_mode_config(dataset_type: "DatasetType") -> ModeConfig:
         "tool_call": TOOL_CALL_CONFIG,
     }
 
-    type_value = dataset_type.value if hasattr(dataset_type, 'value') else str(dataset_type)
+    type_value = dataset_type.value if hasattr(dataset_type, "value") else str(dataset_type)
 
     if type_value not in configs:
         raise ValueError(f"Unknown dataset type: {dataset_type}")

@@ -6,17 +6,17 @@ sub-categories based on natural language commands.
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.schemas import GoldenScenariosArray, HITLIntent
-from synkro.types.coverage import (
-    SubCategoryTaxonomy,
-    CoverageReport,
-    CoverageIntent,
-)
-from synkro.types.logic_map import GoldenScenario, ScenarioType, LogicMap
 from synkro.prompts.coverage_templates import (
     COVERAGE_COMMAND_PROMPT,
     TARGETED_SCENARIO_GENERATION_PROMPT,
 )
+from synkro.schemas import GoldenScenariosArray, HITLIntent
+from synkro.types.coverage import (
+    CoverageIntent,
+    CoverageReport,
+    SubCategoryTaxonomy,
+)
+from synkro.types.logic_map import GoldenScenario, LogicMap, ScenarioType
 
 
 class CoverageImprover:
@@ -80,8 +80,7 @@ class CoverageImprover:
 
         # Format sub-categories list
         sub_cats_list = "\n".join(
-            f"- {sc.id}: {sc.name} ({sc.parent_category})"
-            for sc in taxonomy.sub_categories
+            f"- {sc.id}: {sc.name} ({sc.parent_category})" for sc in taxonomy.sub_categories
         )
 
         prompt = COVERAGE_COMMAND_PROMPT.format(
@@ -221,9 +220,9 @@ class CoverageImprover:
                 types_str = "balanced mix of positive, negative, and edge_case"
 
         # Format existing descriptions to avoid
-        existing_descriptions = "\n".join(
-            f"- {s.description[:80]}..." for s in existing_for_sc[:10]
-        ) or "None"
+        existing_descriptions = (
+            "\n".join(f"- {s.description[:80]}..." for s in existing_for_sc[:10]) or "None"
+        )
 
         # Format logic map
         logic_map_str = self._format_logic_map(logic_map)

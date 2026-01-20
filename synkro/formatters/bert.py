@@ -228,9 +228,7 @@ class BERTFormatter:
 
         return examples
 
-    def save(
-        self, traces: list["Trace"], path: str | Path, pretty_print: bool = False
-    ) -> None:
+    def save(self, traces: list["Trace"], path: str | Path, pretty_print: bool = False) -> None:
         """
         Save formatted traces to a JSONL file.
 

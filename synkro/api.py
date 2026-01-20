@@ -29,31 +29,34 @@ from typing import TYPE_CHECKING, AsyncIterator
 
 from synkro.core.policy import Policy
 from synkro.llm.client import LLM
-from synkro.types.metrics import Metrics, PhaseMetrics
-from synkro.utils.model_detection import get_default_models, get_default_model, get_default_grading_model
+from synkro.types.events import (
+    CompleteEvent,
+    ErrorEvent,
+    Event,
+    ProgressEvent,
+    RefinementStartedEvent,
+    RuleFoundEvent,
+    ScenarioGeneratedEvent,
+    TraceGeneratedEvent,
+    TraceRefinedEvent,
+    TraceVerifiedEvent,
+)
+from synkro.types.metrics import PhaseMetrics
 from synkro.types.results import (
     ExtractionResult,
     ScenariosResult,
     TracesResult,
     VerificationResult,
 )
-from synkro.types.events import (
-    Event,
-    ProgressEvent,
-    RuleFoundEvent,
-    ScenarioGeneratedEvent,
-    TraceGeneratedEvent,
-    TraceVerifiedEvent,
-    RefinementStartedEvent,
-    TraceRefinedEvent,
-    CompleteEvent,
-    ErrorEvent,
+from synkro.utils.model_detection import (
+    get_default_grading_model,
+    get_default_model,
+    get_default_models,
 )
 
 if TYPE_CHECKING:
-    from synkro.types.logic_map import LogicMap, GoldenScenario
     from synkro.types.core import Trace
-    from synkro.types.coverage import CoverageReport
+    from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 async def extract_rules_async(
@@ -160,7 +163,6 @@ async def generate_scenarios_async(
     """
     from synkro.generation.golden_scenarios import GoldenScenarioGenerator
     from synkro.generation.planner import Planner
-    from synkro.types.core import Plan
 
     if isinstance(policy, str):
         policy = Policy(text=policy)
@@ -282,9 +284,7 @@ async def synthesize_traces_async(
     generator = GoldenResponseGenerator(llm=llm)
 
     # Generate traces
-    traces = await generator.generate(
-        policy.text, logic_map, scenario_list, turns
-    )
+    traces = await generator.generate(policy.text, logic_map, scenario_list, turns)
 
     # Record metrics
     metrics.cost = llm.total_cost
@@ -357,8 +357,8 @@ async def verify_traces_async(
         >>> print(f"Pass rate: {verified.pass_rate:.1%}")
         >>> print(f"Refined {verified.refinement_count} traces")
     """
-    from synkro.quality.verifier import TraceVerifier
     from synkro.quality.golden_refiner import GoldenRefiner
+    from synkro.quality.verifier import TraceVerifier
 
     if isinstance(policy, str):
         policy = Policy(text=policy)
@@ -395,7 +395,7 @@ async def verify_traces_async(
     refiner = GoldenRefiner(llm=refine_llm)
 
     # Verify traces
-    semaphore = asyncio.Semaphore(10)
+    asyncio.Semaphore(10)
     verified_traces = []
     refinement_count = 0
     refinement_history = []
@@ -423,14 +423,18 @@ async def verify_traces_async(
                 result = await verifier.verify(refined_trace, logic_map, scenario, policy.text)
 
                 if result.passed:
-                    refined_trace.grade = type("GradeResult", (), {"passed": True, "issues": [], "feedback": ""})()
+                    refined_trace.grade = type(
+                        "GradeResult", (), {"passed": True, "issues": [], "feedback": ""}
+                    )()
                     verified_traces.append(refined_trace)
                     refinement_count += 1
-                    refinement_history.append({
-                        "trace_index": i,
-                        "iteration": iteration + 1,
-                        "success": True,
-                    })
+                    refinement_history.append(
+                        {
+                            "trace_index": i,
+                            "iteration": iteration + 1,
+                            "success": True,
+                        }
+                    )
                     refined = True
                     break
                 else:
@@ -438,17 +442,23 @@ async def verify_traces_async(
 
             if not refined:
                 # Keep last version with failure info
-                current_trace.grade = type("GradeResult", (), {
-                    "passed": False,
-                    "issues": result.issues,
-                    "feedback": "; ".join(result.issues),
-                })()
+                current_trace.grade = type(
+                    "GradeResult",
+                    (),
+                    {
+                        "passed": False,
+                        "issues": result.issues,
+                        "feedback": "; ".join(result.issues),
+                    },
+                )()
                 verified_traces.append(current_trace)
-                refinement_history.append({
-                    "trace_index": i,
-                    "iteration": max_iterations,
-                    "success": False,
-                })
+                refinement_history.append(
+                    {
+                        "trace_index": i,
+                        "iteration": max_iterations,
+                        "success": False,
+                    }
+                )
 
     # Calculate pass rate
     passed = sum(1 for t in verified_traces if t.grade and t.grade.passed)
@@ -632,7 +642,9 @@ async def generate_scenarios_stream(
     try:
         # Extract logic map if needed
         if logic_map is None:
-            yield ProgressEvent(phase="scenarios", message="Extracting rules first...", progress=0.1)
+            yield ProgressEvent(
+                phase="scenarios", message="Extracting rules first...", progress=0.1
+            )
             extraction = await extract_rules_async(policy, model=grading_model, base_url=base_url)
             logic_map = extraction.logic_map
 
@@ -845,8 +857,8 @@ async def verify_traces_stream(
         ...         case "complete":
         ...             print(f"Pass rate: {event.result.pass_rate:.1%}")
     """
-    from synkro.quality.verifier import TraceVerifier
     from synkro.quality.golden_refiner import GoldenRefiner
+    from synkro.quality.verifier import TraceVerifier
 
     if isinstance(policy, str):
         policy = Policy(text=policy)
@@ -901,7 +913,9 @@ async def verify_traces_stream(
             )
 
             if result.passed:
-                trace.grade = type("GradeResult", (), {"passed": True, "issues": [], "feedback": ""})()
+                trace.grade = type(
+                    "GradeResult", (), {"passed": True, "issues": [], "feedback": ""}
+                )()
                 verified_traces.append(trace)
             else:
                 failed_indices.append((i, trace, scenario, result))
@@ -934,14 +948,18 @@ async def verify_traces_stream(
                     result = await verifier.verify(refined_trace, logic_map, scenario, policy.text)
 
                     if result.passed:
-                        refined_trace.grade = type("GradeResult", (), {"passed": True, "issues": [], "feedback": ""})()
+                        refined_trace.grade = type(
+                            "GradeResult", (), {"passed": True, "issues": [], "feedback": ""}
+                        )()
                         verified_traces.append(refined_trace)
                         refinement_count += 1
-                        refinement_history.append({
-                            "trace_index": i,
-                            "iteration": iteration + 1,
-                            "success": True,
-                        })
+                        refinement_history.append(
+                            {
+                                "trace_index": i,
+                                "iteration": iteration + 1,
+                                "success": True,
+                            }
+                        )
 
                         yield TraceRefinedEvent(
                             trace=refined_trace,
@@ -955,17 +973,23 @@ async def verify_traces_stream(
                         current_trace = refined_trace
 
                 if not refined:
-                    current_trace.grade = type("GradeResult", (), {
-                        "passed": False,
-                        "issues": result.issues if hasattr(result, "issues") else [],
-                        "feedback": "",
-                    })()
+                    current_trace.grade = type(
+                        "GradeResult",
+                        (),
+                        {
+                            "passed": False,
+                            "issues": result.issues if hasattr(result, "issues") else [],
+                            "feedback": "",
+                        },
+                    )()
                     verified_traces.append(current_trace)
-                    refinement_history.append({
-                        "trace_index": i,
-                        "iteration": max_iterations,
-                        "success": False,
-                    })
+                    refinement_history.append(
+                        {
+                            "trace_index": i,
+                            "iteration": max_iterations,
+                            "success": False,
+                        }
+                    )
 
                 progress = 0.6 + (0.3 * (idx + 1) / len(failed_indices))
                 yield ProgressEvent(

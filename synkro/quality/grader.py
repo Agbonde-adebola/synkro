@@ -2,11 +2,9 @@
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.core import Trace, GradeResult
-from synkro.prompts.templates import BATCHED_GRADER_PROMPT
-from synkro.schemas import SingleGrade
-from synkro.parsers import parse_batched_grades
 from synkro.quality.multiturn_grader import MultiTurnGrader
+from synkro.schemas import SingleGrade
+from synkro.types.core import GradeResult, Trace
 
 
 class Grader:
@@ -110,9 +108,7 @@ Grade this response."""
                 feedback="Grading failed - unable to parse response",
             )
 
-    async def grade_batch(
-        self, traces: list[Trace], policy_text: str
-    ) -> list[GradeResult]:
+    async def grade_batch(self, traces: list[Trace], policy_text: str) -> list[GradeResult]:
         """
         Grade multiple traces.
 
@@ -150,4 +146,3 @@ Grade this response."""
 
         tasks = [self.grade(trace, policy_text) for trace in traces]
         return await asyncio.gather(*tasks)
-

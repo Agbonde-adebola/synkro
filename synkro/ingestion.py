@@ -22,12 +22,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from synkro.core.policy import Policy
+from synkro.generation.logic_extractor import LogicExtractor
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.logic_map import LogicMap, RuleCategory
 from synkro.types.core import Category
-from synkro.generation.logic_extractor import LogicExtractor
-from synkro.core.policy import Policy
+from synkro.types.logic_map import LogicMap, RuleCategory
 
 
 class ComplexityInfo(BaseModel):
@@ -36,9 +36,7 @@ class ComplexityInfo(BaseModel):
     level: Literal["simple", "conditional", "complex"] = Field(
         description="Complexity level derived from rule count and dependencies"
     )
-    recommended_turns: int = Field(
-        ge=1, le=6, description="Recommended conversation turns"
-    )
+    recommended_turns: int = Field(ge=1, le=6, description="Recommended conversation turns")
     rule_count: int = Field(description="Total number of rules")
     max_depth: int = Field(description="Maximum dependency chain depth")
 
@@ -55,9 +53,7 @@ class PolicyConfig(BaseModel):
     policy_text: str = Field(description="Original policy text for reference")
     complexity: ComplexityInfo = Field(description="Derived complexity info")
     logic_map: LogicMap = Field(description="Extracted Logic Map (rules as DAG)")
-    categories: list[Category] = Field(
-        description="Derived categories from rule categories"
-    )
+    categories: list[Category] = Field(description="Derived categories from rule categories")
 
     def save(self, path: str | Path) -> "PolicyConfig":
         """
@@ -190,11 +186,13 @@ def _derive_categories(logic_map: LogicMap, target_traces: int = 20) -> list[Cat
             count = max(1, round(target_traces * proportion))
             remaining_traces -= count
 
-        categories.append(Category(
-            name=category_names.get(cat, cat.title()),
-            description=category_descriptions.get(cat, f"Scenarios testing {cat} rules"),
-            count=count,
-        ))
+        categories.append(
+            Category(
+                name=category_names.get(cat, cat.title()),
+                description=category_descriptions.get(cat, f"Scenarios testing {cat} rules"),
+                count=count,
+            )
+        )
 
     return categories
 
@@ -223,6 +221,7 @@ async def _extract_logic_map_with_progress(
     # ~8K chars typically produces 30-40 rules, which fits in output limits
     if len(policy_text) >= 8000:
         from synkro.generation.logic_extractor_fast import FastLogicExtractor
+
         extractor = FastLogicExtractor(llm=llm, on_progress=on_progress)
         chunk_count = extractor.get_chunk_count(policy_text)
         logic_map = await extractor.extract(policy_text)
@@ -282,11 +281,13 @@ def _display_config(config: PolicyConfig) -> None:
         f"[bold]Rule Count:[/bold] {config.complexity.rule_count}\n"
         f"[bold]Max Dependency Depth:[/bold] {config.complexity.max_depth}"
     )
-    console.print(Panel(
-        complexity_text,
-        title="[bold cyan]📊 Complexity Analysis[/bold cyan]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            complexity_text,
+            title="[bold cyan]📊 Complexity Analysis[/bold cyan]",
+            border_style="cyan",
+        )
+    )
 
     # Logic Map
     tree = Tree("[bold cyan]Logic Map[/bold cyan]")
@@ -307,12 +308,14 @@ def _display_config(config: PolicyConfig) -> None:
                 rule_text += f" [dim]→ {', '.join(rule.dependencies)}[/dim]"
             branch.add(rule_text)
 
-    console.print(Panel(
-        tree,
-        title=f"[bold]📜 Extracted Rules ({len(config.logic_map.rules)} total)[/bold]",
-        subtitle=f"[dim]Root rules: {', '.join(config.logic_map.root_rules)}[/dim]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            tree,
+            title=f"[bold]📜 Extracted Rules ({len(config.logic_map.rules)} total)[/bold]",
+            subtitle=f"[dim]Root rules: {', '.join(config.logic_map.root_rules)}[/dim]",
+            border_style="cyan",
+        )
+    )
 
     # Categories table
     table = Table(title="📁 Derived Categories")
@@ -329,7 +332,7 @@ def _display_config(config: PolicyConfig) -> None:
 def _interactive_review(config: PolicyConfig, policy_text: str) -> PolicyConfig:
     """Run interactive review session for the policy configuration."""
     from rich.console import Console
-    from rich.prompt import Prompt, Confirm
+    from rich.prompt import Prompt
 
     console = Console()
 
@@ -373,12 +376,16 @@ def _interactive_review(config: PolicyConfig, policy_text: str) -> PolicyConfig:
                 console.print(f"  [bold]Category:[/bold] {rule.category}")
                 console.print(f"  [bold]Condition:[/bold] {rule.condition}")
                 console.print(f"  [bold]Action:[/bold] {rule.action}")
-                console.print(f"  [bold]Dependencies:[/bold] {', '.join(rule.dependencies) or 'None'}")
+                console.print(
+                    f"  [bold]Dependencies:[/bold] {', '.join(rule.dependencies) or 'None'}"
+                )
             else:
                 console.print(f"[red]Rule {rule_id} not found[/red]")
             continue
 
-        console.print("[dim]Unknown command. Type 'done' to finish or 'refresh' to see options.[/dim]")
+        console.print(
+            "[dim]Unknown command. Type 'done' to finish or 'refresh' to see options.[/dim]"
+        )
 
     return config
 
@@ -432,10 +439,16 @@ def ingest(
         >>> print(config.logic_map.rules)
     """
     import time
+
     from rich.console import Console
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
-    from rich.panel import Panel
-    from rich.text import Text
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TaskProgressColumn,
+        TextColumn,
+        TimeElapsedColumn,
+    )
 
     console = Console()
     timings: dict[str, float] = {}
@@ -501,6 +514,7 @@ def ingest(
     else:
         # Single call - just show spinner
         from rich.status import Status
+
         with Status("[bold cyan]Extracting rules...[/bold cyan]", console=console):
             logic_map, chunk_count = asyncio.run(
                 _extract_logic_map_with_progress(policy_text, model, base_url)
@@ -509,7 +523,9 @@ def ingest(
     timings["extract_rules"] = time.time() - t0
 
     # Show extraction results
-    console.print(f"[green]✓[/green] Extracted [bold]{len(logic_map.rules)}[/bold] rules in [bold]{timings['extract_rules']:.1f}s[/bold]")
+    console.print(
+        f"[green]✓[/green] Extracted [bold]{len(logic_map.rules)}[/bold] rules in [bold]{timings['extract_rules']:.1f}s[/bold]"
+    )
     if use_parallel:
         console.print(f"[dim]   {chunk_count} chunks processed in parallel[/dim]")
 

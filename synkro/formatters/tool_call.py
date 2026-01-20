@@ -11,9 +11,9 @@ if TYPE_CHECKING:
 class ToolCallFormatter:
     """
     Format traces with tool calls for fine-tuning.
-    
+
     Outputs OpenAI function calling format compatible with most fine-tuning platforms.
-    
+
     Example output:
         {
           "messages": [
@@ -31,7 +31,7 @@ class ToolCallFormatter:
     def __init__(self, include_metadata: bool = False):
         """
         Initialize the ToolCallFormatter.
-        
+
         Args:
             include_metadata: If True, include trace metadata in output
         """
@@ -40,21 +40,21 @@ class ToolCallFormatter:
     def format(self, traces: list["Trace"]) -> list[dict]:
         """
         Format traces as tool-calling training examples.
-        
+
         Args:
             traces: List of traces to format
-            
+
         Returns:
             List of formatted examples with tool calls
         """
         examples = []
-        
+
         for trace in traces:
             messages = []
-            
+
             for m in trace.messages:
                 msg = {"role": m.role}
-                
+
                 # Handle content (can be None for tool-calling assistant messages)
                 if m.content is not None:
                     msg["content"] = m.content
@@ -62,7 +62,7 @@ class ToolCallFormatter:
                     msg["content"] = None
                 else:
                     msg["content"] = ""
-                
+
                 # Handle tool calls
                 if m.tool_calls:
                     msg["tool_calls"] = [
@@ -72,19 +72,19 @@ class ToolCallFormatter:
                             "function": {
                                 "name": tc.function.name,
                                 "arguments": tc.function.arguments,
-                            }
+                            },
                         }
                         for tc in m.tool_calls
                     ]
-                
+
                 # Handle tool response
                 if m.tool_call_id:
                     msg["tool_call_id"] = m.tool_call_id
-                
+
                 messages.append(msg)
-            
+
             example = {"messages": messages}
-            
+
             if self.include_metadata:
                 example["metadata"] = {
                     "scenario": trace.scenario.description,
@@ -92,9 +92,9 @@ class ToolCallFormatter:
                     "grade": trace.grade.model_dump() if trace.grade else None,
                     "has_tool_calls": trace.has_tool_calls,
                 }
-            
+
             examples.append(example)
-        
+
         return examples
 
     def save(self, traces: list["Trace"], path: str | Path, pretty_print: bool = False) -> None:
@@ -131,4 +131,3 @@ class ToolCallFormatter:
         if pretty_print:
             return "\n\n".join(json.dumps(e, indent=2) for e in examples)
         return "\n".join(json.dumps(e) for e in examples)
-

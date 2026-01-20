@@ -2,10 +2,10 @@
 
 from synkro.modes.config import ModeConfig
 from synkro.prompts.templates import (
-    SCENARIO_GENERATOR_PROMPT,
-    SINGLE_RESPONSE_PROMPT,
-    SINGLE_GRADE_PROMPT,
     BATCHED_REFINER_PROMPT,
+    SCENARIO_GENERATOR_PROMPT,
+    SINGLE_GRADE_PROMPT,
+    SINGLE_RESPONSE_PROMPT,
 )
 
 CONVERSATION_CONFIG = ModeConfig(

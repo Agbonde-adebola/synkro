@@ -10,13 +10,11 @@ Integration tests (requiring API keys) are marked with @pytest.mark.integration
 """
 
 import pytest
-import json
-from dataclasses import asdict
-
 
 # =============================================================================
 # EVENT TYPE TESTS (No API calls needed)
 # =============================================================================
+
 
 def test_progress_event():
     """Test ProgressEvent creation and serialization."""
@@ -75,6 +73,7 @@ def test_error_event():
 # =============================================================================
 # METRICS TESTS (No API calls needed)
 # =============================================================================
+
 
 def test_phase_metrics():
     """Test PhaseMetrics tracking."""
@@ -151,11 +150,12 @@ def test_metrics_format_summary():
 # RESULT TYPE TESTS (No API calls needed)
 # =============================================================================
 
+
 def test_extraction_result():
     """Test ExtractionResult creation."""
-    from synkro.types.results import ExtractionResult
-    from synkro.types.metrics import PhaseMetrics
     from synkro.types.logic_map import LogicMap, Rule, RuleCategory
+    from synkro.types.metrics import PhaseMetrics
+    from synkro.types.results import ExtractionResult
 
     # Create a simple logic map
     rules = [
@@ -179,9 +179,9 @@ def test_extraction_result():
 
 def test_scenarios_result():
     """Test ScenariosResult creation."""
-    from synkro.types.results import ScenariosResult
+    from synkro.types.logic_map import GoldenScenario, LogicMap, ScenarioType
     from synkro.types.metrics import PhaseMetrics
-    from synkro.types.logic_map import LogicMap, GoldenScenario, ScenarioType
+    from synkro.types.results import ScenariosResult
 
     logic_map = LogicMap(rules=[], root_rules=[])
     scenarios = [
@@ -211,6 +211,7 @@ def test_scenarios_result():
 # PIPELINE STATE TESTS (No API calls needed)
 # =============================================================================
 
+
 def test_pipeline_phase_enum():
     """Test PipelinePhase enum."""
     from synkro.types.state import PipelinePhase
@@ -222,7 +223,7 @@ def test_pipeline_phase_enum():
 
 def test_pipeline_state_transitions():
     """Test PipelineState transitions."""
-    from synkro.types.state import PipelineState, PipelinePhase
+    from synkro.types.state import PipelinePhase, PipelineState
 
     state = PipelineState()
     assert state.current_phase == PipelinePhase.IDLE
@@ -243,7 +244,7 @@ def test_pipeline_state_transitions():
 
 def test_pipeline_state_serialization():
     """Test PipelineState serialization."""
-    from synkro.types.state import PipelineState, PipelinePhase
+    from synkro.types.state import PipelinePhase, PipelineState
 
     state = PipelineState()
     state.transition_to(PipelinePhase.EXTRACTION)
@@ -258,6 +259,7 @@ def test_pipeline_state_serialization():
 # =============================================================================
 # SESSION TESTS (No API calls needed for basic functionality)
 # =============================================================================
+
 
 def test_session_creation():
     """Test Session creation."""
@@ -282,8 +284,8 @@ def test_session_format_status():
 
 def test_session_persistence(tmp_path):
     """Test Session save/load."""
-    from synkro.session import Session
     from synkro.core.policy import Policy
+    from synkro.session import Session
 
     # Create session with some state
     session = Session()
@@ -303,6 +305,7 @@ def test_session_persistence(tmp_path):
 # =============================================================================
 # TOOL DEFINITIONS TESTS (No API calls needed)
 # =============================================================================
+
 
 def test_tool_definitions_structure():
     """Test TOOL_DEFINITIONS structure."""
@@ -355,6 +358,7 @@ def test_get_tool_by_name():
 # INTEGRATION TESTS (Require API keys)
 # =============================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_extract_rules_stream():
@@ -398,12 +402,12 @@ async def test_session_full_workflow():
     session = Session()
 
     # Extract rules
-    result = await session.extract_rules("Expenses over $50 require approval.")
+    await session.extract_rules("Expenses over $50 require approval.")
     assert session.logic_map is not None
     assert len(session.logic_map.rules) > 0
 
     # Generate scenarios
-    result = await session.generate_scenarios(count=3)
+    await session.generate_scenarios(count=3)
     assert session.scenarios is not None
     assert len(session.scenarios) > 0
 
@@ -440,10 +444,11 @@ async def test_streaming_scenario_generation():
 # MOCK-BASED TESTS (No API calls, uses mocks)
 # =============================================================================
 
+
 @pytest.mark.asyncio
 async def test_extract_rules_stream_events_structure():
     """Test that streaming yields proper event structure (mocked)."""
-    from synkro.types.events import ProgressEvent, CompleteEvent, ErrorEvent
+    from synkro.types.events import CompleteEvent, ErrorEvent, ProgressEvent
 
     # Test event creation patterns used in streaming
     progress = ProgressEvent(

@@ -4,30 +4,35 @@ The Logic Map represents a policy as a directed acyclic graph (DAG) of rules,
 enabling grounded reasoning and verification of generated traces.
 """
 
+from __future__ import annotations
+
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from synkro.types.core import Scenario
 
 
 class ScenarioType(str, Enum):
     """Types of scenarios for balanced dataset generation."""
 
-    POSITIVE = "positive"      # Happy path - user meets all criteria
-    NEGATIVE = "negative"      # Violation - user fails one criterion
-    EDGE_CASE = "edge_case"    # Boundary - user at exact limit
+    POSITIVE = "positive"  # Happy path - user meets all criteria
+    NEGATIVE = "negative"  # Violation - user fails one criterion
+    EDGE_CASE = "edge_case"  # Boundary - user at exact limit
     IRRELEVANT = "irrelevant"  # Not covered by policy
 
 
 class RuleCategory(str, Enum):
     """Categories of rules extracted from policy."""
 
-    CONSTRAINT = "constraint"      # Must/must not conditions
-    PERMISSION = "permission"      # Allowed/can do
-    PROCEDURE = "procedure"        # Step-by-step processes
-    EXCEPTION = "exception"        # Special cases/overrides
+    CONSTRAINT = "constraint"  # Must/must not conditions
+    PERMISSION = "permission"  # Allowed/can do
+    PROCEDURE = "procedure"  # Step-by-step processes
+    EXCEPTION = "exception"  # Special cases/overrides
 
 
 class Rule(BaseModel):
@@ -48,21 +53,12 @@ class Rule(BaseModel):
         ... )
     """
 
-    rule_id: str = Field(
-        description="Unique identifier (e.g., 'R001', 'R002')"
-    )
-    text: str = Field(
-        description="Exact rule text from the policy"
-    )
-    condition: str = Field(
-        description="The 'if' part - when this rule applies"
-    )
-    action: str = Field(
-        description="The 'then' part - what happens when rule applies"
-    )
+    rule_id: str = Field(description="Unique identifier (e.g., 'R001', 'R002')")
+    text: str = Field(description="Exact rule text from the policy")
+    condition: str = Field(description="The 'if' part - when this rule applies")
+    action: str = Field(description="The 'then' part - what happens when rule applies")
     dependencies: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs that must be evaluated before this rule"
+        default_factory=list, description="Rule IDs that must be evaluated before this rule"
     )
     category: RuleCategory = Field(
         description="Type of rule (constraint, permission, procedure, exception)"
@@ -94,12 +90,9 @@ class LogicMap(BaseModel):
         >>> print(logic_map.get_rule("R001"))
     """
 
-    rules: list[Rule] = Field(
-        description="All rules extracted from the policy"
-    )
+    rules: list[Rule] = Field(description="All rules extracted from the policy")
     root_rules: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs with no dependencies (entry points)"
+        default_factory=list, description="Rule IDs with no dependencies (entry points)"
     )
 
     def get_rule(self, rule_id: str) -> Rule | None:
@@ -240,21 +233,12 @@ class ReasoningStep(BaseModel):
     (or doesn't apply) to the current scenario.
     """
 
-    rule_id: str = Field(
-        description="The rule being evaluated in this step"
-    )
-    rule_text: str = Field(
-        description="The text of the rule"
-    )
-    applies: bool = Field(
-        description="Whether this rule applies to the scenario"
-    )
-    reasoning: str = Field(
-        description="Explanation of why the rule does/doesn't apply"
-    )
+    rule_id: str = Field(description="The rule being evaluated in this step")
+    rule_text: str = Field(description="The text of the rule")
+    applies: bool = Field(description="Whether this rule applies to the scenario")
+    reasoning: str = Field(description="Explanation of why the rule does/doesn't apply")
     exclusions: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs that are excluded because this rule applies"
+        default_factory=list, description="Rule IDs that are excluded because this rule applies"
     )
 
 
@@ -269,36 +253,27 @@ class GoldenScenario(BaseModel):
     - Sub-category IDs for coverage tracking
     """
 
-    description: str = Field(
-        description="The user's request or question"
-    )
-    context: str = Field(
-        default="",
-        description="Additional context for the scenario"
-    )
-    category: str = Field(
-        default="",
-        description="The policy category this scenario belongs to"
-    )
+    description: str = Field(description="The user's request or question")
+    context: str = Field(default="", description="Additional context for the scenario")
+    category: str = Field(default="", description="The policy category this scenario belongs to")
     scenario_type: ScenarioType = Field(
         description="Type of scenario (positive, negative, edge_case, irrelevant)"
     )
     target_rule_ids: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs this scenario is designed to test"
+        default_factory=list, description="Rule IDs this scenario is designed to test"
     )
     expected_outcome: str = Field(
-        default="",
-        description="Expected response behavior based on rules"
+        default="", description="Expected response behavior based on rules"
     )
     sub_category_ids: list[str] = Field(
         default_factory=list,
-        description="Sub-category IDs this scenario covers (for coverage tracking)"
+        description="Sub-category IDs this scenario covers (for coverage tracking)",
     )
 
     def to_base_scenario(self) -> "Scenario":
         """Convert to base Scenario type for compatibility, preserving eval fields."""
         from synkro.types.core import Scenario
+
         return Scenario(
             description=self.description,
             context=self.context,
@@ -317,28 +292,19 @@ class VerificationResult(BaseModel):
     correctly applies all relevant rules without hallucination.
     """
 
-    passed: bool = Field(
-        description="Whether the trace passed verification"
-    )
-    issues: list[str] = Field(
-        default_factory=list,
-        description="List of issues found (if any)"
-    )
+    passed: bool = Field(description="Whether the trace passed verification")
+    issues: list[str] = Field(default_factory=list, description="List of issues found (if any)")
     skipped_rules: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs that should have been applied but weren't"
+        default_factory=list, description="Rule IDs that should have been applied but weren't"
     )
     hallucinated_rules: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs cited that don't exist or don't apply"
+        default_factory=list, description="Rule IDs cited that don't exist or don't apply"
     )
     contradictions: list[str] = Field(
-        default_factory=list,
-        description="Logical contradictions found in the trace"
+        default_factory=list, description="Logical contradictions found in the trace"
     )
     rules_verified: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs that were correctly applied"
+        default_factory=list, description="Rule IDs that were correctly applied"
     )
 
 

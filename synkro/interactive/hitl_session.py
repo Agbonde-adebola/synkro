@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from synkro.types.logic_map import LogicMap, GoldenScenario
+    from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 @dataclass
@@ -104,7 +104,9 @@ class HITLSession:
         self.current_scenarios = new_scenarios
         self.current_distribution = new_distribution
 
-    def undo(self) -> tuple["LogicMap | None", list["GoldenScenario"] | None, dict[str, int] | None]:
+    def undo(
+        self,
+    ) -> tuple["LogicMap | None", list["GoldenScenario"] | None, dict[str, int] | None]:
         """
         Undo the last change (either rule or scenario).
 
@@ -200,6 +202,6 @@ class HITLSession:
 
         lines = []
         for i, entry in enumerate(self.conversation_history[-max_entries:], 1):
-            lines.append(f"{i}. User: \"{entry.user_feedback}\"")
+            lines.append(f'{i}. User: "{entry.user_feedback}"')
             lines.append(f"   Result: {entry.action_summary}")
         return "\n".join(lines)

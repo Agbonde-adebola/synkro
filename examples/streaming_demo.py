@@ -45,7 +45,7 @@ async def demo_streaming_extraction():
                 rule = event.rule
                 print(f"  ✅ Found {rule.rule_id}: {rule.text[:60]}...")
             case "complete":
-                print(f"\n✨ Extraction complete!")
+                print("\n✨ Extraction complete!")
                 print(f"   Total rules: {len(event.result.logic_map.rules)}")
                 print(f"   Cost: ${event.metrics.cost:.4f}")
                 return event.result
@@ -61,7 +61,6 @@ async def demo_streaming_scenarios(extraction_result):
 
     print("Generating scenarios (streaming)...\n")
 
-    policy = extraction_result.logic_map  # Reuse the logic map
     async for event in synkro.generate_scenarios_stream(
         "Expense policy with approval levels",
         logic_map=extraction_result.logic_map,
@@ -72,10 +71,12 @@ async def demo_streaming_scenarios(extraction_result):
                 print(f"  📊 Progress: {event.progress:.0%} - {event.message}")
             case "scenario_generated":
                 s = event.scenario
-                stype = s.scenario_type.value if hasattr(s.scenario_type, 'value') else s.scenario_type
+                stype = (
+                    s.scenario_type.value if hasattr(s.scenario_type, "value") else s.scenario_type
+                )
                 print(f"  🎯 [{stype}] {s.description[:50]}...")
             case "complete":
-                print(f"\n✨ Scenario generation complete!")
+                print("\n✨ Scenario generation complete!")
                 print(f"   Total scenarios: {len(event.result.scenarios)}")
                 print(f"   Distribution: {event.result.distribution}")
                 print(f"   Cost: ${event.metrics.cost:.4f}")
@@ -92,7 +93,9 @@ async def demo_session_workflow():
 
     session = synkro.Session()
 
-    policy = "All purchases over $500 require two approvals. Urgent purchases can skip one approval."
+    policy = (
+        "All purchases over $500 require two approvals. Urgent purchases can skip one approval."
+    )
 
     print("Step 1: Extract rules...")
     await session.extract_rules(policy)
@@ -104,7 +107,9 @@ async def demo_session_workflow():
 
     print("\nStep 3: Edit rules with natural language...")
     try:
-        new_map, summary = await session.edit_rules("Add a rule: Refunds require finance team approval")
+        new_map, summary = await session.edit_rules(
+            "Add a rule: Refunds require finance team approval"
+        )
         print(f"   ✅ {summary}")
     except Exception as e:
         print(f"   ⚠️ Edit skipped: {e}")
@@ -155,7 +160,7 @@ async def demo_step_by_step_api():
 async def demo_tool_definitions():
     """Demonstrate tool definitions for LLM agents."""
     from synkro import TOOL_DEFINITIONS
-    from synkro.tools import get_tool_names, get_tool_by_name
+    from synkro.tools import get_tool_by_name, get_tool_names
 
     print("\n" + "=" * 60)
     print("DEMO 5: Tool Definitions for LLM Agents")
@@ -169,6 +174,7 @@ async def demo_tool_definitions():
 
     print("\nExample tool schema (extract_rules):")
     import json
+
     extract_tool = get_tool_by_name("extract_rules")
     print(json.dumps(extract_tool, indent=2)[:500] + "...")
 
@@ -220,6 +226,7 @@ async def main():
     except Exception as e:
         print(f"\n❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
 
     print("\n" + "=" * 60)

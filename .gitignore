@@ -26,8 +26,6 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-.github/workflows/
-
 # PyInstaller
 *.manifest
 *.spec
@@ -183,4 +181,3 @@ logs/
 tmp/
 temp/
 *.tmp
-

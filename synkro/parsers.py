@@ -4,16 +4,16 @@ import json
 import re
 from typing import Any
 
+from synkro.prompts.templates import SYSTEM_PROMPT
 from synkro.schemas import (
-    ScenarioOutput,
+    ChatMessage,
     GradeOutput,
-    SingleGrade,
-    SingleResponse,
     PolicyComplexity,
     PolicyPlan,
-    ChatMessage,
+    ScenarioOutput,
+    SingleGrade,
+    SingleResponse,
 )
-from synkro.prompts.templates import SYSTEM_PROMPT
 
 # Default fallback values for parsing failures
 DEFAULT_SCENARIO_PREFIX = "Policy compliance scenario"
@@ -21,7 +21,9 @@ DEFAULT_SCENARIO_CONTEXT = "General policy application context"
 DEFAULT_COMPLEXITY_VARIABLE_COUNT = 2
 DEFAULT_COMPLEXITY_LEVEL = "conditional"
 DEFAULT_RECOMMENDED_TURNS = 3
-DEFAULT_COMPLEXITY_REASONING = "Unable to analyze policy, defaulting to conditional complexity with 3 turns"
+DEFAULT_COMPLEXITY_REASONING = (
+    "Unable to analyze policy, defaulting to conditional complexity with 3 turns"
+)
 DEFAULT_PLAN_CATEGORIES = ["Happy Path", "Edge Cases", "Violations"]
 DEFAULT_PLAN_DESCRIPTIONS = [
     "Clear success cases",
@@ -34,8 +36,8 @@ DEFAULT_PLAN_REASONING = "Default plan - unable to parse LLM response"
 def strip_markdown_fences(content: str) -> str:
     """Strip markdown code fences from content."""
     # Remove ```json ... ``` blocks, keeping just the content
-    content = re.sub(r'```json\s*', '', content)
-    content = re.sub(r'```\s*', '', content)
+    content = re.sub(r"```json\s*", "", content)
+    content = re.sub(r"```\s*", "", content)
     return content.strip()
 
 
@@ -215,9 +217,7 @@ def parse_batched_responses(
                                         role="user",
                                         content=f"Scenario: {scenario.scenario}\n\nContext: {scenario.context}",
                                     ),
-                                    ChatMessage(
-                                        role="assistant", content=r.get("response", "")
-                                    ),
+                                    ChatMessage(role="assistant", content=r.get("response", "")),
                                 ],
                             }
                         )
@@ -294,14 +294,14 @@ def parse_single_response(response: Any) -> SingleResponse | None:
         content = extract_content(response)
         # Strip markdown fences first
         content = strip_markdown_fences(content)
-        
+
         # Try to find and parse valid JSON objects with messages
         remaining = content
         while remaining:
             json_str = extract_json(remaining, "{")
             if not json_str:
                 break
-                
+
             try:
                 parsed = json.loads(json_str)
 
@@ -309,30 +309,33 @@ def parse_single_response(response: Any) -> SingleResponse | None:
                 if isinstance(parsed.get("messages"), list) and len(parsed["messages"]) >= 1:
                     messages = []
                     valid = True
-                    
+
                     for m in parsed["messages"]:
                         if not isinstance(m, dict) or "role" not in m or "content" not in m:
                             valid = False
                             break
-                        
+
                         msg_content = m.get("content", "")
                         # Reject if content contains refinement prompt leak markers
-                        if "GRADER FEEDBACK" in msg_content or "Generate an IMPROVED response" in msg_content:
+                        if (
+                            "GRADER FEEDBACK" in msg_content
+                            or "Generate an IMPROVED response" in msg_content
+                        ):
                             valid = False
                             break
-                            
+
                         messages.append(ChatMessage(role=m["role"], content=msg_content))
-                    
+
                     if valid and len(messages) >= 1:
                         return SingleResponse(messages=messages)
-                        
+
             except json.JSONDecodeError:
                 pass
-            
+
             # Move past this JSON object and try to find another
             end_pos = remaining.find(json_str) + len(json_str)
             remaining = remaining[end_pos:]
-            
+
     except Exception:
         pass  # Caller handles None with fallback
 
@@ -444,8 +447,16 @@ def parse_policy_plan(response: Any, target_traces: int) -> PolicyPlan:
     remainder = target_traces - (third * 3)
     return PolicyPlan(
         categories=[
-            {"name": DEFAULT_PLAN_CATEGORIES[0], "description": DEFAULT_PLAN_DESCRIPTIONS[0], "traces": third},
-            {"name": DEFAULT_PLAN_CATEGORIES[1], "description": DEFAULT_PLAN_DESCRIPTIONS[1], "traces": third},
+            {
+                "name": DEFAULT_PLAN_CATEGORIES[0],
+                "description": DEFAULT_PLAN_DESCRIPTIONS[0],
+                "traces": third,
+            },
+            {
+                "name": DEFAULT_PLAN_CATEGORIES[1],
+                "description": DEFAULT_PLAN_DESCRIPTIONS[1],
+                "traces": third,
+            },
             {
                 "name": DEFAULT_PLAN_CATEGORIES[2],
                 "description": DEFAULT_PLAN_DESCRIPTIONS[2],
@@ -454,4 +465,3 @@ def parse_policy_plan(response: Any, target_traces: int) -> PolicyPlan:
         ],
         reasoning=DEFAULT_PLAN_REASONING,
     )
-

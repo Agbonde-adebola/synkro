@@ -2,9 +2,9 @@
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.core import Trace, GradeResult, Message
+from synkro.parsers import extract_content, parse_single_response
 from synkro.prompts.templates import BATCHED_REFINER_PROMPT, SYSTEM_PROMPT
-from synkro.parsers import parse_single_response, extract_content
+from synkro.types.core import GradeResult, Message, Trace
 
 
 class Refiner:
@@ -30,9 +30,7 @@ class Refiner:
         self.llm = llm or LLM(model=model)
         self.prompt_template = BATCHED_REFINER_PROMPT
 
-    async def refine(
-        self, trace: Trace, grade: GradeResult, policy_text: str
-    ) -> Trace:
+    async def refine(self, trace: Trace, grade: GradeResult, policy_text: str) -> Trace:
         """
         Refine a failed trace based on grader feedback.
 
@@ -50,9 +48,7 @@ class Refiner:
         parsed = parse_single_response(response)
 
         if parsed and len(parsed.messages) >= 3:
-            messages = [
-                Message(role=m.role, content=m.content) for m in parsed.messages
-            ]
+            messages = [Message(role=m.role, content=m.content) for m in parsed.messages]
         else:
             # Fallback: construct from response
             content = extract_content(response)
@@ -67,9 +63,7 @@ class Refiner:
 
         return Trace(messages=messages, scenario=trace.scenario)
 
-    def _build_prompt(
-        self, trace: Trace, grade: GradeResult, policy_text: str
-    ) -> str:
+    def _build_prompt(self, trace: Trace, grade: GradeResult, policy_text: str) -> str:
         """Build the refinement prompt."""
         return f"""You are improving a response that failed quality checks.
 
@@ -134,4 +128,3 @@ Respond with ONLY the JSON object."""
                 refined.append(trace)
 
         return refined
-

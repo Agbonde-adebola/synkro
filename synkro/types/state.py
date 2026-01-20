@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING
 from synkro.types.metrics import Metrics
 
 if TYPE_CHECKING:
-    from synkro.types.logic_map import LogicMap, GoldenScenario
     from synkro.types.core import Trace
+    from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 class PipelinePhase(str, Enum):
@@ -193,6 +193,7 @@ class PipelineState:
         """
         # Record the transition
         import time
+
         self.phase_history.append((self.current_phase, time.time()))
 
         self.current_phase = phase
@@ -265,7 +266,9 @@ class PipelineState:
         overall_pct = int(self.total_progress * 100)
 
         if self.phase_message:
-            return f"[{phase_name}] {progress_pct}% - {self.phase_message} (Overall: {overall_pct}%)"
+            return (
+                f"[{phase_name}] {progress_pct}% - {self.phase_message} (Overall: {overall_pct}%)"
+            )
         return f"[{phase_name}] {progress_pct}% (Overall: {overall_pct}%)"
 
     def to_dict(self) -> dict:

@@ -77,8 +77,12 @@ class PhaseMetrics:
             calls=data.get("calls", 0),
             duration_seconds=data.get("duration_seconds", 0.0),
             model=data.get("model", ""),
-            started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
-            completed_at=datetime.fromisoformat(data["completed_at"]) if data.get("completed_at") else None,
+            started_at=datetime.fromisoformat(data["started_at"])
+            if data.get("started_at")
+            else None,
+            completed_at=datetime.fromisoformat(data["completed_at"])
+            if data.get("completed_at")
+            else None,
         )
 
 
@@ -282,7 +286,7 @@ class TrackedLLM:
     def _track(self) -> None:
         """Update metrics with delta from initial state."""
         cost_delta = self._llm.total_cost - self._initial_cost
-        calls_delta = self._llm.call_count - self._initial_calls
+        self._llm.call_count - self._initial_calls
         self._metrics.add_call(self._phase, cost_delta, self._llm.model)
         self._initial_cost = self._llm.total_cost
         self._initial_calls = self._llm.call_count

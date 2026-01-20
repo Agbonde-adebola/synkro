@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.schemas import RefinedScenariosOutput
-from synkro.types.logic_map import LogicMap, GoldenScenario, ScenarioType
 from synkro.prompts.interactive_templates import SCENARIO_REFINEMENT_PROMPT
+from synkro.schemas import RefinedScenariosOutput
+from synkro.types.logic_map import GoldenScenario, LogicMap, ScenarioType
 
 if TYPE_CHECKING:
     pass
@@ -138,8 +138,8 @@ class ScenarioEditor:
 
             scenario = GoldenScenario(
                 description=s.description,
-                context=getattr(s, 'context', ''),
-                category=getattr(s, 'category', ''),
+                context=getattr(s, "context", ""),
+                category=getattr(s, "category", ""),
                 scenario_type=scenario_type,
                 target_rule_ids=s.target_rule_ids,
                 expected_outcome=s.expected_outcome,
@@ -185,7 +185,12 @@ class ScenarioEditor:
                     issues.append(f"S{i} references non-existent rule {rule_id}")
 
             # Check scenario_type is valid
-            if scenario.scenario_type.value not in ["positive", "negative", "edge_case", "irrelevant"]:
+            if scenario.scenario_type.value not in [
+                "positive",
+                "negative",
+                "edge_case",
+                "irrelevant",
+            ]:
                 issues.append(f"S{i} has invalid scenario_type: {scenario.scenario_type}")
 
             # Check expected_outcome is not empty

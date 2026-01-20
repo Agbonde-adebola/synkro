@@ -9,41 +9,43 @@ Uses the Golden Trace 4-stage pipeline for all dataset types:
 
 import asyncio
 from datetime import datetime
-from typing import Callable
 
-from synkro.core.policy import Policy
-from synkro.core.dataset import Dataset
+# Type hints for HITL components (imported dynamically to avoid circular imports)
+from typing import TYPE_CHECKING, Callable
+
 from synkro.core.checkpoint import CheckpointManager, hash_policy
+from synkro.core.dataset import Dataset
+from synkro.core.policy import Policy
 from synkro.factory import ComponentFactory
-from synkro.reporting import ProgressReporter
 from synkro.pipeline.phases import (
-    PlanPhase,
-    LogicExtractionPhase,
     GoldenScenarioPhase,
-    GoldenTracePhase,
     GoldenToolCallPhase,
+    GoldenTracePhase,
+    LogicExtractionPhase,
+    PlanPhase,
     VerificationPhase,
 )
+from synkro.reporting import ProgressReporter
 from synkro.types.logic_map import LogicMap
-from synkro.types.state import PipelinePhase, PipelineState
 from synkro.types.metrics import Metrics, PhaseMetrics
 from synkro.types.results import (
     ExtractionResult,
-    ScenariosResult as ScenariosResultNew,
+    PipelineResult,
     TracesResult,
     VerificationResult,
-    PipelineResult,
 )
+from synkro.types.results import (
+    ScenariosResult as ScenariosResultNew,
+)
+from synkro.types.state import PipelinePhase, PipelineState
 
-# Type hints for HITL components (imported dynamically to avoid circular imports)
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from synkro.ingestion import PolicyConfig
     from synkro.interactive.logic_map_editor import LogicMapEditor
     from synkro.interactive.scenario_editor import ScenarioEditor
     from synkro.types.core import Plan
-    from synkro.types.logic_map import GoldenScenario
     from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
-    from synkro.ingestion import PolicyConfig
+    from synkro.types.logic_map import GoldenScenario
 
 # Type for state callback
 StateCallback = Callable[[PipelineState], None]
@@ -114,7 +116,9 @@ class ScenariosResult:
                 user_message=s.description,
                 expected_outcome=s.expected_outcome,
                 target_rule_ids=s.target_rule_ids,
-                scenario_type=s.scenario_type.value if hasattr(s.scenario_type, 'value') else s.scenario_type,
+                scenario_type=s.scenario_type.value
+                if hasattr(s.scenario_type, "value")
+                else s.scenario_type,
                 category=s.category,
                 context=s.context,
             )
@@ -146,8 +150,9 @@ class ScenariosResult:
             >>> result.save(format="langfuse")
         """
         import json
-        from pathlib import Path
         from datetime import datetime
+        from pathlib import Path
+
         from rich.console import Console
 
         console = Console()
@@ -213,7 +218,11 @@ class ScenariosResult:
                 f.write(json.dumps(example) + "\n")
 
         file_size = path.stat().st_size
-        size_str = f"{file_size / 1024:.1f} KB" if file_size < 1024 * 1024 else f"{file_size / 1024 / 1024:.1f} MB"
+        size_str = (
+            f"{file_size / 1024:.1f} KB"
+            if file_size < 1024 * 1024
+            else f"{file_size / 1024 / 1024:.1f} MB"
+        )
         console.print(f"[green]📁 Saved:[/green] {path} ({size_str})")
 
         return self
@@ -362,6 +371,7 @@ class GenerationPipeline:
             if cm.matches_config(policy_hash, traces, dataset_type):
                 resuming = True
                 from rich.console import Console
+
                 Console().print(f"[cyan]🔄 Resuming from checkpoint (stage: {cm.stage})[/cyan]")
             else:
                 cm.clear()  # Config mismatch, start fresh
@@ -386,6 +396,7 @@ class GenerationPipeline:
         # =====================================================================
         if policy_config is not None:
             from rich.console import Console
+
             from synkro.types.core import Plan
 
             console = Console()
@@ -420,7 +431,9 @@ class GenerationPipeline:
 
             # Phase 0: Planning (for category distribution)
             analyze_turns = turns == "auto"
-            plan = await self.plan_phase.execute(policy, traces, planner, analyze_turns=analyze_turns)
+            plan = await self.plan_phase.execute(
+                policy, traces, planner, analyze_turns=analyze_turns
+            )
             self.reporter.on_plan_complete(plan)
             self._complete_phase()
 
@@ -438,6 +451,7 @@ class GenerationPipeline:
             if resuming and cm and cm.stage in ("logic_map", "scenarios", "traces", "complete"):
                 logic_map = cm.get_logic_map()
                 from rich.console import Console
+
                 Console().print("[dim]📂 Loaded Logic Map from checkpoint[/dim]")
             else:
                 with self.reporter.spinner("Extracting rules..."):
@@ -465,7 +479,10 @@ class GenerationPipeline:
             golden_scenarios = cm.get_scenarios()
             distribution = cm.load().scenario_distribution
             from rich.console import Console
-            Console().print(f"[dim]📂 Loaded {len(golden_scenarios)} scenarios from checkpoint[/dim]")
+
+            Console().print(
+                f"[dim]📂 Loaded {len(golden_scenarios)} scenarios from checkpoint[/dim]"
+            )
         else:
             with self.reporter.spinner("Generating scenarios..."):
                 golden_scenarios, distribution = await self.golden_scenario_phase.execute(
@@ -499,8 +516,7 @@ class GenerationPipeline:
                 # Extract sub-category taxonomy from policy
                 # Handle both Category objects and strings
                 category_names = [
-                    cat.name if hasattr(cat, 'name') else str(cat)
-                    for cat in plan.categories
+                    cat.name if hasattr(cat, "name") else str(cat) for cat in plan.categories
                 ]
                 with self.reporter.spinner("Extracting coverage taxonomy..."):
                     taxonomy = await taxonomy_extractor.extract(
@@ -537,6 +553,7 @@ class GenerationPipeline:
                 # Coverage tracking is optional - don't fail the whole pipeline
                 # But log the error for debugging
                 import sys
+
                 print(f"[Coverage tracking error: {e}]", file=sys.stderr)
                 self._complete_phase()
 
@@ -551,8 +568,19 @@ class GenerationPipeline:
         if self.enable_hitl and self.hitl_editor:
             self._transition_phase(PipelinePhase.HITL, "Interactive editing...")
             hitl_calls_start = self.factory.generation_llm.call_count
-            logic_map, golden_scenarios, distribution, target_turns, coverage_report = await self._run_hitl_session(
-                logic_map, golden_scenarios, distribution, policy, plan, target_turns,
+            (
+                logic_map,
+                golden_scenarios,
+                distribution,
+                target_turns,
+                coverage_report,
+            ) = await self._run_hitl_session(
+                logic_map,
+                golden_scenarios,
+                distribution,
+                policy,
+                plan,
+                target_turns,
                 coverage_report=coverage_report,
                 taxonomy=taxonomy,
             )
@@ -578,7 +606,10 @@ class GenerationPipeline:
 
             if pending_indices:
                 from rich.console import Console
-                Console().print(f"[dim]📂 Resuming: {len(existing_traces)} done, {len(pending_indices)} pending[/dim]")
+
+                Console().print(
+                    f"[dim]📂 Resuming: {len(existing_traces)} done, {len(pending_indices)} pending[/dim]"
+                )
 
                 # Generate only pending scenarios
                 pending_scenarios = [golden_scenarios[i] for i in pending_indices]
@@ -586,11 +617,21 @@ class GenerationPipeline:
                 with self.reporter.spinner("Generating responses..."):
                     if is_tool_call and self.factory.has_tools:
                         new_traces = await self.golden_tool_call_phase.execute(
-                            policy, logic_map, pending_scenarios, golden_tool_call_gen, semaphore, target_turns
+                            policy,
+                            logic_map,
+                            pending_scenarios,
+                            golden_tool_call_gen,
+                            semaphore,
+                            target_turns,
                         )
                     else:
                         new_traces = await self.golden_trace_phase.execute(
-                            policy, logic_map, pending_scenarios, golden_response_gen, semaphore, target_turns
+                            policy,
+                            logic_map,
+                            pending_scenarios,
+                            golden_response_gen,
+                            semaphore,
+                            target_turns,
                         )
 
                 # Save new traces to checkpoint
@@ -604,11 +645,21 @@ class GenerationPipeline:
             with self.reporter.spinner("Generating responses..."):
                 if is_tool_call and self.factory.has_tools:
                     all_traces = await self.golden_tool_call_phase.execute(
-                        policy, logic_map, golden_scenarios, golden_tool_call_gen, semaphore, target_turns
+                        policy,
+                        logic_map,
+                        golden_scenarios,
+                        golden_tool_call_gen,
+                        semaphore,
+                        target_turns,
                     )
                 else:
                     all_traces = await self.golden_trace_phase.execute(
-                        policy, logic_map, golden_scenarios, golden_response_gen, semaphore, target_turns
+                        policy,
+                        logic_map,
+                        golden_scenarios,
+                        golden_response_gen,
+                        semaphore,
+                        target_turns,
                     )
 
             # Save all traces to checkpoint
@@ -634,7 +685,10 @@ class GenerationPipeline:
             passed_count = sum(1 for t in final_traces if t.grade and t.grade.passed)
             pass_rate = (passed_count / len(final_traces) * 100) if final_traces else 0
             from rich.console import Console
-            Console().print(f"[dim]📂 Loaded {len(final_traces)} verified traces from checkpoint[/dim]")
+
+            Console().print(
+                f"[dim]📂 Loaded {len(final_traces)} verified traces from checkpoint[/dim]"
+            )
         elif self.skip_grading:
             final_traces = list(all_traces)
             self.reporter.on_grading_skipped()
@@ -664,10 +718,7 @@ class GenerationPipeline:
 
         # Report completion with cost tracking
         elapsed = (datetime.now() - start_time).total_seconds()
-        total_cost = (
-            self.factory.generation_llm.total_cost +
-            self.factory.grading_llm.total_cost
-        )
+        total_cost = self.factory.generation_llm.total_cost + self.factory.grading_llm.total_cost
         self.reporter.on_complete(
             len(final_traces),
             elapsed,
@@ -711,7 +762,8 @@ class GenerationPipeline:
                 pass_rate=pass_rate or 0.0,
                 refinement_count=refinement_calls,
                 refinement_history=[],
-                metrics=self._metrics.get_phase("verification") or PhaseMetrics(phase="verification"),
+                metrics=self._metrics.get_phase("verification")
+                or PhaseMetrics(phase="verification"),
             )
 
             # Return PipelineResult with all stage results
@@ -797,10 +849,7 @@ class GenerationPipeline:
         # Report completion
         elapsed = (datetime.now() - start_time).total_seconds()
         # Include both LLM costs (grading_llm is used by planner, logic extractor, HITL editors)
-        total_cost = (
-            self.factory.generation_llm.total_cost +
-            self.factory.grading_llm.total_cost
-        )
+        total_cost = self.factory.generation_llm.total_cost + self.factory.grading_llm.total_cost
 
         self.reporter.on_complete(
             len(golden_scenarios),
@@ -849,8 +898,8 @@ class GenerationPipeline:
             Tuple of (modified LogicMap, modified scenarios, modified distribution, confirmed target_turns, updated coverage_report)
         """
         from synkro.interactive.hitl_session import HITLSession
-        from synkro.interactive.rich_ui import LogicMapDisplay, InteractivePrompt
         from synkro.interactive.intent_classifier import HITLIntentClassifier
+        from synkro.interactive.rich_ui import InteractivePrompt, LogicMapDisplay
 
         session = HITLSession(original_logic_map=logic_map)
         session.set_scenarios(scenarios, distribution)
@@ -1007,7 +1056,11 @@ class GenerationPipeline:
                 try:
                     scenario_feedback = intent.scenario_feedback or feedback
                     with display.spinner("Updating scenarios..."):
-                        new_scenarios, new_dist, changes_summary = await self.scenario_editor.refine(
+                        (
+                            new_scenarios,
+                            new_dist,
+                            changes_summary,
+                        ) = await self.scenario_editor.refine(
                             session.current_scenarios or [],
                             session.current_distribution or {},
                             scenario_feedback,
@@ -1086,14 +1139,22 @@ class GenerationPipeline:
                                 coverage_report,
                                 len(new_scenarios),
                             )
-                            session.record_feedback(feedback, "coverage", f"Added {len(new_scenarios)} scenarios")
+                            session.record_feedback(
+                                feedback, "coverage", f"Added {len(new_scenarios)} scenarios"
+                            )
                         else:
-                            display.show_error("Could not generate scenarios for coverage improvement")
+                            display.show_error(
+                                "Could not generate scenarios for coverage improvement"
+                            )
 
                     except Exception as e:
                         display.show_error(f"Failed to improve coverage: {e}")
 
-            elif intent.intent_type == "compound" and intent.rule_feedback and intent.scenario_feedback:
+            elif (
+                intent.intent_type == "compound"
+                and intent.rule_feedback
+                and intent.scenario_feedback
+            ):
                 # Handle compound intent: rules first, then scenarios
                 try:
                     # Step 1: Apply rule changes
@@ -1125,7 +1186,11 @@ class GenerationPipeline:
                     updated_history = session.get_history_for_prompt()
                     if self.scenario_editor:
                         with display.spinner("Updating scenarios..."):
-                            new_scenarios, new_dist, scenario_summary = await self.scenario_editor.refine(
+                            (
+                                new_scenarios,
+                                new_dist,
+                                scenario_summary,
+                            ) = await self.scenario_editor.refine(
                                 session.current_scenarios or [],
                                 session.current_distribution or {},
                                 intent.scenario_feedback,
@@ -1141,8 +1206,12 @@ class GenerationPipeline:
 
                         if is_valid:
                             if session.current_scenarios:
-                                display.display_scenario_diff(session.current_scenarios, new_scenarios)
-                            session.apply_scenario_change(intent.scenario_feedback, new_scenarios, new_dist)
+                                display.display_scenario_diff(
+                                    session.current_scenarios, new_scenarios
+                                )
+                            session.apply_scenario_change(
+                                intent.scenario_feedback, new_scenarios, new_dist
+                            )
                             display.show_success(scenario_summary)
                             session.record_feedback(feedback, "scenarios", scenario_summary)
                         else:

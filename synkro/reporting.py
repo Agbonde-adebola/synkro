@@ -9,65 +9,65 @@ Enhanced for Golden Trace pipeline with:
 - Per-trace category/type logging
 """
 
-from typing import Protocol, TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Protocol
 
-from synkro.types.core import Plan, Scenario, Trace, GradeResult
+from synkro.types.core import Plan, Scenario, Trace
 
 if TYPE_CHECKING:
-    from synkro.types.logic_map import LogicMap, GoldenScenario
-    from synkro.types.coverage import SubCategoryTaxonomy, CoverageReport
+    from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
+    from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 class ProgressReporter(Protocol):
     """
     Protocol for reporting generation progress.
-    
+
     Implement this to customize how progress is displayed or logged.
-    
+
     Examples:
         >>> # Use silent reporter for testing
         >>> generator = Generator(reporter=SilentReporter())
-        
+
         >>> # Use rich reporter for CLI (default)
         >>> generator = Generator(reporter=RichReporter())
     """
-    
+
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:
         """Called when generation starts."""
         ...
-    
+
     def on_plan_complete(self, plan: Plan) -> None:
         """Called when planning phase completes."""
         ...
-    
+
     def on_scenario_progress(self, completed: int, total: int) -> None:
         """Called during scenario generation."""
         ...
-    
+
     def on_response_progress(self, completed: int, total: int) -> None:
         """Called during response generation."""
         ...
-    
+
     def on_responses_complete(self, traces: list[Trace]) -> None:
         """Called when all responses are generated."""
         ...
-    
+
     def on_grading_progress(self, completed: int, total: int) -> None:
         """Called during grading."""
         ...
-    
+
     def on_grading_complete(self, traces: list[Trace], pass_rate: float) -> None:
         """Called when grading completes."""
         ...
-    
+
     def on_refinement_start(self, iteration: int, failed_count: int) -> None:
         """Called when a refinement iteration starts."""
         ...
-    
+
     def on_grading_skipped(self) -> None:
         """Called when grading is skipped."""
         ...
-    
+
     def on_complete(
         self,
         dataset_size: int,
@@ -115,8 +115,10 @@ class ProgressReporter(Protocol):
 
 class _NoOpContextManager:
     """No-op context manager for SilentReporter spinner."""
+
     def __enter__(self):
         return self
+
     def __exit__(self, *args):
         pass
 
@@ -138,28 +140,28 @@ class SilentReporter:
 
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:
         pass
-    
+
     def on_plan_complete(self, plan: Plan) -> None:
         pass
-    
+
     def on_scenario_progress(self, completed: int, total: int) -> None:
         pass
-    
+
     def on_response_progress(self, completed: int, total: int) -> None:
         pass
-    
+
     def on_responses_complete(self, traces: list[Trace]) -> None:
         pass
-    
+
     def on_grading_progress(self, completed: int, total: int) -> None:
         pass
-    
+
     def on_grading_complete(self, traces: list[Trace], pass_rate: float) -> None:
         pass
-    
+
     def on_refinement_start(self, iteration: int, failed_count: int) -> None:
         pass
-    
+
     def on_grading_skipped(self) -> None:
         pass
 
@@ -204,6 +206,7 @@ class RichReporter:
 
     def __init__(self):
         from rich.console import Console
+
         self.console = Console()
         self._progress = None
         self._current_task = None
@@ -216,21 +219,24 @@ class RichReporter:
                 await some_llm_call()
         """
         from rich.status import Status
+
         return Status(f"[cyan]{message}[/cyan]", spinner="dots", console=self.console)
-    
+
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:
         self.console.print(
             f"\n[cyan]⚡ Generating {traces} traces[/cyan] "
             f"[dim]| {dataset_type.upper()} | {model}[/dim]"
         )
-    
+
     def on_plan_complete(self, plan: Plan) -> None:
         """Categories now shown in scenarios table, so just show count here."""
         cat_names = ", ".join(c.name for c in plan.categories[:3])
         if len(plan.categories) > 3:
             cat_names += f" +{len(plan.categories) - 3}"
-        self.console.print(f"[green]📋 Planning[/green] [dim]{len(plan.categories)} categories: {cat_names}[/dim]")
-    
+        self.console.print(
+            f"[green]📋 Planning[/green] [dim]{len(plan.categories)} categories: {cat_names}[/dim]"
+        )
+
     def on_scenario_progress(self, completed: int, total: int) -> None:
         pass
 
@@ -239,24 +245,38 @@ class RichReporter:
 
     def on_grading_progress(self, completed: int, total: int) -> None:
         pass  # Progress shown in on_grading_complete
-    
+
     def on_grading_complete(self, traces: list[Trace], pass_rate: float) -> None:
         self.console.print(f"[green]⚖️  Grading[/green] [dim]{pass_rate:.0f}% passed[/dim]")
         for idx, trace in enumerate(traces, 1):
-            scenario_preview = trace.scenario.description[:40] + "..." if len(trace.scenario.description) > 40 else trace.scenario.description
+            scenario_preview = (
+                trace.scenario.description[:40] + "..."
+                if len(trace.scenario.description) > 40
+                else trace.scenario.description
+            )
             if trace.grade and trace.grade.passed:
-                self.console.print(f"  [dim]#{idx}[/dim] [cyan]{scenario_preview}[/cyan] [green]✓ Passed[/green]")
+                self.console.print(
+                    f"  [dim]#{idx}[/dim] [cyan]{scenario_preview}[/cyan] [green]✓ Passed[/green]"
+                )
             else:
-                issues = ", ".join(trace.grade.issues[:2]) if trace.grade and trace.grade.issues else "No specific issues"
+                issues = (
+                    ", ".join(trace.grade.issues[:2])
+                    if trace.grade and trace.grade.issues
+                    else "No specific issues"
+                )
                 issues_preview = issues[:40] + "..." if len(issues) > 40 else issues
-                self.console.print(f"  [dim]#{idx}[/dim] [cyan]{scenario_preview}[/cyan] [red]✗ Failed[/red] [dim]{issues_preview}[/dim]")
-    
+                self.console.print(
+                    f"  [dim]#{idx}[/dim] [cyan]{scenario_preview}[/cyan] [red]✗ Failed[/red] [dim]{issues_preview}[/dim]"
+                )
+
     def on_refinement_start(self, iteration: int, failed_count: int) -> None:
-        self.console.print(f"  [yellow]↻ Refining {failed_count} failed traces (iteration {iteration})...[/yellow]")
-    
+        self.console.print(
+            f"  [yellow]↻ Refining {failed_count} failed traces (iteration {iteration})...[/yellow]"
+        )
+
     def on_grading_skipped(self) -> None:
-        self.console.print(f"  [dim]⚖️  Grading skipped[/dim]")
-    
+        self.console.print("  [dim]⚖️  Grading skipped[/dim]")
+
     def on_complete(
         self,
         dataset_size: int,
@@ -274,7 +294,11 @@ class RichReporter:
         from rich.panel import Panel
         from rich.table import Table
 
-        elapsed_str = f"{int(elapsed_seconds) // 60}m {int(elapsed_seconds) % 60}s" if elapsed_seconds >= 60 else f"{int(elapsed_seconds)}s"
+        elapsed_str = (
+            f"{int(elapsed_seconds) // 60}m {int(elapsed_seconds) % 60}s"
+            if elapsed_seconds >= 60
+            else f"{int(elapsed_seconds)}s"
+        )
 
         self.console.print()
         summary = Table.grid(padding=(0, 2))
@@ -328,18 +352,25 @@ class RichReporter:
 
             for trace in cat_traces[:3]:  # Show first 3 per category
                 # Try to get scenario type if available
-                scenario_type = getattr(trace.scenario, 'scenario_type', None)
+                scenario_type = getattr(trace.scenario, "scenario_type", None)
                 if scenario_type:
                     type_indicator = {
                         "positive": "[green]✓[/green]",
                         "negative": "[red]✗[/red]",
                         "edge_case": "[yellow]⚡[/yellow]",
-                        "irrelevant": "[dim]○[/dim]"
-                    }.get(scenario_type if isinstance(scenario_type, str) else scenario_type.value, "[white]?[/white]")
+                        "irrelevant": "[dim]○[/dim]",
+                    }.get(
+                        scenario_type if isinstance(scenario_type, str) else scenario_type.value,
+                        "[white]?[/white]",
+                    )
                 else:
                     type_indicator = "[white]•[/white]"
 
-                user_preview = trace.user_message[:50] + "..." if len(trace.user_message) > 50 else trace.user_message
+                user_preview = (
+                    trace.user_message[:50] + "..."
+                    if len(trace.user_message) > 50
+                    else trace.user_message
+                )
                 self.console.print(f"    {type_indicator} [blue]{user_preview}[/blue]")
 
             if len(cat_traces) > 3:
@@ -391,7 +422,7 @@ class RichReporter:
 
         # Show suggestions separately (can be disabled for HITL where it goes in session details)
         if show_suggestions and report.suggestions:
-            self.console.print(f"\n[cyan]Suggestions:[/cyan]")
+            self.console.print("\n[cyan]Suggestions:[/cyan]")
             for i, sugg in enumerate(report.suggestions[:3], 1):
                 self.console.print(f"  {i}. {sugg}")
 
@@ -534,19 +565,22 @@ class CallbackReporter:
         hitl_calls: int | None = None,
         coverage_calls: int | None = None,
     ) -> None:
-        self._emit("complete", {
-            "dataset_size": dataset_size,
-            "elapsed_seconds": elapsed_seconds,
-            "pass_rate": pass_rate,
-            "total_cost": total_cost,
-            "generation_calls": generation_calls,
-            "grading_calls": grading_calls,
-            "scenario_calls": scenario_calls,
-            "response_calls": response_calls,
-            "refinement_calls": refinement_calls,
-            "hitl_calls": hitl_calls,
-            "coverage_calls": coverage_calls,
-        })
+        self._emit(
+            "complete",
+            {
+                "dataset_size": dataset_size,
+                "elapsed_seconds": elapsed_seconds,
+                "pass_rate": pass_rate,
+                "total_cost": total_cost,
+                "generation_calls": generation_calls,
+                "grading_calls": grading_calls,
+                "scenario_calls": scenario_calls,
+                "response_calls": response_calls,
+                "refinement_calls": refinement_calls,
+                "hitl_calls": hitl_calls,
+                "coverage_calls": coverage_calls,
+            },
+        )
         if self._on_complete_cb:
             self._on_complete_cb(dataset_size, elapsed_seconds, pass_rate)
 
@@ -554,26 +588,34 @@ class CallbackReporter:
         self._emit("logic_map_complete", {"rules_count": len(logic_map.rules)})
 
     def on_golden_scenarios_complete(self, scenarios, distribution) -> None:
-        self._emit("golden_scenarios_complete", {"count": len(scenarios), "distribution": distribution})
+        self._emit(
+            "golden_scenarios_complete", {"count": len(scenarios), "distribution": distribution}
+        )
 
     def on_taxonomy_extracted(self, taxonomy) -> None:
         self._emit("taxonomy_extracted", {"sub_categories_count": len(taxonomy.sub_categories)})
 
     def on_coverage_calculated(self, report) -> None:
-        self._emit("coverage_calculated", {
-            "overall_coverage_percent": report.overall_coverage_percent,
-            "covered_count": report.covered_count,
-            "partial_count": report.partial_count,
-            "uncovered_count": report.uncovered_count,
-            "gaps_count": len(report.gaps),
-        })
+        self._emit(
+            "coverage_calculated",
+            {
+                "overall_coverage_percent": report.overall_coverage_percent,
+                "covered_count": report.covered_count,
+                "partial_count": report.partial_count,
+                "uncovered_count": report.uncovered_count,
+                "gaps_count": len(report.gaps),
+            },
+        )
 
     def on_coverage_improved(self, before, after, added_scenarios) -> None:
-        self._emit("coverage_improved", {
-            "before_percent": before.overall_coverage_percent,
-            "after_percent": after.overall_coverage_percent,
-            "added_scenarios": added_scenarios,
-        })
+        self._emit(
+            "coverage_improved",
+            {
+                "before_percent": before.overall_coverage_percent,
+                "after_percent": after.overall_coverage_percent,
+                "added_scenarios": added_scenarios,
+            },
+        )
 
 
 class FileLoggingReporter:
@@ -631,7 +673,7 @@ class FileLoggingReporter:
         self._start_time: float | None = None
 
         # Write header to log file
-        self._write_log(f"=== Synkro Generation Log ===")
+        self._write_log("=== Synkro Generation Log ===")
         self._write_log(f"Started: {datetime.now().isoformat()}")
         self._write_log(f"Log file: {self._log_path}")
         self._write_log("=" * 50)
@@ -639,6 +681,7 @@ class FileLoggingReporter:
     def _write_log(self, message: str) -> None:
         """Write a message to the log file."""
         from datetime import datetime
+
         timestamp = datetime.now().strftime("%H:%M:%S")
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write(f"[{timestamp}] {message}\n")
@@ -660,6 +703,7 @@ class FileLoggingReporter:
 
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:
         import time
+
         self._start_time = time.time()
         self._write_log(f"STARTED: Generating {traces} traces")
         self._write_log(f"  Model: {model}")
@@ -694,10 +738,10 @@ class FileLoggingReporter:
         for cat_name, cat_traces in by_category.items():
             self._write_log(f"  Category '{cat_name}': {len(cat_traces)} traces")
             for trace in cat_traces:
-                scenario_type = getattr(trace.scenario, 'scenario_type', 'unknown')
-                if hasattr(scenario_type, 'value'):
+                scenario_type = getattr(trace.scenario, "scenario_type", "unknown")
+                if hasattr(scenario_type, "value"):
                     scenario_type = scenario_type.value
-                user_preview = trace.user_message[:80].replace('\n', ' ')
+                user_preview = trace.user_message[:80].replace("\n", " ")
                 self._write_log(f"    [{scenario_type}] {user_preview}")
 
         self._delegate.on_responses_complete(traces)
@@ -715,7 +759,7 @@ class FileLoggingReporter:
 
         for idx, trace in enumerate(traces, 1):
             status = "PASS" if (trace.grade and trace.grade.passed) else "FAIL"
-            scenario_preview = trace.scenario.description[:60].replace('\n', ' ')
+            scenario_preview = trace.scenario.description[:60].replace("\n", " ")
             self._write_log(f"  #{idx} [{status}] {scenario_preview}")
             if trace.grade and not trace.grade.passed and trace.grade.issues:
                 for issue in trace.grade.issues[:3]:
@@ -724,7 +768,9 @@ class FileLoggingReporter:
         self._delegate.on_grading_complete(traces, pass_rate)
 
     def on_refinement_start(self, iteration: int, failed_count: int) -> None:
-        self._write_log(f"REFINEMENT: Starting iteration {iteration} for {failed_count} failed traces")
+        self._write_log(
+            f"REFINEMENT: Starting iteration {iteration} for {failed_count} failed traces"
+        )
         self._delegate.on_refinement_start(iteration, failed_count)
 
     def on_grading_skipped(self) -> None:
@@ -746,7 +792,9 @@ class FileLoggingReporter:
         coverage_calls: int | None = None,
     ) -> None:
         self._write_log("=" * 50)
-        self._write_log(f"COMPLETE: Generated {dataset_size} traces in {self._format_duration(elapsed_seconds)}")
+        self._write_log(
+            f"COMPLETE: Generated {dataset_size} traces in {self._format_duration(elapsed_seconds)}"
+        )
         if pass_rate is not None:
             self._write_log(f"  Quality: {pass_rate:.1f}% passed")
         if total_cost is not None and total_cost > 0:
@@ -767,22 +815,30 @@ class FileLoggingReporter:
         self._write_log("=" * 50)
 
         self._delegate.on_complete(
-            dataset_size, elapsed_seconds, pass_rate, total_cost,
-            generation_calls, grading_calls, scenario_calls, response_calls,
-            refinement_calls, hitl_calls, coverage_calls
+            dataset_size,
+            elapsed_seconds,
+            pass_rate,
+            total_cost,
+            generation_calls,
+            grading_calls,
+            scenario_calls,
+            response_calls,
+            refinement_calls,
+            hitl_calls,
+            coverage_calls,
         )
 
         # Print log file location to console
-        if hasattr(self._delegate, 'console'):
+        if hasattr(self._delegate, "console"):
             self._delegate.console.print(f"[dim]📝 Log saved: {self._log_path}[/dim]")
 
     def on_logic_map_complete(self, logic_map) -> None:
         self._write_log(f"LOGIC MAP: Extracted {len(logic_map.rules)} rules")
         for rule in logic_map.rules:
-            rule_type = getattr(rule, 'category', 'unknown')
-            if hasattr(rule_type, 'value'):
+            rule_type = getattr(rule, "category", "unknown")
+            if hasattr(rule_type, "value"):
                 rule_type = rule_type.value
-            rule_text = getattr(rule, 'text', str(rule))[:60]
+            rule_text = getattr(rule, "text", str(rule))[:60]
             self._write_log(f"  [{rule.rule_id}] ({rule_type}) {rule_text}")
         self._delegate.on_logic_map_complete(logic_map)
 
@@ -790,10 +846,14 @@ class FileLoggingReporter:
         self._write_log(f"SCENARIOS: Generated {len(scenarios)} golden scenarios")
         self._write_log(f"  Distribution: {distribution}")
         for scenario in scenarios:
-            scenario_type = getattr(scenario, 'scenario_type', 'unknown')
-            if hasattr(scenario_type, 'value'):
+            scenario_type = getattr(scenario, "scenario_type", "unknown")
+            if hasattr(scenario_type, "value"):
                 scenario_type = scenario_type.value
-            preview = scenario.user_message[:60].replace('\n', ' ') if hasattr(scenario, 'user_message') else str(scenario)[:60]
+            preview = (
+                scenario.user_message[:60].replace("\n", " ")
+                if hasattr(scenario, "user_message")
+                else str(scenario)[:60]
+            )
             self._write_log(f"  [{scenario_type}] {preview}")
         self._delegate.on_golden_scenarios_complete(scenarios, distribution)
 
@@ -803,13 +863,22 @@ class FileLoggingReporter:
 
     def on_coverage_calculated(self, report) -> None:
         self._write_log(f"COVERAGE: {report.overall_coverage_percent:.0f}% overall")
-        self._write_log(f"  Covered: {report.covered_count}, Partial: {report.partial_count}, Uncovered: {report.uncovered_count}")
+        self._write_log(
+            f"  Covered: {report.covered_count}, Partial: {report.partial_count}, Uncovered: {report.uncovered_count}"
+        )
         self._delegate.on_coverage_calculated(report)
 
     def on_coverage_improved(self, before, after, added_scenarios) -> None:
-        self._write_log(f"COVERAGE IMPROVED: {before.overall_coverage_percent:.0f}% → {after.overall_coverage_percent:.0f}% (+{added_scenarios} scenarios)")
+        self._write_log(
+            f"COVERAGE IMPROVED: {before.overall_coverage_percent:.0f}% → {after.overall_coverage_percent:.0f}% (+{added_scenarios} scenarios)"
+        )
         self._delegate.on_coverage_improved(before, after, added_scenarios)
 
 
-__all__ = ["ProgressReporter", "SilentReporter", "RichReporter", "CallbackReporter", "FileLoggingReporter"]
-
+__all__ = [
+    "ProgressReporter",
+    "SilentReporter",
+    "RichReporter",
+    "CallbackReporter",
+    "FileLoggingReporter",
+]

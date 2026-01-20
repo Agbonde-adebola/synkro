@@ -10,10 +10,10 @@ Components:
 - CoverageImprover: Generate scenarios to fill coverage gaps
 """
 
-from synkro.coverage.taxonomy_extractor import TaxonomyExtractor
-from synkro.coverage.scenario_tagger import ScenarioTagger
 from synkro.coverage.calculator import CoverageCalculator
 from synkro.coverage.improver import CoverageImprover
+from synkro.coverage.scenario_tagger import ScenarioTagger
+from synkro.coverage.taxonomy_extractor import TaxonomyExtractor
 
 __all__ = [
     "TaxonomyExtractor",

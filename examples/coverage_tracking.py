@@ -54,5 +54,6 @@ def main():
     dataset = result.dataset
     dataset.save("coverage_example_output.jsonl")
 
+
 if __name__ == "__main__":
     main()

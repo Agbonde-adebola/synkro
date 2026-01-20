@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from synkro.types.logic_map import LogicMap, GoldenScenario
     from synkro.types.core import Plan
     from synkro.types.coverage import CoverageReport
+    from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 class LogicMapDisplay:
@@ -169,6 +169,7 @@ class LogicMapDisplay:
                 await some_llm_call()
         """
         from rich.status import Status
+
         return Status(f"[cyan]{message}[/cyan]", spinner="dots", console=self.console)
 
     def display_session_state(
@@ -247,18 +248,28 @@ class LogicMapDisplay:
                 type_display = type_name.replace("_", " ").title()
                 branch = tree.add(f"[bold]{type_display}[/bold] ({len(by_type[type_name])})")
                 for idx, scenario in by_type[type_name]:
-                    desc = scenario.description[:40] + "..." if len(scenario.description) > 40 else scenario.description
+                    desc = (
+                        scenario.description[:40] + "..."
+                        if len(scenario.description) > 40
+                        else scenario.description
+                    )
 
                     # Get parent category (green) and sub-categories (yellow)
-                    parent_cat = getattr(scenario, 'category', None)
+                    parent_cat = getattr(scenario, "category", None)
                     sub_cats = scenario_sub_categories.get(idx, [])
-                    if not sub_cats and hasattr(scenario, 'sub_category_ids') and scenario.sub_category_ids:
+                    if (
+                        not sub_cats
+                        and hasattr(scenario, "sub_category_ids")
+                        and scenario.sub_category_ids
+                    ):
                         sub_cats = scenario.sub_category_ids[:2]
 
                     # Build tags: parent category in green, sub-categories in yellow
                     tags_parts = []
                     if parent_cat:
-                        cat_name = parent_cat[:12] if isinstance(parent_cat, str) else str(parent_cat)[:12]
+                        cat_name = (
+                            parent_cat[:12] if isinstance(parent_cat, str) else str(parent_cat)[:12]
+                        )
                         tags_parts.append(f"[green][{cat_name}][/green]")
                     if sub_cats:
                         for sc in sub_cats[:2]:
@@ -270,7 +281,11 @@ class LogicMapDisplay:
                         tags = " ".join(tags_parts)
                         branch.add(f"[cyan]S{idx}[/cyan]: {desc} {tags}")
                     else:
-                        rules = ", ".join(scenario.target_rule_ids[:2]) if scenario.target_rule_ids else ""
+                        rules = (
+                            ", ".join(scenario.target_rule_ids[:2])
+                            if scenario.target_rule_ids
+                            else ""
+                        )
                         if rules:
                             branch.add(f"[cyan]S{idx}[/cyan]: {desc} [dim]→ {rules}[/dim]")
                         else:
@@ -296,7 +311,9 @@ class LogicMapDisplay:
         try:
             idx = int(scenario_id.upper().replace("S", "")) - 1
             if idx < 0 or idx >= len(scenarios):
-                self.console.print(f"[red]Scenario {scenario_id} not found (valid: S1-S{len(scenarios)})[/red]")
+                self.console.print(
+                    f"[red]Scenario {scenario_id} not found (valid: S1-S{len(scenarios)})[/red]"
+                )
                 return
         except ValueError:
             self.console.print(f"[red]Invalid scenario ID: {scenario_id}[/red]")
@@ -350,7 +367,11 @@ class LogicMapDisplay:
                 type_display = type_name.replace("_", " ").title()
                 branch = tree.add(f"[bold]{type_display}[/bold] ({len(by_type[type_name])})")
                 for idx, scenario, is_added in by_type[type_name]:
-                    desc = scenario.description[:50] + "..." if len(scenario.description) > 50 else scenario.description
+                    desc = (
+                        scenario.description[:50] + "..."
+                        if len(scenario.description) > 50
+                        else scenario.description
+                    )
 
                     if is_added:
                         prefix = "[green]+ "
@@ -361,15 +382,25 @@ class LogicMapDisplay:
                         style_close = ""
                         id_style = "[cyan]"
 
-                    rules = ", ".join(scenario.target_rule_ids[:3]) if scenario.target_rule_ids else "None"
-                    branch.add(f"{prefix}{id_style}S{idx}[/]: {desc}{style_close} [dim]→ {rules}[/dim]")
+                    rules = (
+                        ", ".join(scenario.target_rule_ids[:3])
+                        if scenario.target_rule_ids
+                        else "None"
+                    )
+                    branch.add(
+                        f"{prefix}{id_style}S{idx}[/]: {desc}{style_close} [dim]→ {rules}[/dim]"
+                    )
 
         # Add removed scenarios at bottom
         if removed_descs:
             removed_branch = tree.add("[red][bold]REMOVED[/bold][/red]")
             for scenario in before:
                 if scenario.description in removed_descs:
-                    desc = scenario.description[:50] + "..." if len(scenario.description) > 50 else scenario.description
+                    desc = (
+                        scenario.description[:50] + "..."
+                        if len(scenario.description) > 50
+                        else scenario.description
+                    )
                     removed_branch.add(f"[red][strike]- {desc}[/strike][/red]")
 
         # Build legend

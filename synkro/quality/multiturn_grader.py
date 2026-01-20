@@ -2,9 +2,9 @@
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.core import Trace, Message, GradeResult
 from synkro.prompts.multiturn_templates import MULTI_TURN_GRADE_PROMPT
 from synkro.schemas import ConversationGrade, TurnGrade
+from synkro.types.core import GradeResult, Message, Trace
 
 
 class MultiTurnGrader:

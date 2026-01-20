@@ -1,28 +1,13 @@
 """Test that all public imports work correctly."""
 
-import pytest
-
 
 def test_main_imports():
     """Test importing from synkro package."""
     from synkro import (
-        # Quick function
-        generate,
-        # Core classes
-        Policy,
-        Dataset,
-        Trace,
-        Scenario,
-        Message,
-        GradeResult,
-        Plan,
-        Category,
         # LLM
-        LLM,
-        # Model enums (OpenAI, Anthropic, Google supported)
         OpenAI,
-        Anthropic,
-        Google,
+        Policy,
+        generate,
     )
 
     # Verify they're all importable
@@ -33,7 +18,7 @@ def test_main_imports():
 
 def test_model_enums():
     """Test model enum values."""
-    from synkro import OpenAI, Anthropic, Google
+    from synkro import Anthropic, Google, OpenAI
 
     assert OpenAI.GPT_5_MINI.value == "gpt-5-mini"
     assert OpenAI.GPT_52.value == "gpt-5.2"
@@ -54,7 +39,7 @@ def test_policy_from_text():
 
 def test_trace_properties():
     """Test Trace message extraction."""
-    from synkro import Trace, Scenario, Message
+    from synkro import Message, Scenario, Trace
 
     trace = Trace(
         messages=[
@@ -72,7 +57,7 @@ def test_trace_properties():
 
 def test_dataset_filter():
     """Test Dataset filtering."""
-    from synkro import Dataset, Trace, Scenario, Message, GradeResult
+    from synkro import Dataset, GradeResult, Message, Scenario, Trace
 
     traces = [
         Trace(
@@ -108,8 +93,8 @@ def test_dataset_filter():
 
 def test_formatter_output():
     """Test messages formatter output."""
+    from synkro import Message, Scenario, Trace
     from synkro.formatters import MessagesFormatter
-    from synkro import Trace, Scenario, Message
 
     trace = Trace(
         messages=[
@@ -126,4 +111,3 @@ def test_formatter_output():
     assert len(output) == 1
     assert "messages" in output[0]
     assert len(output[0]["messages"]) == 3
-

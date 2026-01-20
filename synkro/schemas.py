@@ -1,8 +1,8 @@
 """Pydantic schemas for structured LLM outputs and validation."""
 
 from typing import Literal
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 
 # =============================================================================
 # SCENARIO SCHEMAS
@@ -98,7 +98,8 @@ class GradeOutput(BaseModel):
 
     index: int = Field(description="Scenario index (0-based)")
     passed: bool = Field(
-        alias="pass", description="Is the response FULLY correct, policy-compliant, and format-valid?"
+        alias="pass",
+        description="Is the response FULLY correct, policy-compliant, and format-valid?",
     )
     policy_violations: list[str] = Field(
         default_factory=list,
@@ -144,12 +145,10 @@ class MultiTurnResponse(BaseModel):
     """Multi-turn response output for complexity-driven generation."""
 
     messages: list[ChatMessage] = Field(
-        min_length=3,
-        description="Conversation messages (variable length based on turn count)"
+        min_length=3, description="Conversation messages (variable length based on turn count)"
     )
     turn_count: int = Field(
-        ge=1, le=10,
-        description="Number of user-assistant exchanges in this conversation"
+        ge=1, le=10, description="Number of user-assistant exchanges in this conversation"
     )
 
 
@@ -157,7 +156,8 @@ class SingleGrade(BaseModel):
     """Single grade output for parallel generation."""
 
     passed: bool = Field(
-        alias="pass", description="Is the response FULLY correct, policy-compliant, and format-valid?"
+        alias="pass",
+        description="Is the response FULLY correct, policy-compliant, and format-valid?",
     )
     policy_violations: list[str] = Field(
         default_factory=list, description="Specific policy rules that were violated"
@@ -221,9 +221,7 @@ class ConversationGrade(BaseModel):
     index: int = Field(description="Scenario index")
     overall_pass: bool = Field(description="Does the ENTIRE conversation pass?")
     turn_grades: list[TurnGrade] = Field(description="Grade for each assistant turn")
-    coherence_pass: bool = Field(
-        description="Is the conversation coherent with no contradictions?"
-    )
+    coherence_pass: bool = Field(description="Is the conversation coherent with no contradictions?")
     coherence_issues: list[str] = Field(
         default_factory=list, description="Any contradictions or incoherence across turns"
     )
@@ -270,63 +268,58 @@ class AgenticTrace(BaseModel):
 
 class ToolCallGrade(BaseModel):
     """Grading result for a tool call trace.
-    
+
     Evaluates tool usage on four criteria:
     - Tool Selection: Did they use the right tool?
     - Parameter Accuracy: Were the parameters correct?
     - Response Synthesis: Did they use tool results correctly?
     - Timing: Did they call tools at the right time?
     """
-    
-    passed: bool = Field(
-        alias="pass",
-        description="Does the trace pass ALL criteria?"
-    )
-    
+
+    passed: bool = Field(alias="pass", description="Does the trace pass ALL criteria?")
+
     # Criterion 1: Tool Selection
     tool_selection_correct: bool = Field(
         description="Did the assistant choose the appropriate tool for the task?"
     )
     tool_selection_issues: list[str] = Field(
         default_factory=list,
-        description="Specific issues with tool selection (wrong tool, missing tool, unnecessary tool)"
+        description="Specific issues with tool selection (wrong tool, missing tool, unnecessary tool)",
     )
-    
+
     # Criterion 2: Parameter Accuracy
     parameters_valid: bool = Field(
         description="Were the tool parameters correct (types, values, required fields)?"
     )
     parameter_issues: list[str] = Field(
         default_factory=list,
-        description="Specific issues with parameters (wrong type, invalid value, missing required)"
+        description="Specific issues with parameters (wrong type, invalid value, missing required)",
     )
-    
+
     # Criterion 3: Response Synthesis
     synthesis_accurate: bool = Field(
         description="Did the assistant correctly use tool results without hallucination?"
     )
     synthesis_issues: list[str] = Field(
         default_factory=list,
-        description="Specific issues with synthesis (hallucinated data, ignored results, misinterpreted)"
+        description="Specific issues with synthesis (hallucinated data, ignored results, misinterpreted)",
     )
-    
+
     # Criterion 4: Timing
     timing_appropriate: bool = Field(
         description="Did the assistant call tools at the right moment?"
     )
     timing_issues: list[str] = Field(
         default_factory=list,
-        description="Specific issues with timing (premature call, delayed call, should have called earlier)"
+        description="Specific issues with timing (premature call, delayed call, should have called earlier)",
     )
-    
+
     # Overall feedback
-    feedback: str = Field(
-        description="Summary of issues or 'Correct' if passing"
-    )
-    
+    feedback: str = Field(description="Summary of issues or 'Correct' if passing")
+
     class Config:
         populate_by_name = True
-    
+
     def get_all_issues(self) -> list[str]:
         """Get all issues combined."""
         return (
@@ -350,8 +343,7 @@ class RuleExtraction(BaseModel):
     condition: str = Field(description="The 'if' part - when this rule applies")
     action: str = Field(description="The 'then' part - what happens")
     dependencies: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs that must be evaluated before this rule"
+        default_factory=list, description="Rule IDs that must be evaluated before this rule"
     )
     category: Literal["constraint", "permission", "procedure", "exception"] = Field(
         description="Type of rule"
@@ -361,12 +353,8 @@ class RuleExtraction(BaseModel):
 class LogicMapOutput(BaseModel):
     """Output schema for logic extraction - the complete DAG of rules."""
 
-    rules: list[RuleExtraction] = Field(
-        description="All rules extracted from the policy"
-    )
-    root_rules: list[str] = Field(
-        description="Rule IDs with no dependencies (entry points)"
-    )
+    rules: list[RuleExtraction] = Field(description="All rules extracted from the policy")
+    root_rules: list[str] = Field(description="Rule IDs with no dependencies (entry points)")
     reasoning: str = Field(
         description="Explanation of rule extraction and relationship identification"
     )
@@ -378,9 +366,7 @@ class RefinedLogicMapOutput(BaseModel):
     rules: list[RuleExtraction] = Field(
         description="All rules in the refined Logic Map (modified and unmodified)"
     )
-    root_rules: list[str] = Field(
-        description="Rule IDs with no dependencies (entry points)"
-    )
+    root_rules: list[str] = Field(description="Rule IDs with no dependencies (entry points)")
     changes_summary: str = Field(
         description="Brief summary of changes made (e.g., 'Added R009, removed R005')"
     )
@@ -392,12 +378,12 @@ class RefinedLogicMapOutput(BaseModel):
 class HITLIntent(BaseModel):
     """Classified user intent in unified HITL session."""
 
-    intent_type: Literal["turns", "rules", "scenarios", "compound", "coverage", "command", "unclear"] = Field(
+    intent_type: Literal[
+        "turns", "rules", "scenarios", "compound", "coverage", "command", "unclear"
+    ] = Field(
         description="Type of user intent: turns adjustment, rule modification, scenario editing, compound (rules + scenarios together), coverage operations, command, or unclear"
     )
-    confidence: float = Field(
-        ge=0, le=1, description="Confidence score for the classification"
-    )
+    confidence: float = Field(ge=0, le=1, description="Confidence score for the classification")
 
     # For turns changes
     target_turns: int | None = Field(
@@ -452,12 +438,8 @@ class GoldenScenarioOutput(BaseModel):
     scenario_type: Literal["positive", "negative", "edge_case", "irrelevant"] = Field(
         description="Type of scenario"
     )
-    target_rule_ids: list[str] = Field(
-        description="Rule IDs this scenario tests"
-    )
-    expected_outcome: str = Field(
-        description="Expected behavior based on rules"
-    )
+    target_rule_ids: list[str] = Field(description="Rule IDs this scenario tests")
+    expected_outcome: str = Field(description="Expected behavior based on rules")
 
 
 class GoldenScenariosArray(BaseModel):
@@ -475,9 +457,7 @@ class RefinedScenariosOutput(BaseModel):
     changes_summary: str = Field(
         description="Brief summary of what changed (e.g., 'Added S21, deleted S3')"
     )
-    reasoning: str = Field(
-        description="Explanation of how user feedback was interpreted"
-    )
+    reasoning: str = Field(description="Explanation of how user feedback was interpreted")
 
 
 class ReasoningStepOutput(BaseModel):
@@ -488,26 +468,20 @@ class ReasoningStepOutput(BaseModel):
     applies: bool = Field(description="Whether this rule applies")
     reasoning: str = Field(description="Why the rule does/doesn't apply")
     exclusions: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs excluded because this rule applies"
+        default_factory=list, description="Rule IDs excluded because this rule applies"
     )
 
 
 class GoldenTraceOutput(BaseModel):
     """Output schema for a golden trace with grounded reasoning."""
 
-    messages: list[ChatMessage] = Field(
-        description="The conversation messages"
-    )
+    messages: list[ChatMessage] = Field(description="The conversation messages")
     reasoning_chain: list[ReasoningStepOutput] = Field(
         description="Step-by-step reasoning with rule citations"
     )
-    rules_applied: list[str] = Field(
-        description="Rule IDs that were applied in the response"
-    )
+    rules_applied: list[str] = Field(description="Rule IDs that were applied in the response")
     rules_excluded: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs that were explicitly excluded and why"
+        default_factory=list, description="Rule IDs that were explicitly excluded and why"
     )
 
 
@@ -515,29 +489,20 @@ class VerificationOutput(BaseModel):
     """Output schema for trace verification against Logic Map."""
 
     passed: bool = Field(description="Whether the trace passed verification")
-    issues: list[str] = Field(
-        default_factory=list,
-        description="List of issues found"
-    )
+    issues: list[str] = Field(default_factory=list, description="List of issues found")
     skipped_rules: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs that should have been applied but weren't"
+        default_factory=list, description="Rule IDs that should have been applied but weren't"
     )
     hallucinated_rules: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs cited that don't exist or don't apply"
+        default_factory=list, description="Rule IDs cited that don't exist or don't apply"
     )
     contradictions: list[str] = Field(
-        default_factory=list,
-        description="Logical contradictions found"
+        default_factory=list, description="Logical contradictions found"
     )
     rules_verified: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs correctly applied"
+        default_factory=list, description="Rule IDs correctly applied"
     )
-    feedback: str = Field(
-        description="Summary of verification result"
-    )
+    feedback: str = Field(description="Summary of verification result")
 
 
 # =============================================================================
@@ -553,50 +518,35 @@ class SubCategoryOutput(BaseModel):
     description: str = Field(description="What this sub-category covers")
     parent_category: str = Field(description="Name of the parent category")
     related_rule_ids: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs from LogicMap that relate to this sub-category"
+        default_factory=list, description="Rule IDs from LogicMap that relate to this sub-category"
     )
     priority: Literal["high", "medium", "low"] = Field(
-        default="medium",
-        description="Coverage priority based on policy importance"
+        default="medium", description="Coverage priority based on policy importance"
     )
 
 
 class TaxonomyOutput(BaseModel):
     """Output schema for sub-category taxonomy extraction."""
 
-    sub_categories: list[SubCategoryOutput] = Field(
-        description="All extracted sub-categories"
-    )
-    reasoning: str = Field(
-        description="Explanation of how the taxonomy was organized"
-    )
+    sub_categories: list[SubCategoryOutput] = Field(description="All extracted sub-categories")
+    reasoning: str = Field(description="Explanation of how the taxonomy was organized")
 
 
 class ScenarioTaggingOutput(BaseModel):
     """Output schema for tagging a scenario with sub-categories."""
 
     scenario_index: int = Field(description="Index of the scenario being tagged")
-    sub_category_ids: list[str] = Field(
-        description="Sub-category IDs this scenario covers"
-    )
+    sub_category_ids: list[str] = Field(description="Sub-category IDs this scenario covers")
 
 
 class BatchedScenarioTagging(BaseModel):
     """Batch output for scenario tagging."""
 
-    taggings: list[ScenarioTaggingOutput] = Field(
-        description="Tagging results for each scenario"
-    )
+    taggings: list[ScenarioTaggingOutput] = Field(description="Tagging results for each scenario")
 
 
 class CoverageSuggestionsOutput(BaseModel):
     """Output schema for coverage improvement suggestions."""
 
-    suggestions: list[str] = Field(
-        description="Actionable suggestions to improve coverage"
-    )
-    reasoning: str = Field(
-        description="Explanation of how suggestions were prioritized"
-    )
-
+    suggestions: list[str] = Field(description="Actionable suggestions to improve coverage")
+    reasoning: str = Field(description="Explanation of how suggestions were prioritized")

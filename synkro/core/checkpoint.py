@@ -6,14 +6,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from typing import TYPE_CHECKING
-
 from pydantic import BaseModel, Field
 from rich.console import Console
 
 if TYPE_CHECKING:
     from synkro.types.core import Trace
-    from synkro.types.logic_map import LogicMap, GoldenScenario
+    from synkro.types.logic_map import GoldenScenario, LogicMap
 
 console = Console()
 
@@ -201,16 +199,14 @@ class CheckpointManager:
         data = self._load_or_create()
         return self._validate_list(data.verified_traces_data, Trace)
 
-    def _validate_list(
-        self, data_list: list[dict], model_class: type[BaseModel]
-    ) -> list:
+    def _validate_list(self, data_list: list[dict], model_class: type[BaseModel]) -> list:
         """
         Helper to validate a list of dicts into model instances.
-        
+
         Args:
             data_list: List of dictionaries to validate
             model_class: Pydantic model class to validate against
-            
+
         Returns:
             List of validated model instances
         """
@@ -249,8 +245,8 @@ class CheckpointManager:
         data = self._load_or_create()
 
         lines = [
-            f"Checkpoint Status",
-            f"=================",
+            "Checkpoint Status",
+            "=================",
             f"Stage: {self.stage}",
             f"Target traces: {data.target_traces}",
             f"Logic Map: {'✓' if data.logic_map_data else '✗'}",

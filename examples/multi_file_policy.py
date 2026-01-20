@@ -17,15 +17,16 @@ Use cases:
 """
 
 from pathlib import Path
+
 from dotenv import load_dotenv
+
+from synkro import DatasetType, Policy, create_pipeline
+from synkro.models.google import Google
+from synkro.reporting import FileLoggingReporter
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
-
-from synkro import create_pipeline, Policy, DatasetType
-from synkro.models.google import Google
-from synkro.reporting import FileLoggingReporter
 
 # =============================================================================
 # Method 1: Load from Folder
@@ -77,9 +78,7 @@ print()
 
 # Use a custom separator between documents
 policy_custom = Policy.from_files(
-    policy_files,
-    separator="\n\n" + "=" * 60 + "\n\n",
-    source_prefix="company_policies"
+    policy_files, separator="\n\n" + "=" * 60 + "\n\n", source_prefix="company_policies"
 )
 
 print(f"✓ Loaded with custom separator: {policy_custom.word_count} words")
@@ -103,12 +102,12 @@ pipeline = create_pipeline(
     grading_model=Google.GEMINI_25_FLASH,
     dataset_type=DatasetType.CONVERSATION,
     max_iterations=2,
-    reporter=reporter,                  # Log to both CLI and file
+    reporter=reporter,  # Log to both CLI and file
 )
 
 # Generate from the combined policy (using folder method)
-print(f"Generating 5 traces from combined policy...")
-print(f"Policy covers: Expense (txt + docx), HR, and Security policies")
+print("Generating 5 traces from combined policy...")
+print("Policy covers: Expense (txt + docx), HR, and Security policies")
 print()
 
 dataset = pipeline.generate(policy_from_folder, traces=5)
@@ -141,4 +140,3 @@ if len(dataset) > 0:
 
 print(f"\n✓ Saved to: {output_file}")
 print(f"✓ Generated from combined policy documents (folder contains {len(policy_files)} files)")
-

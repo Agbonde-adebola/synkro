@@ -10,17 +10,18 @@ Requires: ANTHROPIC_API_KEY environment variable
 """
 
 from pathlib import Path
+
 from dotenv import load_dotenv
+
+from synkro.examples import EXPENSE_POLICY
+from synkro.models.anthropic import Anthropic
+from synkro.pipelines import create_pipeline
+from synkro.reporting import FileLoggingReporter
+from synkro.types import DatasetType
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
-
-from synkro.pipelines import create_pipeline
-from synkro.models.anthropic import Anthropic
-from synkro.types import DatasetType
-from synkro.examples import EXPENSE_POLICY
-from synkro.reporting import FileLoggingReporter
 
 # Use FileLoggingReporter for both CLI output and file logging
 reporter = FileLoggingReporter(log_dir="./logs")
@@ -29,11 +30,11 @@ reporter = FileLoggingReporter(log_dir="./logs")
 # - model: Used for scenario and response generation
 # - grading_model: Used for quality grading (stronger = better filtering)
 pipeline = create_pipeline(
-    model=Anthropic.CLAUDE_45_HAIKU,      # Fast, cost-effective generation
+    model=Anthropic.CLAUDE_45_HAIKU,  # Fast, cost-effective generation
     grading_model=Anthropic.CLAUDE_45_SONNET,  # High-quality grading
-    dataset_type=DatasetType.CONVERSATION,         # Chat format for fine-tuning
-    max_iterations=3,                     # Max refinement attempts per trace
-    reporter=reporter,                    # Log to both CLI and file
+    dataset_type=DatasetType.CONVERSATION,  # Chat format for fine-tuning
+    max_iterations=3,  # Max refinement attempts per trace
+    reporter=reporter,  # Log to both CLI and file
 )
 
 # Generate dataset from policy
@@ -47,4 +48,3 @@ passing.save("anthropic_training.jsonl")
 
 # View summary
 print(passing.summary())
-

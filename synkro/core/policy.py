@@ -5,8 +5,8 @@ from typing import Sequence
 
 from pydantic import BaseModel, Field
 
-from synkro.errors import FileNotFoundError as SynkroFileNotFoundError, PolicyTooShortError
-
+from synkro.errors import FileNotFoundError as SynkroFileNotFoundError
+from synkro.errors import PolicyTooShortError
 
 MIN_POLICY_WORDS = 10  # Minimum words for meaningful generation
 
@@ -55,7 +55,7 @@ class Policy(BaseModel):
         Load policy from a file or folder.
 
         Supports: .txt, .md, .pdf, .docx
-        
+
         If path is a directory, loads all supported files from that directory.
         If path is a file, loads that single file.
 
@@ -70,7 +70,7 @@ class Policy(BaseModel):
             >>> policy = Policy.from_file("compliance.pdf")
             >>> len(policy.text) > 0
             True
-            
+
             >>> # Folder of documents
             >>> policy = Policy.from_file("policies/")
             >>> len(policy.text) > 0
@@ -90,7 +90,7 @@ class Policy(BaseModel):
         # If it's a directory, load all supported files
         if path.is_dir():
             return cls._from_folder(path)
-        
+
         # Otherwise, load single file
         return cls._load_single_file(path)
 
@@ -98,10 +98,10 @@ class Policy(BaseModel):
     def _load_single_file(cls, path: Path) -> "Policy":
         """
         Load a single policy file.
-        
+
         Args:
             path: Path to a single file
-            
+
         Returns:
             Policy object with extracted text
         """
@@ -122,31 +122,32 @@ class Policy(BaseModel):
     def _from_folder(cls, folder_path: Path) -> "Policy":
         """
         Load all supported files from a folder.
-        
+
         Args:
             folder_path: Path to folder containing policy files
-            
+
         Returns:
             Policy object with combined text from all files
-            
+
         Raises:
             ValueError: If no supported files found in folder
         """
         # Find all supported files in folder (non-recursive)
         files = [
-            f for f in folder_path.iterdir()
+            f
+            for f in folder_path.iterdir()
             if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
         ]
-        
+
         if not files:
             raise ValueError(
                 f"No supported policy files found in {folder_path}. "
                 f"Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}"
             )
-        
+
         # Sort files for consistent ordering
         files.sort(key=lambda f: f.name)
-        
+
         # Load each file and combine
         return cls.from_files(files, source_prefix=str(folder_path))
 
@@ -177,7 +178,7 @@ class Policy(BaseModel):
             >>> policy = Policy.from_files(["doc1.pdf", "doc2.docx", "doc3.txt"])
             >>> len(policy.text) > 0
             True
-            
+
             >>> # With custom separator
             >>> policy = Policy.from_files(
             ...     ["part1.txt", "part2.txt"],
@@ -189,30 +190,32 @@ class Policy(BaseModel):
 
         texts: list[str] = []
         sources: list[str] = []
-        
+
         for path in paths:
             path_obj = Path(path)
-            
+
             if not path_obj.exists():
                 raise SynkroFileNotFoundError(str(path_obj), None)
-            
+
             if not path_obj.is_file():
                 raise ValueError(f"Path is not a file: {path_obj}")
-            
+
             # Load the file
             policy = cls._load_single_file(path_obj)
             texts.append(policy.text)
             sources.append(str(path_obj))
-        
+
         # Combine texts
         combined_text = separator.join(texts)
-        
+
         # Create source description
         if source_prefix:
             combined_source = f"{source_prefix} ({len(sources)} files: {', '.join(Path(s).name for s in sources)})"
         else:
-            combined_source = f"multiple_files ({len(sources)} files: {', '.join(Path(s).name for s in sources)})"
-        
+            combined_source = (
+                f"multiple_files ({len(sources)} files: {', '.join(Path(s).name for s in sources)})"
+            )
+
         return cls(text=combined_text, source=combined_source)
 
     @classmethod
@@ -235,8 +238,7 @@ class Policy(BaseModel):
             return cls(text=text, source=str(path))
         except ImportError:
             raise ImportError(
-                "pymupdf is required for PDF support. "
-                "Install with: pip install pymupdf"
+                "pymupdf is required for PDF support. " "Install with: pip install pymupdf"
             )
 
     @classmethod
@@ -258,8 +260,7 @@ class Policy(BaseModel):
                 return cls(text=result.value, source=str(path))
         except ImportError:
             raise ImportError(
-                "mammoth is required for DOCX support. "
-                "Install with: pip install mammoth"
+                "mammoth is required for DOCX support. " "Install with: pip install mammoth"
             )
 
     @classmethod
@@ -279,9 +280,9 @@ class Policy(BaseModel):
             >>> policy = Policy.from_url("https://example.com/terms")
         """
         try:
+            import html2text
             import httpx
             from bs4 import BeautifulSoup
-            import html2text
 
             response = httpx.get(url, follow_redirects=True)
             response.raise_for_status()
@@ -320,7 +321,7 @@ class Policy(BaseModel):
     def validate_length(self) -> None:
         """
         Validate that the policy has enough content for meaningful generation.
-        
+
         Raises:
             PolicyTooShortError: If policy is too short
         """
@@ -334,4 +335,3 @@ class Policy(BaseModel):
 
     def __repr__(self) -> str:
         return self.__str__()
-

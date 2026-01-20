@@ -1,10 +1,10 @@
 """Pipeline module for decomposed generation phases."""
 
 from synkro.pipeline.phases import (
-    PlanPhase,
-    ScenarioPhase,
-    ResponsePhase,
     GradingPhase,
+    PlanPhase,
+    ResponsePhase,
+    ScenarioPhase,
     ToolCallResponsePhase,
 )
 from synkro.pipeline.runner import GenerationPipeline
@@ -17,4 +17,3 @@ __all__ = [
     "ToolCallResponsePhase",
     "GenerationPipeline",
 ]
-

@@ -33,13 +33,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from synkro.generation.generator import Generator
-from synkro.types import DatasetType
 from synkro.models import Model, OpenAI
 from synkro.reporting import ProgressReporter
+from synkro.types import DatasetType
 
 if TYPE_CHECKING:
-    from synkro.types.tool import ToolDefinition
     from synkro.ingestion import PolicyConfig
+    from synkro.types.tool import ToolDefinition
 
 
 def create_pipeline(

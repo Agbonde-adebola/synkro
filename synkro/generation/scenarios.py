@@ -2,9 +2,9 @@
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.core import Scenario, Category
-from synkro.prompts.templates import SCENARIO_GENERATOR_PROMPT, CATEGORY_SCENARIO_PROMPT
+from synkro.prompts.templates import CATEGORY_SCENARIO_PROMPT, SCENARIO_GENERATOR_PROMPT
 from synkro.schemas import ScenariosArray
+from synkro.types.core import Category, Scenario
 
 
 class ScenarioGenerator:
@@ -74,9 +74,7 @@ POLICY:
 
 Generate exactly {count} diverse scenarios."""
 
-    def _build_category_prompt(
-        self, policy_text: str, count: int, category: Category
-    ) -> str:
+    def _build_category_prompt(self, policy_text: str, count: int, category: Category) -> str:
         """Build prompt for category-specific scenario generation."""
         return f"""{CATEGORY_SCENARIO_PROMPT}
 
@@ -87,4 +85,3 @@ POLICY:
 {policy_text}
 
 Generate exactly {count} scenarios for the "{category.name}" category."""
-
