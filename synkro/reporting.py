@@ -226,11 +226,15 @@ class RichReporter:
     def spinner(self, message: str = "Thinking..."):
         """Context manager that shows a loading spinner.
 
-        Note: During live display, the spinner is built into the panel.
-        This method is for compatibility when live display is paused (e.g., HITL).
+        When the Live display is active, this returns a no-op and updates the phase
+        instead of showing a separate spinner (which would stack panels).
         """
-        from rich.status import Status
+        # If live display is running, don't show separate spinner - update phase instead
+        if self._display._live is not None:
+            self._display.update_phase(message.replace("...", ""))
+            return _NoOpContextManager()
 
+        from rich.status import Status
         return Status(f"[cyan]{message}[/cyan]", spinner="dots", console=self.console)
 
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:
@@ -344,10 +348,8 @@ class RichReporter:
         self._display.add_event(f"COV: Coverage at {report.overall_coverage_percent:.0f}%")
         self._update_elapsed()
 
-        if show_suggestions and report.suggestions:
-            self.console.print("\n[cyan]Suggestions:[/cyan]")
-            for i, sugg in enumerate(report.suggestions[:3], 1):
-                self.console.print(f"  {i}. {sugg}")
+        # Don't print suggestions while Live display is active - they go in the panel
+        # Suggestions will be shown after generation completes
 
     def on_coverage_improved(self, before, after, added_scenarios) -> None:
         """Display coverage improvement."""
