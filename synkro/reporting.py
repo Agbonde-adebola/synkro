@@ -303,20 +303,15 @@ class RichReporter:
         self._display.stop()
 
     def on_logic_map_complete(self, logic_map) -> None:
-        """Update display with extracted rules."""
-        self._display._state.rules_count = len(logic_map.rules)
-        self._display._state.rule_ids = [r.rule_id for r in logic_map.rules]
+        """Store full logic map for section rendering."""
+        self._display.set_logic_map(logic_map)
         self._display.update_phase("Rules Extracted")
         self._display.add_activity(f"{len(logic_map.rules)} rules found")
         self._update_elapsed()
 
     def on_golden_scenarios_complete(self, scenarios, distribution) -> None:
-        """Update display with scenario distribution."""
-        self._display._state.scenarios_count = len(scenarios)
-        self._display._state.positive_count = distribution.get("positive", 0)
-        self._display._state.negative_count = distribution.get("negative", 0)
-        self._display._state.edge_count = distribution.get("edge_case", 0)
-        self._display._state.irrelevant_count = distribution.get("irrelevant", 0)
+        """Store full scenarios for section rendering."""
+        self._display.set_scenarios(scenarios, distribution)
         self._display.update_phase("Scenarios Generated")
         self._display.add_activity(f"{len(scenarios)} scenarios created")
         self._update_elapsed()
@@ -334,48 +329,11 @@ class RichReporter:
         self._update_elapsed()
 
     def on_coverage_calculated(self, report, show_suggestions: bool = True) -> None:
-        """Display coverage report (shown after live display completes or in HITL)."""
-        from rich.table import Table
-
-        # If live display is still running, just add activity
-        if self._display._live:
-            self._display.add_activity(f"Coverage: {report.overall_coverage_percent:.0f}%")
-            return
-
-        # Otherwise show full table (for non-live scenarios)
-        table = Table(show_header=True, header_style="bold cyan", title="📊 Coverage")
-        table.add_column("Sub-Category")
-        table.add_column("Coverage", justify="right")
-        table.add_column("Status")
-
-        for cov in report.sub_category_coverage[:10]:
-            status_icon = {
-                "covered": "[green]✓[/green]",
-                "partial": "[yellow]~[/yellow]",
-                "uncovered": "[red]✗[/red]",
-            }.get(cov.coverage_status, "?")
-
-            table.add_row(
-                cov.sub_category_name,
-                f"{cov.coverage_percent:.0f}% ({cov.scenario_count})",
-                status_icon,
-            )
-
-        if len(report.sub_category_coverage) > 10:
-            table.add_row(
-                f"[dim]... {len(report.sub_category_coverage) - 10} more[/dim]",
-                "",
-                "",
-            )
-
-        table.add_row("", "", "", end_section=True)
-        table.add_row(
-            f"[bold]Total ({report.covered_count}✓ {report.partial_count}~ {report.uncovered_count}✗)[/bold]",
-            f"[bold]{report.overall_coverage_percent:.0f}%[/bold]",
-            "",
-        )
-
-        self.console.print(table)
+        """Store coverage for section rendering - displayed in live panel."""
+        # Store coverage data in live display - it will be shown as a section
+        self._display.set_coverage(report)
+        self._display.add_activity(f"Coverage: {report.overall_coverage_percent:.0f}%")
+        self._update_elapsed()
 
         if show_suggestions and report.suggestions:
             self.console.print("\n[cyan]Suggestions:[/cyan]")

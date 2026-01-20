@@ -50,6 +50,11 @@ class DisplayState:
     rule_ids: list[str] = field(default_factory=list)
     output_file: str = ""
 
+    # Full data for section rendering
+    logic_map: "LogicMap | None" = None
+    coverage_percent: float | None = None
+    coverage_sub_categories: int = 0
+
 
 class _NoOpContextManager:
     """No-op context manager for HITL spinner."""
@@ -127,25 +132,48 @@ class LiveProgressDisplay:
 
         content_lines.append(Text(""))
 
-        # Summary line (rule IDs or type distribution)
-        if s.rule_ids and not s.is_complete:
-            ids = ", ".join(s.rule_ids[-5:])
-            if len(s.rule_ids) > 5:
-                ids += f" (+{len(s.rule_ids) - 5} more)"
-            content_lines.append(Text(f"  Rules: {ids}", style="white"))
-        elif (s.positive_count > 0 or s.negative_count > 0 or s.edge_count > 0) and not s.is_complete:
+        # Rules section (if logic_map available)
+        if s.logic_map and s.rules_count > 0 and not s.is_complete:
+            content_lines.append(
+                Text(f"  ─────────────────── Rules ({s.rules_count}) ───────────────────", style="dim")
+            )
+            # Group by category
+            categories: dict[str, list[str]] = {}
+            for rule in s.logic_map.rules:
+                cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
+                categories.setdefault(cat, []).append(rule.rule_id)
+            for cat, ids in sorted(categories.items()):
+                ids_str = ", ".join(ids[:5])
+                if len(ids) > 5:
+                    ids_str += f" (+{len(ids) - 5})"
+                line = Text(f"  {cat} ({len(ids)}): ", style="bold")
+                line.append(ids_str, style="cyan")
+                content_lines.append(line)
+            content_lines.append(Text(""))
+
+        # Scenarios section (if available)
+        if s.scenarios_count > 0 and not s.is_complete:
+            content_lines.append(Text("  ─────────────────── Scenarios ───────────────────", style="dim"))
             dist = Text("  ")
-            dist.append("[+]", style="green")
-            dist.append(f" {s.positive_count} positive  ", style="white")
-            dist.append("[-]", style="red")
-            dist.append(f" {s.negative_count} negative  ", style="white")
-            dist.append("[!]", style="yellow")
-            dist.append(f" {s.edge_count} edge", style="white")
+            dist.append(f"[+] {s.positive_count} positive  ", style="green")
+            dist.append(f"[-] {s.negative_count} negative  ", style="red")
+            dist.append(f"[!] {s.edge_count} edge  ", style="yellow")
+            dist.append(f"[o] {s.irrelevant_count} irrelevant", style="dim")
             content_lines.append(dist)
+            content_lines.append(Text(""))
+
+        # Coverage section (if available)
+        if s.coverage_percent is not None and not s.is_complete:
+            content_lines.append(Text("  ─────────────────── Coverage ────────────────────", style="dim"))
+            cov_style = "green" if s.coverage_percent >= 70 else "yellow"
+            cov_line = Text(f"  {s.coverage_percent:.0f}% overall", style=cov_style)
+            if s.coverage_sub_categories > 0:
+                cov_line.append(f" ({s.coverage_sub_categories} sub-categories)", style="dim")
+            content_lines.append(cov_line)
+            content_lines.append(Text(""))
 
         # Latest activity
         if s.latest_activity and not s.is_complete:
-            content_lines.append(Text(""))
             activity = Text("  ")
             activity.append("Latest: ", style="cyan")
             activity_text = s.latest_activity[:60]
@@ -153,6 +181,7 @@ class LiveProgressDisplay:
                 activity_text += "..."
             activity.append(activity_text, style="white")
             content_lines.append(activity)
+            content_lines.append(Text(""))
 
         # Completion summary
         if s.is_complete:
@@ -194,12 +223,14 @@ class LiveProgressDisplay:
         )
 
     def start(self, model: str = "") -> None:
-        """Start the live display."""
+        """Start the live display with auto-animating spinner."""
         self._state = DisplayState(model=model)
         self._start_time = time.time()
         self._frame_idx = 0
+        # Pass callable (not result) so Live calls _render() on each refresh
+        # This makes the spinner animate automatically
         self._live = Live(
-            self._render(),
+            self._render,  # callable, not self._render()
             console=self.console,
             refresh_per_second=10,  # Higher rate for smooth spinner
             transient=True,  # Replace in place, don't stack
@@ -277,6 +308,28 @@ class LiveProgressDisplay:
         self._state.output_file = output_file
         self._refresh()
 
+    def set_logic_map(self, logic_map: "LogicMap") -> None:
+        """Store logic map for section rendering."""
+        self._state.logic_map = logic_map
+        self._state.rules_count = len(logic_map.rules)
+        self._state.rule_ids = [r.rule_id for r in logic_map.rules]
+        self._refresh()
+
+    def set_scenarios(self, scenarios: list, distribution: dict) -> None:
+        """Store scenarios for section rendering."""
+        self._state.scenarios_count = len(scenarios)
+        self._state.positive_count = distribution.get("positive", 0)
+        self._state.negative_count = distribution.get("negative", 0)
+        self._state.edge_count = distribution.get("edge_case", 0)
+        self._state.irrelevant_count = distribution.get("irrelevant", 0)
+        self._refresh()
+
+    def set_coverage(self, report: "CoverageReport") -> None:
+        """Store coverage for section rendering."""
+        self._state.coverage_percent = report.overall_coverage_percent
+        self._state.coverage_sub_categories = len(report.sub_category_coverage)
+        self._refresh()
+
     def _refresh(self) -> None:
         """Refresh the live display."""
         if self._live and not self._hitl_mode:
@@ -298,7 +351,7 @@ class LiveProgressDisplay:
         self._hitl_mode = False
         self._frame_idx = 0
         self._live = Live(
-            self._render(),
+            self._render,  # callable for auto-animation
             console=self.console,
             refresh_per_second=10,
             transient=True,
