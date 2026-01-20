@@ -1,11 +1,12 @@
 """Live-updating display using Rich's Live component.
 
 Provides a polished, single-panel UI that updates in-place with spinners,
-colors, styled progress bars, and emoji indicators.
+colors, styled progress bars, and indicators.
 """
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -67,9 +68,8 @@ class LiveProgressDisplay:
         self.console = Console()
         self._live: Live | None = None
         self._state = DisplayState()
-        self._spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        self._frame_idx = 0
         self._hitl_mode = False
+        self._start_time: float | None = None
 
     @property
     def state(self) -> DisplayState:
@@ -80,58 +80,57 @@ class LiveProgressDisplay:
         """Render the current state as a styled Panel."""
         s = self._state
 
+        # Update elapsed time
+        if self._start_time and not s.is_complete:
+            s.elapsed_seconds = time.time() - self._start_time
+
         # Build content lines
         content_lines: list[Text] = []
 
         # Header row: branding + model
         header = Text()
-        header.append("  ⚡ SYNKRO", style="bold cyan")
+        header.append("  SYNKRO", style="bold cyan")
         if s.model:
-            # Right-align the model name
             padding = 50 - len(s.model)
             header.append(" " * max(padding, 2), style="")
             header.append(s.model, style="dim")
         content_lines.append(header)
         content_lines.append(Text(""))
 
-        # Phase row with spinner (if not complete)
-        phase_row = Text()
+        # Phase row with status indicator
         if s.is_complete:
-            phase_row.append("  ✅ Complete", style="bold green")
-            # Add 100% indicator
+            phase_row = Text()
+            phase_row.append("  [OK] Complete", style="bold green")
             phase_row.append("  " + " " * 30 + "100%", style="dim")
+            content_lines.append(phase_row)
         else:
-            spinner = self._spinner_frames[self._frame_idx % len(self._spinner_frames)]
-            phase_row.append(f"  {spinner} ", style="cyan")
+            phase_row = Text()
+            phase_row.append("  [..] ", style="cyan")
             phase_row.append(s.phase, style="bold cyan")
 
             # Progress bar
             if s.progress_total > 0:
                 pct = (s.progress_current / s.progress_total) * 100
                 filled = int(pct / 5)  # 20 char bar
-                bar = "█" * filled + "░" * (20 - filled)
-                phase_row.append(
-                    f"  {bar}  {s.progress_current}/{s.progress_total} {pct:.0f}%", style="cyan"
-                )
+                bar = "[" + "=" * filled + "-" * (20 - filled) + "]"
+                phase_row.append(f"  {bar}  {s.progress_current}/{s.progress_total} {pct:.0f}%", style="cyan")
+            content_lines.append(phase_row)
 
-        content_lines.append(phase_row)
         content_lines.append(Text(""))
 
         # Summary line (rule IDs or type distribution)
         if s.rule_ids and not s.is_complete:
-            ids = ", ".join(s.rule_ids[-5:])  # Last 5
+            ids = ", ".join(s.rule_ids[-5:])
             if len(s.rule_ids) > 5:
                 ids += f" (+{len(s.rule_ids) - 5} more)"
-            content_lines.append(Text(f"  📜 Found: {ids}", style="white"))
-        elif (
-            s.positive_count > 0 or s.negative_count > 0 or s.edge_count > 0
-        ) and not s.is_complete:
+            content_lines.append(Text(f"  Rules: {ids}", style="white"))
+        elif (s.positive_count > 0 or s.negative_count > 0 or s.edge_count > 0) and not s.is_complete:
             dist = Text("  ")
-            dist.append("✓", style="green")
+            dist.append("[+]", style="green")
             dist.append(f" {s.positive_count} positive  ", style="white")
-            dist.append("✗", style="red")
+            dist.append("[-]", style="red")
             dist.append(f" {s.negative_count} negative  ", style="white")
-            dist.append("⚡", style="yellow")
+            dist.append("[!]", style="yellow")
             dist.append(f" {s.edge_count} edge", style="white")
             content_lines.append(dist)
 
@@ -140,7 +139,6 @@ class LiveProgressDisplay:
             content_lines.append(Text(""))
             activity = Text("  ")
             activity.append("Latest: ", style="cyan")
-            # Truncate if too long
             activity_text = s.latest_activity[:60]
             if len(s.latest_activity) > 60:
                 activity_text += "..."
@@ -150,35 +148,17 @@ class LiveProgressDisplay:
         # Completion summary
         if s.is_complete:
             content_lines.append(Text(""))
-
-            # Time summary
             elapsed_str = f"{int(s.elapsed_seconds)}s"
             if s.elapsed_seconds >= 60:
                 elapsed_str = f"{int(s.elapsed_seconds) // 60}m {int(s.elapsed_seconds) % 60}s"
-            content_lines.append(
-                Text(f"  Generated {s.traces_count} traces in {elapsed_str}", style="white")
-            )
-
-            # Rules
-            content_lines.append(Text(f"  ├─ 📜 {s.rules_count} rules extracted", style="dim"))
-
-            # Scenarios with distribution
-            dist_str = (
-                f"({s.positive_count}+ {s.negative_count}- {s.edge_count}⚡ {s.irrelevant_count}○)"
-            )
-            content_lines.append(
-                Text(f"  ├─ 📋 {s.scenarios_count} scenarios {dist_str}", style="dim")
-            )
-
-            # Traces
-            content_lines.append(Text(f"  ├─ ✍️  {s.traces_count} traces synthesized", style="dim"))
-
-            # Pass rate
+            content_lines.append(Text(f"  Generated {s.traces_count} traces in {elapsed_str}", style="white"))
+            content_lines.append(Text(f"  |-- {s.rules_count} rules extracted", style="dim"))
+            dist_str = f"({s.positive_count}+ {s.negative_count}- {s.edge_count}! {s.irrelevant_count}o)"
+            content_lines.append(Text(f"  |-- {s.scenarios_count} scenarios {dist_str}", style="dim"))
+            content_lines.append(Text(f"  |-- {s.traces_count} traces synthesized", style="dim"))
             if s.pass_rate is not None:
-                rate_style = (
-                    "green" if s.pass_rate >= 80 else "yellow" if s.pass_rate >= 50 else "red"
-                )
-                line = Text("  └─ ⚖️  ")
+                rate_style = "green" if s.pass_rate >= 80 else "yellow" if s.pass_rate >= 50 else "red"
+                line = Text("  `-- ")
                 line.append(f"{s.pass_rate:.0f}%", style=rate_style)
                 line.append(" passed verification", style="dim")
                 content_lines.append(line)
@@ -187,14 +167,14 @@ class LiveProgressDisplay:
 
         # Footer: metrics
         footer = Text("  ")
-        footer.append(f"⏱ {s.elapsed_seconds:.0f}s", style="dim")
-        footer.append("  •  ", style="dim")
-        footer.append(f"💰 ${s.cost:.4f}", style="dim")
+        footer.append(f"Time: {s.elapsed_seconds:.0f}s", style="dim")
+        footer.append("  |  ", style="dim")
+        footer.append(f"Cost: ${s.cost:.4f}", style="dim")
         if s.output_file:
-            footer.append("  •  📁 ", style="dim")
+            footer.append("  |  ", style="dim")
             footer.append(s.output_file, style="cyan")
         elif not s.is_complete:
-            footer.append("  •  ", style="dim")
+            footer.append("  |  ", style="dim")
             footer.append("Ctrl+C to cancel", style="dim")
         content_lines.append(footer)
 
@@ -207,11 +187,13 @@ class LiveProgressDisplay:
     def start(self, model: str = "") -> None:
         """Start the live display."""
         self._state = DisplayState(model=model)
+        self._start_time = time.time()
         self._live = Live(
             self._render(),
             console=self.console,
-            refresh_per_second=8,
+            refresh_per_second=4,
             transient=False,
+            vertical_overflow="visible",
         )
         self._live.start()
 
@@ -225,14 +207,14 @@ class LiveProgressDisplay:
         """Update the current phase."""
         self._state.phase = phase
         self._state.phase_message = message
-        self._frame_idx += 1
+        self._state.progress_current = 0
+        self._state.progress_total = 0
         self._refresh()
 
     def update_progress(self, current: int, total: int) -> None:
         """Update progress within the current phase."""
         self._state.progress_current = current
         self._state.progress_total = total
-        self._frame_idx += 1
         self._refresh()
 
     def add_activity(self, text: str) -> None:
@@ -306,8 +288,9 @@ class LiveProgressDisplay:
         self._live = Live(
             self._render(),
             console=self.console,
-            refresh_per_second=8,
+            refresh_per_second=4,
             transient=False,
+            vertical_overflow="visible",
         )
         self._live.start()
 
@@ -323,104 +306,132 @@ class LiveProgressDisplay:
         scenarios: list["GoldenScenario"],
         coverage: "CoverageReport | None",
         current_turns: int,
+        complexity_level: str = "medium",
     ) -> None:
-        """Render HITL state (rules, scenarios, coverage) in compact format."""
-        content_lines: list[Text] = []
+        """Render HITL state as ONE consolidated panel with all sections."""
+        from rich.rule import Rule
 
-        # Header
+        content_lines = []
+
+        # =====================================================================
+        # HEADER
+        # =====================================================================
         header = Text()
-        header.append("  ⚡ SYNKRO HITL", style="bold cyan")
+        header.append("  SYNKRO HITL", style="bold cyan")
+        header.append(" " * 30, style="")
+        header.append(self._state.model or "", style="dim")
         content_lines.append(header)
         content_lines.append(Text(""))
 
-        # Two-column layout: Rules | Scenarios
+        # =====================================================================
+        # RULES SECTION
+        # =====================================================================
+        content_lines.append(Text("  --- Rules ---", style="bold white"))
+
+        # Group rules by category
         rules_by_category: dict[str, list] = {}
         for rule in logic_map.rules:
             cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
             rules_by_category.setdefault(cat, []).append(rule)
 
-        # Rules summary (left side concept)
-        rules_line = Text(f"  📜 Rules ({len(logic_map.rules)})", style="bold white")
-        content_lines.append(rules_line)
-
-        # Show up to 4 categories
+        # Show categories with counts
         categories = sorted(rules_by_category.items(), key=lambda x: -len(x[1]))
         for cat_name, rules in categories[:4]:
-            content_lines.append(Text(f"  ├─ {cat_name} ({len(rules)})", style="dim"))
+            content_lines.append(Text(f"    {cat_name}: {len(rules)} rules", style="dim"))
         if len(categories) > 4:
-            content_lines.append(Text(f"  └─ +{len(categories) - 4} more categories", style="dim"))
-
+            content_lines.append(Text(f"    ... +{len(categories) - 4} more categories", style="dim"))
+        content_lines.append(Text(f"    Total: {len(logic_map.rules)} rules", style="cyan"))
         content_lines.append(Text(""))
 
-        # Scenarios summary
+        # =====================================================================
+        # SCENARIOS SECTION
+        # =====================================================================
         if scenarios:
+            content_lines.append(Text("  --- Scenarios ---", style="bold white"))
+
+            # Calculate distribution
             dist: dict[str, int] = {}
             for s in scenarios:
-                t = (
-                    s.scenario_type.value
-                    if hasattr(s.scenario_type, "value")
-                    else str(s.scenario_type)
-                )
+                t = s.scenario_type.value if hasattr(s.scenario_type, "value") else str(s.scenario_type)
                 dist[t] = dist.get(t, 0) + 1
 
-            scenarios_line = Text(f"  📋 Scenarios ({len(scenarios)})", style="bold white")
-            content_lines.append(scenarios_line)
-
-            # Distribution
-            dist_line = Text("  ")
+            dist_line = Text("    ")
             if dist.get("positive", 0):
-                dist_line.append("✓", style="green")
-                dist_line.append(f" {dist.get('positive', 0)} positive  ", style="dim")
+                dist_line.append(f"{dist.get('positive', 0)} positive", style="green")
+                dist_line.append("  ", style="")
             if dist.get("negative", 0):
-                dist_line.append("✗", style="red")
-                dist_line.append(f" {dist.get('negative', 0)} negative  ", style="dim")
+                dist_line.append(f"{dist.get('negative', 0)} negative", style="red")
+                dist_line.append("  ", style="")
             if dist.get("edge_case", 0):
-                dist_line.append("⚡", style="yellow")
-                dist_line.append(f" {dist.get('edge_case', 0)} edge_case  ", style="dim")
+                dist_line.append(f"{dist.get('edge_case', 0)} edge_case", style="yellow")
+                dist_line.append("  ", style="")
             if dist.get("irrelevant", 0):
-                dist_line.append("○", style="dim")
-                dist_line.append(f" {dist.get('irrelevant', 0)} irrelevant", style="dim")
+                dist_line.append(f"{dist.get('irrelevant', 0)} irrelevant", style="dim")
             content_lines.append(dist_line)
+            content_lines.append(Text(f"    Total: {len(scenarios)} scenarios", style="cyan"))
+            content_lines.append(Text(""))
 
-        content_lines.append(Text(""))
-
-        # Coverage and Turns row
-        coverage_line = Text("  ")
+        # =====================================================================
+        # COVERAGE SECTION
+        # =====================================================================
         if coverage:
+            content_lines.append(Text("  --- Coverage ---", style="bold white"))
             cov_style = (
-                "green"
-                if coverage.overall_coverage_percent >= 80
-                else "yellow"
-                if coverage.overall_coverage_percent >= 50
+                "green" if coverage.overall_coverage_percent >= 80
+                else "yellow" if coverage.overall_coverage_percent >= 50
                 else "red"
             )
-            coverage_line.append("📊 Coverage: ", style="dim")
-            coverage_line.append(f"{coverage.overall_coverage_percent:.0f}%", style=cov_style)
-            coverage_line.append(f"  ({len(coverage.gaps)} gaps)  ", style="dim")
+            cov_line = Text("    Overall: ")
+            cov_line.append(f"{coverage.overall_coverage_percent:.0f}%", style=cov_style)
+            cov_line.append(f"  ({coverage.covered_count} covered, {coverage.partial_count} partial, {coverage.uncovered_count} uncovered)", style="dim")
+            content_lines.append(cov_line)
+            if coverage.gaps:
+                content_lines.append(Text(f"    Gaps: {len(coverage.gaps)}", style="dim"))
+            content_lines.append(Text(""))
 
-        coverage_line.append("⚙️  Turns: ", style="dim")
-        coverage_line.append(f"{current_turns}", style="cyan")
-        content_lines.append(coverage_line)
-
+        # =====================================================================
+        # SETTINGS SECTION
+        # =====================================================================
+        content_lines.append(Text("  --- Settings ---", style="bold white"))
+        settings_line = Text("    ")
+        settings_line.append("Complexity: ", style="dim")
+        settings_line.append(complexity_level.title(), style="cyan")
+        settings_line.append("    Turns: ", style="dim")
+        settings_line.append(str(current_turns), style="cyan")
+        content_lines.append(settings_line)
         content_lines.append(Text(""))
 
-        # Command hints
-        hints = Text("  ")
-        hints.append("done", style="cyan")
-        hints.append(" · ", style="dim")
-        hints.append("undo", style="cyan")
-        hints.append(" · ", style="dim")
-        hints.append("reset", style="cyan")
-        hints.append(" · ", style="dim")
-        hints.append("show rules", style="cyan")
-        hints.append(" · ", style="dim")
-        hints.append("show scenarios", style="cyan")
-        hints.append(" · ", style="dim")
-        hints.append("show gaps", style="cyan")
-        content_lines.append(hints)
+        # =====================================================================
+        # COMMANDS SECTION
+        # =====================================================================
+        content_lines.append(Text("  --- Commands ---", style="bold white"))
+        cmd_line = Text("    ")
+        cmd_line.append("done", style="cyan")
+        cmd_line.append(" | ", style="dim")
+        cmd_line.append("undo", style="cyan")
+        cmd_line.append(" | ", style="dim")
+        cmd_line.append("reset", style="cyan")
+        cmd_line.append(" | ", style="dim")
+        cmd_line.append("show R001", style="cyan")
+        cmd_line.append(" | ", style="dim")
+        cmd_line.append("show S3", style="cyan")
+        cmd_line.append(" | ", style="dim")
+        cmd_line.append("help", style="cyan")
+        content_lines.append(cmd_line)
+        content_lines.append(Text(""))
 
+        # =====================================================================
+        # FEEDBACK SECTION
+        # =====================================================================
+        content_lines.append(Text("  --- Feedback Examples ---", style="bold white"))
+        content_lines.append(Text('    "shorter" "5 turns" "remove R005" "add rule for..."', style="yellow"))
+        content_lines.append(Text('    "add scenario for..." "delete S3" "improve coverage"', style="yellow"))
+        content_lines.append(Text(""))
+
+        # Build and print the panel
         panel = Panel(
             Group(*content_lines),
+            title="[bold cyan]Interactive Session[/bold cyan]",
             border_style="cyan",
             padding=(0, 1),
         )
@@ -430,7 +441,7 @@ class LiveProgressDisplay:
     def render_paginated_list(
         self,
         title: str,
-        items: list[tuple[str, str]],  # List of (id, description) tuples
+        items: list[tuple[str, str]],
         page: int = 1,
         per_page: int = 20,
     ) -> None:
@@ -455,14 +466,13 @@ class LiveProgressDisplay:
 
         content_lines.append(Text(""))
 
-        # Pagination footer
         footer = Text("  ")
         footer.append(f"Page {page}/{total_pages} ({per_page} per page)", style="dim")
-        footer.append(" · ", style="dim")
+        footer.append(" | ", style="dim")
         footer.append("n", style="cyan")
-        footer.append(" next · ", style="dim")
+        footer.append(" next | ", style="dim")
         footer.append("p", style="cyan")
-        footer.append(" prev · ", style="dim")
+        footer.append(" prev | ", style="dim")
         footer.append("q", style="cyan")
         footer.append(" back", style="dim")
         content_lines.append(footer)
@@ -490,43 +500,30 @@ class LiveProgressDisplay:
 
         content_lines: list[Text] = []
         content_lines.append(Text(""))
-
-        # Rule details
-        content_lines.append(Text(f"  [bold]ID:[/bold]         {rule.rule_id}"))
+        content_lines.append(Text(f"  ID:         {rule.rule_id}", style="white"))
 
         cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
-        content_lines.append(Text(f"  [bold]Category:[/bold]   {cat}"))
+        content_lines.append(Text(f"  Category:   {cat}", style="white"))
 
-        # Wrap text if long
         text_lines = [rule.text[i : i + 60] for i in range(0, len(rule.text), 60)]
-        content_lines.append(Text(f"  [bold]Text:[/bold]       {text_lines[0]}"))
+        content_lines.append(Text(f"  Text:       {text_lines[0]}", style="white"))
         for line in text_lines[1:]:
-            content_lines.append(Text(f"               {line}"))
+            content_lines.append(Text(f"              {line}", style="white"))
 
         if rule.condition:
-            content_lines.append(Text(f"  [bold]Condition:[/bold]  {rule.condition}"))
+            content_lines.append(Text(f"  Condition:  {rule.condition}", style="dim"))
         if rule.action:
-            content_lines.append(Text(f"  [bold]Action:[/bold]     {rule.action}"))
+            content_lines.append(Text(f"  Action:     {rule.action}", style="dim"))
         if rule.dependencies:
-            content_lines.append(Text(f"  [bold]Depends on:[/bold] {', '.join(rule.dependencies)}"))
+            content_lines.append(Text(f"  Depends on: {', '.join(rule.dependencies)}", style="dim"))
 
         if tested_by:
             content_lines.append(Text(""))
-            content_lines.append(Text(f"  [bold]Tested by:[/bold]  {', '.join(tested_by[:6])}"))
+            content_lines.append(Text(f"  Tested by:  {', '.join(tested_by[:6])}", style="dim"))
             if len(tested_by) > 6:
-                content_lines.append(Text(f"               +{len(tested_by) - 6} more"))
+                content_lines.append(Text(f"              +{len(tested_by) - 6} more", style="dim"))
 
         content_lines.append(Text(""))
-
-        # Footer
-        footer = Text("  ")
-        footer.append("q", style="cyan")
-        footer.append(" back · ", style="dim")
-        footer.append("edit", style="cyan")
-        footer.append(" modify · ", style="dim")
-        footer.append("delete", style="cyan")
-        footer.append(" remove", style="dim")
-        content_lines.append(footer)
 
         panel = Panel(
             Group(*content_lines),
@@ -543,13 +540,10 @@ class LiveProgressDisplay:
         scenarios: list["GoldenScenario"],
     ) -> None:
         """Render single scenario detail view."""
-        # Parse S1, S2, etc. to index
         try:
             idx = int(scenario_id.upper().replace("S", "")) - 1
             if idx < 0 or idx >= len(scenarios):
-                self.console.print(
-                    f"[red]Scenario {scenario_id} not found (valid: S1-S{len(scenarios)})[/red]"
-                )
+                self.console.print(f"[red]Scenario {scenario_id} not found (valid: S1-S{len(scenarios)})[/red]")
                 return
         except ValueError:
             self.console.print(f"[red]Invalid scenario ID: {scenario_id}[/red]")
@@ -558,54 +552,30 @@ class LiveProgressDisplay:
         scenario = scenarios[idx]
         content_lines: list[Text] = []
         content_lines.append(Text(""))
+        content_lines.append(Text(f"  ID:          S{idx + 1}", style="white"))
 
-        # Scenario details
-        content_lines.append(Text(f"  [bold]ID:[/bold]           S{idx + 1}"))
-
-        stype = (
-            scenario.scenario_type.value
-            if hasattr(scenario.scenario_type, "value")
-            else str(scenario.scenario_type)
-        )
+        stype = scenario.scenario_type.value if hasattr(scenario.scenario_type, "value") else str(scenario.scenario_type)
         type_display = stype.replace("_", " ").title()
-        content_lines.append(Text(f"  [bold]Type:[/bold]         {type_display}"))
+        content_lines.append(Text(f"  Type:        {type_display}", style="white"))
 
-        # Wrap description if long
-        desc_lines = [
-            scenario.description[i : i + 55] for i in range(0, len(scenario.description), 55)
-        ]
-        content_lines.append(Text(f"  [bold]Description:[/bold]  {desc_lines[0]}"))
+        desc_lines = [scenario.description[i : i + 55] for i in range(0, len(scenario.description), 55)]
+        content_lines.append(Text(f"  Description: {desc_lines[0]}", style="white"))
         for line in desc_lines[1:]:
-            content_lines.append(Text(f"                  {line}"))
+            content_lines.append(Text(f"               {line}", style="white"))
 
         if scenario.context:
-            content_lines.append(Text(f"  [bold]Context:[/bold]      {scenario.context[:55]}"))
+            content_lines.append(Text(f"  Context:     {scenario.context[:55]}", style="dim"))
 
         if scenario.target_rule_ids:
-            content_lines.append(
-                Text(f"  [bold]Target Rules:[/bold] {', '.join(scenario.target_rule_ids)}")
-            )
+            content_lines.append(Text(f"  Target Rules: {', '.join(scenario.target_rule_ids)}", style="dim"))
 
         if scenario.expected_outcome:
-            exp_lines = [
-                scenario.expected_outcome[i : i + 55]
-                for i in range(0, len(scenario.expected_outcome), 55)
-            ]
-            content_lines.append(Text(f"  [bold]Expected:[/bold]     {exp_lines[0]}"))
+            exp_lines = [scenario.expected_outcome[i : i + 55] for i in range(0, len(scenario.expected_outcome), 55)]
+            content_lines.append(Text(f"  Expected:    {exp_lines[0]}", style="dim"))
             for line in exp_lines[1:]:
-                content_lines.append(Text(f"                  {line}"))
+                content_lines.append(Text(f"               {line}", style="dim"))
 
         content_lines.append(Text(""))
-
-        # Footer
-        footer = Text("  ")
-        footer.append("q", style="cyan")
-        footer.append(" back · ", style="dim")
-        footer.append("edit", style="cyan")
-        footer.append(" modify · ", style="dim")
-        footer.append("delete", style="cyan")
-        footer.append(" remove", style="dim")
-        content_lines.append(footer)
 
         panel = Panel(
             Group(*content_lines),
@@ -630,26 +600,23 @@ class LiveProgressDisplay:
 
         if parts[0] == "show":
             if len(parts) == 1:
-                return False  # Need subcommand
+                return False
 
             target = parts[1]
 
             if target == "rules":
-                # Show all rule categories
                 items = [(r.rule_id, r.text) for r in logic_map.rules]
                 page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
                 self.render_paginated_list("Rules", items, page)
                 return True
 
             elif target == "scenarios" and scenarios:
-                # Show all scenarios
                 items = [(f"S{i + 1}", s.description) for i, s in enumerate(scenarios)]
                 page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
                 self.render_paginated_list("Scenarios", items, page)
                 return True
 
             elif target == "gaps" and coverage:
-                # Show coverage gaps
                 items = [(f"G{i + 1}", gap) for i, gap in enumerate(coverage.gaps)]
                 if not items:
                     self.console.print("[green]No coverage gaps![/green]")
@@ -658,19 +625,18 @@ class LiveProgressDisplay:
                 return True
 
             elif target == "coverage" and coverage:
-                # Show full coverage report
                 from rich.table import Table
 
-                table = Table(show_header=True, header_style="bold cyan", title="📊 Coverage")
+                table = Table(show_header=True, header_style="bold cyan", title="Coverage")
                 table.add_column("Sub-Category")
                 table.add_column("Coverage", justify="right")
                 table.add_column("Status")
 
                 for cov in coverage.sub_category_coverage:
                     status_icon = {
-                        "covered": "[green]✓[/green]",
+                        "covered": "[green]+[/green]",
                         "partial": "[yellow]~[/yellow]",
-                        "uncovered": "[red]✗[/red]",
+                        "uncovered": "[red]-[/red]",
                     }.get(cov.coverage_status, "?")
 
                     table.add_row(
@@ -681,7 +647,7 @@ class LiveProgressDisplay:
 
                 table.add_row("", "", "", end_section=True)
                 table.add_row(
-                    f"[bold]Total ({coverage.covered_count}✓ {coverage.partial_count}~ {coverage.uncovered_count}✗)[/bold]",
+                    f"[bold]Total ({coverage.covered_count}+ {coverage.partial_count}~ {coverage.uncovered_count}-)[/bold]",
                     f"[bold]{coverage.overall_coverage_percent:.0f}%[/bold]",
                     "",
                 )
@@ -689,12 +655,10 @@ class LiveProgressDisplay:
                 return True
 
             elif target.upper().startswith("R"):
-                # Show specific rule
                 self.render_rule_detail(target.upper(), logic_map)
                 return True
 
             elif target.upper().startswith("S") and scenarios:
-                # Show specific scenario
                 self.render_scenario_detail(target.upper(), scenarios)
                 return True
 
@@ -702,10 +666,8 @@ class LiveProgressDisplay:
             if len(parts) < 2:
                 return False
 
-            # Search query
             query = " ".join(parts[1:]).strip("\"'")
 
-            # Search rules
             matching_rules = [
                 (r.rule_id, r.text)
                 for r in logic_map.rules
@@ -717,7 +679,6 @@ class LiveProgressDisplay:
             else:
                 self.console.print(f"[dim]No rules matching '{query}'[/dim]")
 
-            # Search scenarios if available
             if scenarios:
                 matching_scenarios = [
                     (f"S{i + 1}", s.description)
