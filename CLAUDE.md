@@ -1,116 +1,192 @@
 # CLAUDE.md - Synkro Development Guide
 
+## Quick Reference
+
+```bash
+# BEFORE pushing to PyPI or GitHub - ALWAYS run:
+pre-commit run --all-files
+
+# Full publish flow:
+1. Bump version in pyproject.toml
+2. pre-commit run --all-files
+3. python -m build
+4. python -m twine upload dist/synkro-X.Y.Z*
+5. git add -A && git commit -m "..." && git push origin main
+```
+
 ## Project Overview
 
-Synkro is a Python framework for turning unstructured policies into training data for LLMs. It extracts rules from policy documents, generates scenarios, and synthesizes conversation traces.
+Synkro turns unstructured policy documents into LLM training data through a 4-stage pipeline:
+1. **Extract** - Parse rules from policy text into structured LogicMap
+2. **Generate** - Create golden scenarios (positive, negative, edge cases)
+3. **Synthesize** - Generate multi-turn conversation traces
+4. **Verify** - Grade traces for quality and policy compliance
 
-## Tech Stack
-
-- **Python**: 3.10+ required
-- **Build**: Hatchling
-- **Linting**: Ruff
-- **Testing**: pytest, pytest-asyncio
-- **UI**: Rich (console UI with Live displays)
-- **LLM**: LiteLLM for multi-provider support
-
-## Key Directories
+## Architecture
 
 ```
 synkro/
-├── core/           # Dataset, checkpoint management
-├── interactive/    # Live display, HITL session, rich UI
-├── pipeline/       # Main runner, generation pipeline
-├── types/          # Pydantic models (logic_map, coverage, etc.)
-└── cli.py          # CLI entry point
+├── pipeline/runner.py      # Main orchestrator - START HERE to understand flow
+├── interactive/
+│   ├── live_display.py     # Terminal UI (Rich Live) - most UI bugs are here
+│   ├── hitl_session.py     # HITL state management
+│   └── rich_ui.py          # Static Rich components
+├── reporting.py            # Connects pipeline → UI (callbacks)
+├── types/
+│   ├── logic_map.py        # Rule, LogicMap, GoldenScenario models
+│   └── coverage.py         # CoverageReport model
+└── core/
+    ├── dataset.py          # Dataset model and serialization
+    └── checkpoint.py       # Resume interrupted generations
 ```
 
-## Before Publishing
+## Critical: Live Display System
 
-**ALWAYS run pre-commit before publishing to PyPI or pushing to GitHub:**
+The UI uses Rich's `Live` component. **Most UI bugs stem from misunderstanding this.**
 
-```bash
-# Run pre-commit checks (ruff lint + format)
-pre-commit run --all-files
+### How It Works
 
-# If it fails, it will auto-fix issues. Run again to verify:
-pre-commit run --all-files
+```python
+# In LiveProgressDisplay.start():
+self._live = Live(
+    self._render,      # Pass CALLABLE, not result
+    refresh_per_second=10,
+    transient=True,    # Replace in place, don't stack
+)
 ```
 
-## Publishing Workflow
+### The Three Rules
 
-1. **Bump version** in `pyproject.toml`
-2. **Run pre-commit**: `pre-commit run --all-files`
-3. **Build**: `python -m build`
-4. **Upload to PyPI**: `python -m twine upload dist/synkro-X.Y.Z*`
-5. **Commit and push**: `git add -A && git commit -m "..." && git push origin main`
+1. **Never `console.print()` while Live is running** → causes panel stacking
+2. **Pass callable to Live, not result** → `self._render` not `self._render()`
+3. **Use `refresh()` not `update()`** → `update()` replaces the callable
+
+### Common Bugs and Fixes
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Panels stacking vertically | `console.print()` during Live | Update state instead, or return no-op from spinner() |
+| Spinner frozen / not animating | Passed `self._render()` to Live | Pass `self._render` (no parens) |
+| Time not updating | `_refresh()` using `update()` | Change to `self._live.refresh()` |
+| HITL panels stacking | Each render adds new panel | Clear screen before render: `console.clear()` |
+
+### Key Methods
+
+```python
+# Start/stop the live display
+display.start(model="gemini-2.5-flash")
+display.stop()
+
+# Update state (triggers refresh)
+display.update_phase("Generating Traces")
+display.update_progress(5, 10)
+display.add_event("RULES: Extracted 14 rules")
+
+# For HITL - unified clear + render + input
+feedback = display.hitl_get_input(logic_map, scenarios, coverage, turns)
+```
+
+## Reporting System
+
+`RichReporter` bridges the pipeline and UI via callbacks:
+
+```python
+# In pipeline/runner.py:
+self.reporter.on_logic_map_complete(logic_map)  # Updates UI
+self.reporter.on_response_progress(5, 10)        # Updates progress
+
+# The reporter updates LiveProgressDisplay state internally
+```
+
+**Important**: `reporter.spinner()` returns no-op when Live is active to prevent stacking.
 
 ## Testing
 
 ```bash
-# Run all tests
+# Run all tests (some need API keys)
 pytest tests/ -v
 
-# Run specific test file
-pytest tests/test_imports.py -v
+# Run without API-dependent tests
+pytest tests/test_imports.py tests/test_types.py -v
 
-# Note: tests/test_streaming_api.py requires API keys (integration tests)
+# Quick smoke test
+python -c "from synkro import Generator; print('OK')"
 ```
 
-## Live Display Architecture
+## Do's and Don'ts
 
-The `LiveProgressDisplay` class in `synkro/interactive/live_display.py` handles the terminal UI:
+### Do
+- Run `pre-commit run --all-files` before every publish
+- Update `DisplayState` fields, not print directly
+- Use `hitl_get_input()` for HITL interaction (clears screen)
+- Add events via `display.add_event()` for the activity log
+- Check `if self._live is not None` before assuming Live is running
 
-- Uses Rich's `Live` component with `transient=True` for in-place updates
-- Pass **callable** to `Live()` (not the result) for auto-refresh animation
-- Use `refresh()` not `update()` to trigger re-render without replacing the callable
-- When Live is active, `spinner()` should return no-op to prevent stacking
+### Don't
+- Don't `console.print()` while Live display is active
+- Don't use `self._live.update(self._render())` - use `refresh()`
+- Don't create Rich `Status`/spinners while Live is running
+- Don't forget to bump version before publishing
+- Don't push without running pre-commit
 
-### Key Methods
+## Code Patterns
 
-- `start()` - Start live display
-- `stop()` - Stop and print final panel
-- `_render()` - Callable that returns the Panel (called by Rich on each refresh)
-- `_refresh()` - Trigger immediate refresh via `self._live.refresh()`
-- `hitl_get_input()` - For HITL: clears screen, renders state, gets input
+### Adding a new phase to the UI
 
-### Common Pitfalls
-
-1. **Panels stacking**: Don't call `console.print()` while Live is running
-2. **Spinner not animating**: Pass `self._render` (callable), not `self._render()` (result)
-3. **State not updating**: Use `refresh()` not `update()` in `_refresh()`
-
-## HITL (Human-in-the-Loop) Mode
-
-The HITL session allows users to interactively edit rules/scenarios:
-
-- `enter_hitl_mode()` - Pauses Live display
-- `hitl_get_input()` - Unified render + input (clears screen first)
-- `exit_hitl_mode()` - Resumes Live display
-
-## Reporting
-
-`RichReporter` in `synkro/reporting.py` connects the pipeline to the UI:
-
-- `spinner()` returns no-op when Live is active (prevents stacking)
-- Callbacks update the display state and add events
-- Don't call `console.print()` during Live - update state instead
-
-## Common Commands
-
-```bash
-# Local install for testing
-pip install -e .
-
-# Run example
-python examples/quickstart.py
-
-# Lint only
-ruff check synkro/
-
-# Format only
-ruff format synkro/
+```python
+# In reporting.py callback:
+def on_my_new_phase(self, data) -> None:
+    self._display.update_phase("My Phase")
+    self._display.add_event(f"EVENT: {data}")
+    self._display.set_my_data(data)  # If needed
 ```
 
-## Version History Convention
+### Adding state to DisplayState
 
-Bump patch version (0.4.X) for bug fixes and minor features. The version is in `pyproject.toml`.
+```python
+# In live_display.py:
+@dataclass
+class DisplayState:
+    # ... existing fields ...
+    my_new_field: int = 0
+
+# Add setter method:
+def set_my_data(self, data) -> None:
+    self._state.my_new_field = data
+    self._refresh()
+```
+
+### Conditional behavior when Live is active
+
+```python
+if self._display._live is not None:
+    # Live is running - don't print, update state instead
+    self._display.update_phase("Working")
+    return _NoOpContextManager()
+else:
+    # Live not running - safe to print
+    return Status("Working...", console=self.console)
+```
+
+## Environment
+
+- **Python**: 3.10+ required (uses `|` union syntax, match statements)
+- **Build**: Hatchling (`python -m build`)
+- **Lint/Format**: Ruff (via pre-commit)
+- **Publish**: Twine to PyPI
+
+## Debugging
+
+### "Panels keep stacking"
+1. Search for `console.print` in the code path
+2. Check if `spinner()` is being called while Live runs
+3. Ensure HITL uses `hitl_get_input()` not separate display + prompt
+
+### "UI not updating"
+1. Verify `_refresh()` calls `self._live.refresh()` not `update()`
+2. Check that state is being modified before `_refresh()`
+3. Ensure Live was started with callable: `Live(self._render, ...)`
+
+### "Tests failing with API errors"
+- Tests in `test_streaming_api.py` need `LITELLM_API_KEY`
+- Run other tests: `pytest tests/test_imports.py -v`
