@@ -304,7 +304,9 @@ class LiveProgressDisplay:
         # Breakdown
         lines.append(Text(f"├─ {s.rules_count} rules extracted", style="dim"))
 
-        dist_str = f"({s.positive_count}+ {s.negative_count}- {s.edge_count}! {s.irrelevant_count}o)"
+        dist_str = (
+            f"({s.positive_count}+ {s.negative_count}- {s.edge_count}! {s.irrelevant_count}o)"
+        )
         lines.append(Text(f"├─ {s.scenarios_count} scenarios {dist_str}", style="dim"))
 
         lines.append(Text(f"├─ {s.traces_count} traces synthesized", style="dim"))
@@ -355,7 +357,9 @@ class LiveProgressDisplay:
         # Feedback examples
         feedback_line = Text()
         feedback_line.append("Feedback: ", style="dim")
-        feedback_line.append('"add rule for..." "remove R005" "improve coverage" "shorter"', style="yellow")
+        feedback_line.append(
+            '"add rule for..." "remove R005" "improve coverage" "shorter"', style="yellow"
+        )
         lines.append(feedback_line)
 
         return Panel(
@@ -378,7 +382,6 @@ class LiveProgressDisplay:
         Returns the user's input string.
         """
         # Stop live display if running
-        was_live = self._live is not None
         if self._live:
             self._live.stop()
             self._live = None
@@ -569,7 +572,6 @@ class LiveProgressDisplay:
         complexity_level: str = "medium",
     ) -> None:
         """Render HITL state as ONE consolidated panel with all sections."""
-        from rich.rule import Rule
 
         content_lines = []
 
@@ -599,7 +601,9 @@ class LiveProgressDisplay:
         for cat_name, rules in categories[:4]:
             content_lines.append(Text(f"    {cat_name}: {len(rules)} rules", style="dim"))
         if len(categories) > 4:
-            content_lines.append(Text(f"    ... +{len(categories) - 4} more categories", style="dim"))
+            content_lines.append(
+                Text(f"    ... +{len(categories) - 4} more categories", style="dim")
+            )
         content_lines.append(Text(f"    Total: {len(logic_map.rules)} rules", style="cyan"))
         content_lines.append(Text(""))
 
@@ -612,7 +616,11 @@ class LiveProgressDisplay:
             # Calculate distribution
             dist: dict[str, int] = {}
             for s in scenarios:
-                t = s.scenario_type.value if hasattr(s.scenario_type, "value") else str(s.scenario_type)
+                t = (
+                    s.scenario_type.value
+                    if hasattr(s.scenario_type, "value")
+                    else str(s.scenario_type)
+                )
                 dist[t] = dist.get(t, 0) + 1
 
             dist_line = Text("    ")
@@ -637,13 +645,18 @@ class LiveProgressDisplay:
         if coverage:
             content_lines.append(Text("  --- Coverage ---", style="bold white"))
             cov_style = (
-                "green" if coverage.overall_coverage_percent >= 80
-                else "yellow" if coverage.overall_coverage_percent >= 50
+                "green"
+                if coverage.overall_coverage_percent >= 80
+                else "yellow"
+                if coverage.overall_coverage_percent >= 50
                 else "red"
             )
             cov_line = Text("    Overall: ")
             cov_line.append(f"{coverage.overall_coverage_percent:.0f}%", style=cov_style)
-            cov_line.append(f"  ({coverage.covered_count} covered, {coverage.partial_count} partial, {coverage.uncovered_count} uncovered)", style="dim")
+            cov_line.append(
+                f"  ({coverage.covered_count} covered, {coverage.partial_count} partial, {coverage.uncovered_count} uncovered)",
+                style="dim",
+            )
             content_lines.append(cov_line)
             if coverage.gaps:
                 content_lines.append(Text(f"    Gaps: {len(coverage.gaps)}", style="dim"))
@@ -684,8 +697,12 @@ class LiveProgressDisplay:
         # FEEDBACK SECTION
         # =====================================================================
         content_lines.append(Text("  --- Feedback Examples ---", style="bold white"))
-        content_lines.append(Text('    "shorter" "5 turns" "remove R005" "add rule for..."', style="yellow"))
-        content_lines.append(Text('    "add scenario for..." "delete S3" "improve coverage"', style="yellow"))
+        content_lines.append(
+            Text('    "shorter" "5 turns" "remove R005" "add rule for..."', style="yellow")
+        )
+        content_lines.append(
+            Text('    "add scenario for..." "delete S3" "improve coverage"', style="yellow")
+        )
         content_lines.append(Text(""))
 
         # Build and print the panel
@@ -697,6 +714,35 @@ class LiveProgressDisplay:
         )
 
         self.console.print(panel)
+
+    def hitl_get_input(
+        self,
+        logic_map: "LogicMap",
+        scenarios: list["GoldenScenario"],
+        coverage: "CoverageReport | None",
+        current_turns: int,
+        prompt: str = "synkro> ",
+    ) -> str:
+        """
+        Clear screen, render HITL state, and get user input.
+
+        This is the main entry point for HITL interaction - it combines
+        rendering and input into a single clean flow to prevent panel stacking.
+        """
+        # Clear console to prevent stacking
+        self.console.clear()
+
+        # Render the current state
+        self.render_hitl_state(logic_map, scenarios, coverage, current_turns)
+
+        # Get input
+        try:
+            user_input = self.console.input(f"[cyan]{prompt}[/cyan]")
+        except (KeyboardInterrupt, EOFError):
+            user_input = "done"
+            self.console.print()
+
+        return user_input.strip()
 
     def render_paginated_list(
         self,
@@ -803,7 +849,9 @@ class LiveProgressDisplay:
         try:
             idx = int(scenario_id.upper().replace("S", "")) - 1
             if idx < 0 or idx >= len(scenarios):
-                self.console.print(f"[red]Scenario {scenario_id} not found (valid: S1-S{len(scenarios)})[/red]")
+                self.console.print(
+                    f"[red]Scenario {scenario_id} not found (valid: S1-S{len(scenarios)})[/red]"
+                )
                 return
         except ValueError:
             self.console.print(f"[red]Invalid scenario ID: {scenario_id}[/red]")
@@ -814,11 +862,17 @@ class LiveProgressDisplay:
         content_lines.append(Text(""))
         content_lines.append(Text(f"  ID:          S{idx + 1}", style="white"))
 
-        stype = scenario.scenario_type.value if hasattr(scenario.scenario_type, "value") else str(scenario.scenario_type)
+        stype = (
+            scenario.scenario_type.value
+            if hasattr(scenario.scenario_type, "value")
+            else str(scenario.scenario_type)
+        )
         type_display = stype.replace("_", " ").title()
         content_lines.append(Text(f"  Type:        {type_display}", style="white"))
 
-        desc_lines = [scenario.description[i : i + 55] for i in range(0, len(scenario.description), 55)]
+        desc_lines = [
+            scenario.description[i : i + 55] for i in range(0, len(scenario.description), 55)
+        ]
         content_lines.append(Text(f"  Description: {desc_lines[0]}", style="white"))
         for line in desc_lines[1:]:
             content_lines.append(Text(f"               {line}", style="white"))
@@ -827,10 +881,15 @@ class LiveProgressDisplay:
             content_lines.append(Text(f"  Context:     {scenario.context[:55]}", style="dim"))
 
         if scenario.target_rule_ids:
-            content_lines.append(Text(f"  Target Rules: {', '.join(scenario.target_rule_ids)}", style="dim"))
+            content_lines.append(
+                Text(f"  Target Rules: {', '.join(scenario.target_rule_ids)}", style="dim")
+            )
 
         if scenario.expected_outcome:
-            exp_lines = [scenario.expected_outcome[i : i + 55] for i in range(0, len(scenario.expected_outcome), 55)]
+            exp_lines = [
+                scenario.expected_outcome[i : i + 55]
+                for i in range(0, len(scenario.expected_outcome), 55)
+            ]
             content_lines.append(Text(f"  Expected:    {exp_lines[0]}", style="dim"))
             for line in exp_lines[1:]:
                 content_lines.append(Text(f"               {line}", style="dim"))

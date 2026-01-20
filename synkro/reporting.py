@@ -235,6 +235,7 @@ class RichReporter:
             return _NoOpContextManager()
 
         from rich.status import Status
+
         return Status(f"[cyan]{message}[/cyan]", spinner="dots", console=self.console)
 
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:

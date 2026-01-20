@@ -918,20 +918,29 @@ class GenerationPipeline:
         current_turns = initial_turns
         turns_history: list[int] = []  # For undo support
 
-        # Show initial state (includes session details with instructions)
-        display.display_full_session_state(
-            plan,
-            session.current_logic_map,
-            current_turns,
-            session.current_scenarios,
-            session.current_distribution,
-            coverage_report=coverage_report,
-        )
-
-        # Coverage is now displayed in display_full_session_state via coverage table
+        # Use unified HITL input if live_display available, otherwise fallback
+        def get_hitl_input() -> str:
+            if live_display and session.current_scenarios:
+                return live_display.hitl_get_input(
+                    session.current_logic_map,
+                    session.current_scenarios,
+                    coverage_report,
+                    current_turns,
+                )
+            else:
+                # Fallback to traditional display + prompt
+                display.display_full_session_state(
+                    plan,
+                    session.current_logic_map,
+                    current_turns,
+                    session.current_scenarios,
+                    session.current_distribution,
+                    coverage_report=coverage_report,
+                )
+                return prompt.get_feedback().strip()
 
         while True:
-            feedback = prompt.get_feedback().strip()
+            feedback = get_hitl_input()
 
             # Handle explicit commands first (no LLM needed)
             if feedback.lower() == "done":
@@ -943,14 +952,7 @@ class GenerationPipeline:
                     restored_map, restored_scenarios, restored_dist = session.undo()
                     if turns_history:
                         current_turns = turns_history.pop()
-                    display.show_success("Reverted to previous state")
-                    display.display_full_session_state(
-                        plan,
-                        session.current_logic_map,
-                        current_turns,
-                        session.current_scenarios,
-                        session.current_distribution,
-                    )
+                    # State will be re-rendered on next loop iteration
                 else:
                     display.show_error("Nothing to undo")
                 continue
@@ -959,14 +961,7 @@ class GenerationPipeline:
                 session.reset()
                 current_turns = initial_turns
                 turns_history.clear()
-                display.show_success("Reset to original state")
-                display.display_full_session_state(
-                    plan,
-                    session.current_logic_map,
-                    current_turns,
-                    session.current_scenarios,
-                    session.current_distribution,
-                )
+                # State will be re-rendered on next loop iteration
                 continue
 
             if feedback.lower() == "help":
@@ -1029,15 +1024,8 @@ class GenerationPipeline:
                 current_turns = intent.target_turns
                 reasoning = intent.turns_reasoning or "User preference"
                 summary = f"Set to {current_turns} turns ({reasoning})"
-                display.show_success(summary)
                 session.record_feedback(feedback, "turns", summary)
-                display.display_full_session_state(
-                    plan,
-                    session.current_logic_map,
-                    current_turns,
-                    session.current_scenarios,
-                    session.current_distribution,
-                )
+                # State will be re-rendered on next loop iteration
 
             elif intent.intent_type == "rules" and intent.rule_feedback:
                 # Handle rule change
