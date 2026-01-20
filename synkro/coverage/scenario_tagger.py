@@ -6,10 +6,10 @@ coverage calculation and gap analysis.
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
+from synkro.prompts.coverage_templates import SCENARIO_SUBCATEGORY_TAGGING_PROMPT
 from synkro.schemas import BatchedScenarioTagging
 from synkro.types.coverage import SubCategoryTaxonomy
-from synkro.types.logic_map import LogicMap, GoldenScenario
-from synkro.prompts.coverage_templates import SCENARIO_SUBCATEGORY_TAGGING_PROMPT
+from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 class ScenarioTagger:
@@ -75,9 +75,7 @@ class ScenarioTagger:
         # or to refine existing tags
         untagged = [s for s in scenarios if not s.sub_category_ids]
         if untagged:
-            scenarios = await self._tag_with_llm(
-                scenarios, taxonomy, logic_map
-            )
+            scenarios = await self._tag_with_llm(scenarios, taxonomy, logic_map)
 
         return scenarios
 
@@ -117,7 +115,7 @@ class ScenarioTagger:
         """Use LLM to tag scenarios with sub-categories."""
         # Process in batches
         for i in range(0, len(scenarios), self.batch_size):
-            batch = scenarios[i:i + self.batch_size]
+            batch = scenarios[i : i + self.batch_size]
             batch_indices = list(range(i, min(i + self.batch_size, len(scenarios))))
 
             # Format inputs

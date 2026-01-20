@@ -7,37 +7,48 @@ Usage:
 """
 
 from synkro.types.core import (
-    Role,
-    Message,
-    Scenario,
-    EvalScenario,
-    Trace,
-    GradeResult,
-    Plan,
     Category,
+    EvalScenario,
+    GradeResult,
+    Message,
+    Plan,
+    Role,
+    Scenario,
+    Trace,
 )
 from synkro.types.dataset_type import DatasetType
-from synkro.types.tool import (
-    ToolDefinition,
-    ToolCall,
-    ToolFunction,
-    ToolResult,
+
+# New event types for streaming
+from synkro.types.events import (
+    CompleteEvent,
+    CoverageCalculatedEvent,
+    ErrorEvent,
+    Event,
+    EventType,
+    ProgressEvent,
+    RefinementStartedEvent,
+    RuleFoundEvent,
+    ScenarioGeneratedEvent,
+    StreamEvent,
+    TraceGeneratedEvent,
+    TraceRefinedEvent,
+    TraceVerifiedEvent,
 )
 
 # New metrics types
 from synkro.types.metrics import (
-    PhaseMetrics,
     Metrics,
+    PhaseMetrics,
     TrackedLLM,
 )
 
 # New result types
 from synkro.types.results import (
     ExtractionResult,
+    PipelineResult,
     ScenariosResult,
     TracesResult,
     VerificationResult,
-    PipelineResult,
 )
 
 # New state types
@@ -45,22 +56,11 @@ from synkro.types.state import (
     PipelinePhase,
     PipelineState,
 )
-
-# New event types for streaming
-from synkro.types.events import (
-    EventType,
-    Event,
-    ProgressEvent,
-    RuleFoundEvent,
-    ScenarioGeneratedEvent,
-    TraceGeneratedEvent,
-    TraceVerifiedEvent,
-    RefinementStartedEvent,
-    TraceRefinedEvent,
-    CoverageCalculatedEvent,
-    CompleteEvent,
-    ErrorEvent,
-    StreamEvent,
+from synkro.types.tool import (
+    ToolCall,
+    ToolDefinition,
+    ToolFunction,
+    ToolResult,
 )
 
 __all__ = [

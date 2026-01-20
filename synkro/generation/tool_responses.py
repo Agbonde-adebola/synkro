@@ -8,28 +8,29 @@ from pydantic import BaseModel, Field
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.core import Scenario, Trace, Message
-from synkro.types.tool import ToolCall, ToolFunction, ToolDefinition
 from synkro.prompts.tool_templates import (
     MULTI_TURN_TOOL_DECISION_PROMPT,
     MULTI_TURN_TOOL_SYNTHESIS_PROMPT,
 )
+from synkro.types.core import Message, Scenario, Trace
+from synkro.types.tool import ToolCall, ToolDefinition, ToolFunction
 
 if TYPE_CHECKING:
-    from synkro.generation.tool_simulator import ToolSimulator
     from synkro.generation.follow_ups import FollowUpGenerator
+    from synkro.generation.tool_simulator import ToolSimulator
 
 
 # =============================================================================
 # Pydantic models for structured JSON output
 # =============================================================================
 
+
 class ToolCallRequest(BaseModel):
     """A single tool call request from the LLM."""
-    
+
     name: str = Field(description="Name of the tool to call")
-    arguments: str = Field(description="Arguments as a JSON string, e.g. '{\"query\": \"test\"}'")
-    
+    arguments: str = Field(description='Arguments as a JSON string, e.g. \'{"query": "test"}\'')
+
     def get_arguments_dict(self) -> dict:
         """Parse arguments JSON string to dict."""
         return json.loads(self.arguments)
@@ -38,50 +39,46 @@ class ToolCallRequest(BaseModel):
 class ToolCallDecision(BaseModel):
     """
     Structured output for the LLM's tool calling decision.
-    
+
     The LLM outputs this to indicate whether tools are needed
     and which ones to call.
     """
-    
+
     needs_tool: bool = Field(
         description="Whether a tool call is needed to answer the user's request"
     )
-    reasoning: str = Field(
-        description="Brief explanation of why tool is/isn't needed"
-    )
+    reasoning: str = Field(description="Brief explanation of why tool is/isn't needed")
     tool_calls: list[ToolCallRequest] = Field(
         default_factory=list,
-        description="List of tool calls to make (empty if needs_tool is False)"
+        description="List of tool calls to make (empty if needs_tool is False)",
     )
     direct_response: str | None = Field(
-        default=None,
-        description="Direct response if no tool is needed"
+        default=None, description="Direct response if no tool is needed"
     )
 
 
 class FinalSynthesis(BaseModel):
     """Structured output for synthesizing tool results into a response."""
-    
-    response: str = Field(
-        description="Natural response incorporating the tool results"
-    )
+
+    response: str = Field(description="Natural response incorporating the tool results")
 
 
 # =============================================================================
 # Tool Call Response Generator
 # =============================================================================
 
+
 class ToolCallResponseGenerator:
     """
     Generates tool call training traces using JSON mode for structured outputs.
-    
+
     Produces traces in OpenAI function calling format:
     - system message with tool descriptions
     - user message with request
     - assistant message with tool_calls (or direct response)
     - tool response messages
     - final assistant message synthesizing results
-    
+
     Example:
         >>> gen = ToolCallResponseGenerator(
         ...     tools=[web_search_tool, db_tool],
@@ -90,7 +87,7 @@ class ToolCallResponseGenerator:
         ... )
         >>> trace = await gen.generate_single(policy_text, scenario)
     """
-    
+
     def __init__(
         self,
         tools: list[ToolDefinition],
@@ -100,7 +97,7 @@ class ToolCallResponseGenerator:
     ):
         """
         Initialize the tool call response generator.
-        
+
         Args:
             tools: List of available tool definitions
             llm: LLM client to use (creates one if not provided)
@@ -118,25 +115,26 @@ class ToolCallResponseGenerator:
         """Lazy initialization of follow-up generator for multi-turn."""
         if self._follow_up_gen is None:
             from synkro.generation.follow_ups import FollowUpGenerator
+
             self._follow_up_gen = FollowUpGenerator(llm=self.llm)
         return self._follow_up_gen
-    
+
     def _get_tools_description(self) -> str:
         """Get formatted description of all tools for system prompt."""
         descriptions = []
         for tool in self.tools:
             descriptions.append(tool.to_system_prompt())
         return "\n\n".join(descriptions)
-    
+
     def _get_tools_json_schema(self) -> str:
         """Get JSON schema representation of tools."""
         tools_json = [tool.to_openai_format() for tool in self.tools]
         return json.dumps(tools_json, indent=2)
-    
+
     def _generate_call_id(self) -> str:
         """Generate a unique tool call ID."""
         return f"call_{uuid.uuid4().hex[:12]}"
-    
+
     async def generate_single(
         self,
         policy_text: str,
@@ -165,12 +163,10 @@ class ToolCallResponseGenerator:
         decision = await self._get_tool_decision(policy_text, scenario, tools_desc)
 
         # Step 2: Build the message sequence
-        messages = await self._build_message_sequence(
-            policy_text, scenario, tools_desc, decision
-        )
+        messages = await self._build_message_sequence(policy_text, scenario, tools_desc, decision)
 
         return Trace(messages=messages, scenario=scenario)
-    
+
     async def _get_tool_decision(
         self,
         policy_text: str,
@@ -179,7 +175,7 @@ class ToolCallResponseGenerator:
     ) -> ToolCallDecision:
         """
         Get the LLM's decision on whether to use tools.
-        
+
         Uses JSON mode to force structured output.
         """
         prompt = f"""You are a customer support agent deciding whether to use tools.
@@ -208,7 +204,7 @@ Important rules:
 - Provide clear reasoning for your decision"""
 
         return await self.llm.generate_structured(prompt, ToolCallDecision)
-    
+
     async def _build_message_sequence(
         self,
         policy_text: str,
@@ -218,71 +214,65 @@ Important rules:
     ) -> list[Message]:
         """Build the full message sequence based on the tool decision."""
         messages = []
-        
+
         # System message with tool descriptions
         system_content = f"""You are a helpful customer support agent. You have access to the following tools:
 
 {tools_desc}
 
 Follow the tool usage guidelines provided to assist customers effectively."""
-        
+
         messages.append(Message(role="system", content=system_content))
-        
+
         # User message
         messages.append(Message(role="user", content=scenario.description))
-        
+
         if decision.needs_tool and decision.tool_calls:
             # Assistant message with tool_calls
             tool_calls = []
             for tc in decision.tool_calls:
                 call_id = self._generate_call_id()
-                tool_calls.append(ToolCall(
-                    id=call_id,
-                    type="function",
-                    function=ToolFunction(
-                        name=tc.name,
-                        arguments=tc.arguments  # Already a JSON string
+                tool_calls.append(
+                    ToolCall(
+                        id=call_id,
+                        type="function",
+                        function=ToolFunction(
+                            name=tc.name,
+                            arguments=tc.arguments,  # Already a JSON string
+                        ),
                     )
-                ))
-            
-            messages.append(Message(
-                role="assistant",
-                content=None,
-                tool_calls=tool_calls
-            ))
-            
+                )
+
+            messages.append(Message(role="assistant", content=None, tool_calls=tool_calls))
+
             # Tool response messages
             tool_results = []
             for tc in tool_calls:
                 result = await self._simulate_tool_call(tc)
                 tool_results.append(result)
-                
-                messages.append(Message(
-                    role="tool",
-                    content=result,
-                    tool_call_id=tc.id
-                ))
-            
+
+                messages.append(Message(role="tool", content=result, tool_call_id=tc.id))
+
             # Final assistant message synthesizing results
             final_response = await self._synthesize_response(
                 scenario.description, tool_calls, tool_results, policy_text
             )
             messages.append(Message(role="assistant", content=final_response))
-        
+
         else:
             # Direct response without tools
             response = decision.direct_response or await self._generate_direct_response(
                 policy_text, scenario, tools_desc
             )
             messages.append(Message(role="assistant", content=response))
-        
+
         return messages
-    
+
     async def _simulate_tool_call(self, tool_call: ToolCall) -> str:
         """Simulate a tool response."""
         if self.simulator:
             return await self.simulator.simulate(tool_call)
-        
+
         # Fallback: generate a mock response based on tool definition
         tool_name = tool_call.function.name
         if tool_name in self.tools_by_name:
@@ -290,16 +280,15 @@ Follow the tool usage guidelines provided to assist customers effectively."""
             if tool.mock_responses:
                 # Use a mock response
                 import random
+
                 return random.choice(tool.mock_responses)
-        
+
         # Default mock response
         args = json.loads(tool_call.function.arguments)
-        return json.dumps({
-            "status": "success",
-            "result": f"Simulated response for {tool_name}",
-            "query": args
-        })
-    
+        return json.dumps(
+            {"status": "success", "result": f"Simulated response for {tool_name}", "query": args}
+        )
+
     async def _synthesize_response(
         self,
         user_request: str,
@@ -315,7 +304,7 @@ Follow the tool usage guidelines provided to assist customers effectively."""
             tools_context.append(f"Arguments: {tc.function.arguments}")
             tools_context.append(f"Result: {result}")
             tools_context.append("")
-        
+
         prompt = f"""Based on the tool results, provide a helpful response to the user.
 
 USER REQUEST:
@@ -327,7 +316,7 @@ TOOL RESULTS:
 GUIDELINES:
 {policy_text}
 
-Synthesize the tool results into a natural, helpful response. 
+Synthesize the tool results into a natural, helpful response.
 - Incorporate the information from the tool results
 - Don't expose raw JSON or technical details
 - Be conversational and helpful
@@ -335,7 +324,7 @@ Synthesize the tool results into a natural, helpful response.
 
         synthesis = await self.llm.generate_structured(prompt, FinalSynthesis)
         return synthesis.response
-    
+
     async def _generate_direct_response(
         self,
         policy_text: str,
@@ -388,9 +377,7 @@ based on your knowledge and the guidelines."""
 
         # Step 1: Generate initial response (Turn 1)
         decision = await self._get_tool_decision(policy_text, scenario, tools_desc)
-        messages = await self._build_message_sequence(
-            policy_text, scenario, tools_desc, decision
-        )
+        messages = await self._build_message_sequence(policy_text, scenario, tools_desc, decision)
 
         # Step 2: Generate follow-up turns
         for turn in range(1, target_turns):
@@ -444,9 +431,7 @@ based on your knowledge and the guidelines."""
                 tool_strs = []
                 for tc in msg.tool_calls:
                     if hasattr(tc, "function"):
-                        tool_strs.append(
-                            f"  - {tc.function.name}({tc.function.arguments})"
-                        )
+                        tool_strs.append(f"  - {tc.function.name}({tc.function.arguments})")
                     elif isinstance(tc, dict) and "function" in tc:
                         func = tc["function"]
                         tool_strs.append(
@@ -454,7 +439,7 @@ based on your knowledge and the guidelines."""
                         )
                     else:
                         tool_strs.append(f"  - {tc}")
-                formatted.append(f"ASSISTANT: [Tool Calls]\n" + "\n".join(tool_strs))
+                formatted.append("ASSISTANT: [Tool Calls]\n" + "\n".join(tool_strs))
             elif msg.role == "tool":
                 # Format tool response
                 formatted.append(f"TOOL RESULT [{msg.tool_call_id}]: {msg.content}")
@@ -521,18 +506,14 @@ based on your knowledge and the guidelines."""
                     )
                 )
 
-            new_messages.append(
-                Message(role="assistant", content=None, tool_calls=tool_calls)
-            )
+            new_messages.append(Message(role="assistant", content=None, tool_calls=tool_calls))
 
             # Tool response messages
             tool_results = []
             for tc in tool_calls:
                 result = await self._simulate_tool_call(tc)
                 tool_results.append(result)
-                new_messages.append(
-                    Message(role="tool", content=result, tool_call_id=tc.id)
-                )
+                new_messages.append(Message(role="tool", content=result, tool_call_id=tc.id))
 
             # Final assistant message synthesizing new results
             final_response = await self._synthesize_follow_up_response(
@@ -601,11 +582,11 @@ based on your knowledge and the guidelines."""
     ) -> list[Trace]:
         """
         Generate traces for multiple scenarios.
-        
+
         Args:
             policy_text: The policy/guidelines text
             scenarios: List of scenarios to respond to
-            
+
         Returns:
             List of traces with tool calling format
         """
@@ -622,4 +603,3 @@ __all__ = [
     "ToolCallRequest",
     "FinalSynthesis",
 ]
-

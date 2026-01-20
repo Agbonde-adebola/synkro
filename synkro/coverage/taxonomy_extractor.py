@@ -6,11 +6,11 @@ enabling coverage tracking across different testable aspects.
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
+from synkro.prompts.coverage_templates import SUBCATEGORY_EXTRACTION_PROMPT
 from synkro.schemas import TaxonomyOutput
+from synkro.types.core import Category
 from synkro.types.coverage import SubCategory, SubCategoryTaxonomy
 from synkro.types.logic_map import LogicMap
-from synkro.types.core import Category
-from synkro.prompts.coverage_templates import SUBCATEGORY_EXTRACTION_PROMPT
 
 
 class TaxonomyExtractor:
@@ -101,7 +101,7 @@ class TaxonomyExtractor:
         """Format categories for the prompt."""
         lines = []
         for cat in categories:
-            if hasattr(cat, 'name'):
+            if hasattr(cat, "name"):
                 lines.append(f"- {cat.name}: {cat.description}")
             else:
                 lines.append(f"- {cat}")
@@ -133,10 +133,7 @@ class TaxonomyExtractor:
     ) -> None:
         """Validate the extracted taxonomy."""
         # Handle both Category objects and strings
-        category_names = {
-            cat.name if hasattr(cat, 'name') else str(cat)
-            for cat in categories
-        }
+        category_names = {cat.name if hasattr(cat, "name") else str(cat) for cat in categories}
 
         # Check that sub-categories reference valid parent categories
         for sc in taxonomy.sub_categories:
@@ -151,7 +148,9 @@ class TaxonomyExtractor:
                 if not matched:
                     # Assign to first category if no match
                     first_cat = categories[0]
-                    sc.parent_category = first_cat.name if hasattr(first_cat, 'name') else str(first_cat)
+                    sc.parent_category = (
+                        first_cat.name if hasattr(first_cat, "name") else str(first_cat)
+                    )
 
         # Ensure unique IDs
         seen_ids = set()

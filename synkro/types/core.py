@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Literal, Any
-from pydantic import BaseModel, Field
+from typing import Any, Literal
 
+from pydantic import BaseModel, Field
 
 Role = Literal["system", "user", "assistant", "tool"]
 
@@ -12,16 +12,16 @@ Role = Literal["system", "user", "assistant", "tool"]
 class Message(BaseModel):
     """
     A single message in a conversation.
-    
+
     Supports both regular chat messages and tool-calling messages.
-    
+
     Examples:
         >>> # Regular message
         >>> Message(role="user", content="Hello")
-        
+
         >>> # Assistant with tool call (tool_calls is list of dicts or ToolCall objects)
         >>> Message(role="assistant", content=None, tool_calls=[...])
-        
+
         >>> # Tool response
         >>> Message(role="tool", content="Result", tool_call_id="call_123")
     """
@@ -29,14 +29,12 @@ class Message(BaseModel):
     role: Role
     content: str | None = None
     tool_calls: list[Any] | None = Field(
-        default=None,
-        description="Tool calls made by the assistant (list of ToolCall or dicts)"
+        default=None, description="Tool calls made by the assistant (list of ToolCall or dicts)"
     )
     tool_call_id: str | None = Field(
-        default=None,
-        description="ID of the tool call this message responds to (for tool role)"
+        default=None, description="ID of the tool call this message responds to (for tool role)"
     )
-    
+
     def model_post_init(self, __context) -> None:
         """Validate message structure based on role."""
         # For backwards compatibility, ensure content is string for non-tool roles
@@ -52,9 +50,15 @@ class Scenario(BaseModel):
     category: str | None = Field(default=None, description="Category this scenario belongs to")
 
     # Evaluation fields (populated from GoldenScenario)
-    scenario_type: str | None = Field(default=None, description="Type: positive, negative, edge_case, irrelevant")
-    target_rule_ids: list[str] | None = Field(default=None, description="Rule IDs this scenario tests")
-    expected_outcome: str | None = Field(default=None, description="Expected behavior based on rules")
+    scenario_type: str | None = Field(
+        default=None, description="Type: positive, negative, edge_case, irrelevant"
+    )
+    target_rule_ids: list[str] | None = Field(
+        default=None, description="Rule IDs this scenario tests"
+    )
+    expected_outcome: str | None = Field(
+        default=None, description="Expected behavior based on rules"
+    )
 
 
 class GradeResult(BaseModel):
@@ -73,9 +77,15 @@ class Trace(BaseModel):
     grade: GradeResult | None = Field(default=None, description="Grading result if graded")
 
     # Golden Trace metadata (for verification)
-    reasoning_chain: list[Any] | None = Field(default=None, description="Chain-of-thought reasoning steps with rule citations")
-    rules_applied: list[str] | None = Field(default=None, description="Rule IDs that were applied in the response")
-    rules_excluded: list[str] | None = Field(default=None, description="Rule IDs that were explicitly excluded")
+    reasoning_chain: list[Any] | None = Field(
+        default=None, description="Chain-of-thought reasoning steps with rule citations"
+    )
+    rules_applied: list[str] | None = Field(
+        default=None, description="Rule IDs that were applied in the response"
+    )
+    rules_excluded: list[str] | None = Field(
+        default=None, description="Rule IDs that were explicitly excluded"
+    )
 
     @property
     def system_message(self) -> str | None:
@@ -100,7 +110,7 @@ class Trace(BaseModel):
             if m.role == "assistant":
                 return m.content or ""
         return ""
-    
+
     @property
     def has_tool_calls(self) -> bool:
         """Check if this trace contains any tool calls."""
@@ -126,7 +136,9 @@ class EvalScenario(BaseModel):
 
     user_message: str = Field(description="The user's request or question (test input)")
     expected_outcome: str = Field(description="Expected behavior based on policy rules")
-    target_rule_ids: list[str] = Field(default_factory=list, description="Rule IDs this scenario tests")
+    target_rule_ids: list[str] = Field(
+        default_factory=list, description="Rule IDs this scenario tests"
+    )
     scenario_type: str = Field(description="Type: positive, negative, edge_case, irrelevant")
     category: str = Field(default="", description="Policy category this scenario belongs to")
     context: str = Field(default="", description="Additional context for the scenario")
@@ -146,14 +158,13 @@ class Plan(BaseModel):
     categories: list[Category] = Field(description="Categories with trace allocations")
     reasoning: str = Field(description="Explanation of why these categories were chosen")
     recommended_turns: int = Field(
-        default=1,
-        description="Recommended conversation turns based on policy complexity"
+        default=1, description="Recommended conversation turns based on policy complexity"
     )
     complexity_level: Literal["simple", "conditional", "complex"] = Field(
         default="simple",
-        description="Policy complexity level: simple (1-2 turns), conditional (3 turns), complex (5+ turns)"
+        description="Policy complexity level: simple (1-2 turns), conditional (3 turns), complex (5+ turns)",
     )
     taxonomy: Any = Field(
         default=None,
-        description="Sub-category taxonomy for coverage tracking (SubCategoryTaxonomy)"
+        description="Sub-category taxonomy for coverage tracking (SubCategoryTaxonomy)",
     )

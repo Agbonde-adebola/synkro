@@ -39,7 +39,7 @@ def get_default_models() -> Tuple[str, str]:
     Raises:
         EnvironmentError: If no API key is found
     """
-    from synkro.models import OpenAI, Anthropic, Google
+    from synkro.models import Anthropic, Google, OpenAI
 
     provider = detect_available_provider()
 
@@ -77,7 +77,7 @@ def get_provider_info() -> dict:
     Returns:
         Dict with provider status and recommended models
     """
-    from synkro.models import OpenAI, Anthropic, Google
+    from synkro.models import Anthropic, Google, OpenAI
 
     info = {
         "anthropic": {

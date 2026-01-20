@@ -1,16 +1,17 @@
 """Test script to verify prompt fixes."""
+
 from pathlib import Path
+
 from dotenv import load_dotenv
-import json
+
+from synkro.examples import EXPENSE_POLICY
+from synkro.models.openai import OpenAI
+from synkro.pipelines import create_pipeline
+from synkro.types import DatasetType
 
 # Load environment variables
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
-
-from synkro.pipelines import create_pipeline
-from synkro.models.openai import OpenAI
-from synkro.types import DatasetType
-from synkro.examples import EXPENSE_POLICY
 
 # Create pipeline
 pipeline = create_pipeline(
@@ -33,9 +34,9 @@ print(f"Total traces: {len(dataset)}")
 print(f"Passing: {len(dataset.filter(passed=True))}")
 
 # Print first few traces for inspection
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("SAMPLE TRACES FOR INSPECTION:")
-print("="*60)
+print("=" * 60)
 
 for i, trace in enumerate(dataset.traces[:3]):
     print(f"\n--- Trace {i+1} ---")

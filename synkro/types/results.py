@@ -7,15 +7,15 @@ with metrics, display formatters, and serialization support.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from synkro.types.metrics import Metrics, PhaseMetrics
 
 if TYPE_CHECKING:
-    from synkro.types.logic_map import LogicMap, GoldenScenario
-    from synkro.types.core import Trace, EvalScenario
-    from synkro.types.coverage import CoverageReport
     from synkro.core.dataset import Dataset
+    from synkro.types.core import EvalScenario, Trace
+    from synkro.types.coverage import CoverageReport
+    from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 @dataclass
@@ -39,7 +39,9 @@ class ExtractionResult:
         """One-line summary of extraction result."""
         rule_count = len(self.logic_map.rules)
         root_count = len(self.logic_map.root_rules)
-        return f"Extracted {rule_count} rules ({root_count} root, {rule_count - root_count} dependent)"
+        return (
+            f"Extracted {rule_count} rules ({root_count} root, {rule_count - root_count} dependent)"
+        )
 
     def format_table(self) -> str:
         """Formatted table of extracted rules."""
@@ -145,7 +147,9 @@ class ScenariosResult:
 
         for i, s in enumerate(self.scenarios[:10]):  # Limit to 10 for context
             rules = ", ".join(s.target_rule_ids) if s.target_rule_ids else "none"
-            lines.append(f"- S{i+1} [{s.scenario_type.value}]: {s.description[:60]}... (rules: {rules})")
+            lines.append(
+                f"- S{i+1} [{s.scenario_type.value}]: {s.description[:60]}... (rules: {rules})"
+            )
 
         if len(self.scenarios) > 10:
             lines.append(f"... and {len(self.scenarios) - 10} more")
@@ -171,7 +175,9 @@ class ScenariosResult:
                 user_message=s.description,
                 expected_outcome=s.expected_outcome,
                 target_rule_ids=s.target_rule_ids,
-                scenario_type=s.scenario_type.value if hasattr(s.scenario_type, "value") else s.scenario_type,
+                scenario_type=s.scenario_type.value
+                if hasattr(s.scenario_type, "value")
+                else s.scenario_type,
                 category=s.category,
                 context=s.context,
             )

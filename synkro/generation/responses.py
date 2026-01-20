@@ -1,12 +1,12 @@
 """Response generation for scenarios."""
 
+from synkro.generation.multiturn_responses import MultiTurnResponseGenerator
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.core import Scenario, Trace, Message
+from synkro.parsers import parse_batched_responses
 from synkro.prompts.templates import BATCHED_RESPONSE_PROMPT, SYSTEM_PROMPT
 from synkro.schemas import SingleResponse
-from synkro.parsers import parse_batched_responses, extract_content
-from synkro.generation.multiturn_responses import MultiTurnResponseGenerator
+from synkro.types.core import Message, Scenario, Trace
 
 
 class ResponseGenerator:
@@ -84,9 +84,7 @@ class ResponseGenerator:
         """
         # Delegate to multi-turn generator for multi-turn traces
         if target_turns > 1:
-            return await self.multi_turn_gen.generate_single(
-                policy_text, scenario, target_turns
-            )
+            return await self.multi_turn_gen.generate_single(policy_text, scenario, target_turns)
 
         # Single-turn generation
         prompt = f"""You are a domain expert generating a training example.
@@ -113,9 +111,7 @@ Generate exactly 3 messages: system, user, and assistant."""
 
         # Use structured output for reliable JSON
         parsed = await self.llm.generate_structured(prompt, SingleResponse)
-        messages = [
-            Message(role=m.role, content=m.content) for m in parsed.messages
-        ]
+        messages = [Message(role=m.role, content=m.content) for m in parsed.messages]
 
         return Trace(messages=messages, scenario=scenario)
 
@@ -180,10 +176,7 @@ SCENARIOS:
         traces = []
         for i, p in enumerate(parsed):
             scenario = scenarios[min(p["index"], len(scenarios) - 1)]
-            messages = [
-                Message(role=m.role, content=m.content) for m in p["messages"]
-            ]
+            messages = [Message(role=m.role, content=m.content) for m in p["messages"]]
             traces.append(Trace(messages=messages, scenario=scenario))
 
         return traces
-

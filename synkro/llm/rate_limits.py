@@ -100,4 +100,3 @@ def get_default_workers(model: str) -> int:
     """
     provider = get_provider(model)
     return DEFAULT_WORKERS.get(provider, 10)
-

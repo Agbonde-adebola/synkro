@@ -20,10 +20,10 @@ Usage:
 from enum import Enum
 from typing import Union
 
-from synkro.models.openai import OpenAI
 from synkro.models.anthropic import Anthropic
 from synkro.models.google import Google
 from synkro.models.local import Local, LocalModel
+from synkro.models.openai import OpenAI
 
 # Union type for any model
 Model = Union[OpenAI, Anthropic, Google, LocalModel, str]
@@ -47,4 +47,3 @@ __all__ = [
     "Model",
     "get_model_string",
 ]
-

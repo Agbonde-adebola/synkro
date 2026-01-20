@@ -5,28 +5,26 @@ with explicit rule targeting. This is Stage 2 of the Golden Trace pipeline.
 """
 
 import asyncio
-from typing import Literal
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
+from synkro.prompts.golden_templates import (
+    EDGE_CASE_SCENARIO_INSTRUCTIONS,
+    GOLDEN_SCENARIO_BATCHED_PROMPT,
+    GOLDEN_SCENARIO_PROMPT,
+    IRRELEVANT_SCENARIO_INSTRUCTIONS,
+    NEGATIVE_SCENARIO_INSTRUCTIONS,
+    POSITIVE_SCENARIO_INSTRUCTIONS,
+)
 from synkro.schemas import GoldenScenariosArray
 from synkro.types.core import Category
-from synkro.types.logic_map import LogicMap, GoldenScenario, ScenarioType
-from synkro.prompts.golden_templates import (
-    GOLDEN_SCENARIO_PROMPT,
-    GOLDEN_SCENARIO_BATCHED_PROMPT,
-    POSITIVE_SCENARIO_INSTRUCTIONS,
-    NEGATIVE_SCENARIO_INSTRUCTIONS,
-    EDGE_CASE_SCENARIO_INSTRUCTIONS,
-    IRRELEVANT_SCENARIO_INSTRUCTIONS,
-)
-
+from synkro.types.logic_map import GoldenScenario, LogicMap, ScenarioType
 
 # Default scenario type distribution
 DEFAULT_DISTRIBUTION = {
-    ScenarioType.POSITIVE: 0.35,    # 35% happy path
-    ScenarioType.NEGATIVE: 0.30,    # 30% violations
-    ScenarioType.EDGE_CASE: 0.25,   # 25% edge cases
+    ScenarioType.POSITIVE: 0.35,  # 35% happy path
+    ScenarioType.NEGATIVE: 0.30,  # 30% violations
+    ScenarioType.EDGE_CASE: 0.25,  # 25% edge cases
     ScenarioType.IRRELEVANT: 0.10,  # 10% out of scope
 }
 
@@ -129,6 +127,7 @@ class GoldenScenarioGenerator:
             # Single scenario - use the configured distribution ratio to pick type
             # This ensures variety across categories
             import random
+
             types = list(self.distribution.keys())
             weights = list(self.distribution.values())
             chosen = random.choices(types, weights=weights, k=1)[0]
@@ -138,6 +137,7 @@ class GoldenScenarioGenerator:
             counts[ScenarioType.POSITIVE] = 1
             # Randomly pick between negative and edge_case for the second
             import random
+
             other = random.choice([ScenarioType.NEGATIVE, ScenarioType.EDGE_CASE])
             counts[other] = 1
         elif total == 3:
@@ -196,8 +196,13 @@ class GoldenScenarioGenerator:
 
         # Retry once if count doesn't match
         if len(scenarios) != total_count:
-            retry_prompt = prompt + f"\n\nIMPORTANT: You must generate EXACTLY {total_count} scenarios. You previously generated {len(scenarios)}."
-            retry_scenarios = await self._generate_and_parse(retry_prompt, category.name, total_count)
+            retry_prompt = (
+                prompt
+                + f"\n\nIMPORTANT: You must generate EXACTLY {total_count} scenarios. You previously generated {len(scenarios)}."
+            )
+            retry_scenarios = await self._generate_and_parse(
+                retry_prompt, category.name, total_count
+            )
 
             # Use retry result if it's closer to target, otherwise keep original
             if abs(len(retry_scenarios) - total_count) < abs(len(scenarios) - total_count):
@@ -279,9 +284,7 @@ class GoldenScenarioGenerator:
         lines.append("RULES:")
         for rule in logic_map.rules:
             deps = f" (depends on: {', '.join(rule.dependencies)})" if rule.dependencies else ""
-            lines.append(
-                f"  {rule.rule_id} [{rule.category.value}]: {rule.text}{deps}"
-            )
+            lines.append(f"  {rule.rule_id} [{rule.category.value}]: {rule.text}{deps}")
 
         lines.append("\nROOT RULES (Entry Points):")
         lines.append(f"  {', '.join(logic_map.root_rules)}")
@@ -318,6 +321,7 @@ class GoldenScenarioGenerator:
 
         # Shuffle for randomness, but maintain overall distribution
         import random
+
         random.shuffle(type_pool)
 
         # Assign type distributions to each category from the pool

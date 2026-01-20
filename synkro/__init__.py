@@ -55,6 +55,7 @@ Advanced Usage (power users):
 # Dynamic version from package metadata
 try:
     from importlib.metadata import version as _get_version
+
     __version__ = _get_version("synkro")
 except Exception:
     __version__ = "0.4.58"  # Fallback
@@ -63,55 +64,24 @@ except Exception:
 # PRIMARY API - What most developers need
 # =============================================================================
 
-from synkro.pipelines import create_pipeline
-from synkro.models import OpenAI, Anthropic, Google, Local, LocalModel
-from synkro.llm import LLM
-from synkro.types import DatasetType
-from synkro.core.policy import Policy
-from synkro.core.dataset import Dataset
-from synkro.reporting import SilentReporter, RichReporter, CallbackReporter, FileLoggingReporter
-from synkro.ingestion import ingest, load_config, PolicyConfig
-
-# Tool types (needed for TOOL_CALL dataset type)
-from synkro.types import ToolDefinition
-
-# =============================================================================
-# SECONDARY API - Less commonly needed
-# =============================================================================
-
-from synkro.types import Message, Scenario, EvalScenario, Trace, GradeResult, Plan, Category
-from synkro.types import ToolCall, ToolFunction, ToolResult
-from synkro.reporting import ProgressReporter
-
-# GenerationResult for return_logic_map=True (backward compatibility)
-from synkro.pipeline.runner import GenerationResult, ScenariosResult
-
-# New result types with metrics
-from synkro.types.results import PipelineResult, ExtractionResult
-from synkro.types.results import ScenariosResult as ScenariosResultNew
-from synkro.types.results import TracesResult, VerificationResult
-from synkro.types.metrics import Metrics, PhaseMetrics
-from synkro.types.state import PipelinePhase, PipelineState
-from synkro.types.events import Event, ProgressEvent, CompleteEvent
-
-# Coverage tracking types
-from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
-
 # Step-by-step API functions
 from synkro.api import (
     extract_rules,
     extract_rules_async,
-    generate_scenarios_async,
-    synthesize_traces,
-    synthesize_traces_async,
-    verify_traces,
-    verify_traces_async,
     # Streaming variants
     extract_rules_stream,
+    generate_scenarios_async,
     generate_scenarios_stream,
+    synthesize_traces,
+    synthesize_traces_async,
     synthesize_traces_stream,
+    verify_traces,
+    verify_traces_async,
     verify_traces_stream,
 )
+from synkro.core.dataset import Dataset
+from synkro.core.policy import Policy
+from synkro.ingestion import PolicyConfig, ingest, load_config
 
 # HITL editing functions
 from synkro.interactive.standalone import (
@@ -120,6 +90,19 @@ from synkro.interactive.standalone import (
     edit_scenarios,
     edit_scenarios_async,
 )
+from synkro.llm import LLM
+from synkro.models import Anthropic, Google, Local, LocalModel, OpenAI
+
+# GenerationResult for return_logic_map=True (backward compatibility)
+from synkro.pipeline.runner import GenerationResult, ScenariosResult
+from synkro.pipelines import create_pipeline
+from synkro.reporting import (
+    CallbackReporter,
+    FileLoggingReporter,
+    ProgressReporter,
+    RichReporter,
+    SilentReporter,
+)
 
 # Session class
 from synkro.session import Session
@@ -127,12 +110,41 @@ from synkro.session import Session
 # Tool definitions for LLM agents
 from synkro.tools import TOOL_DEFINITIONS
 
+# Tool types (needed for TOOL_CALL dataset type)
+# =============================================================================
+# SECONDARY API - Less commonly needed
+# =============================================================================
+from synkro.types import (
+    Category,
+    DatasetType,
+    EvalScenario,
+    GradeResult,
+    Message,
+    Plan,
+    Scenario,
+    ToolCall,
+    ToolDefinition,
+    ToolFunction,
+    ToolResult,
+    Trace,
+)
+
+# Coverage tracking types
+from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
+from synkro.types.events import CompleteEvent, Event, ProgressEvent
+from synkro.types.metrics import Metrics, PhaseMetrics
+
+# New result types with metrics
+from synkro.types.results import ExtractionResult, PipelineResult, TracesResult, VerificationResult
+from synkro.types.results import ScenariosResult as ScenariosResultNew
+from synkro.types.state import PipelinePhase, PipelineState
+
 # Model detection utilities
 from synkro.utils.model_detection import (
     detect_available_provider,
-    get_default_models,
-    get_default_model,
     get_default_grading_model,
+    get_default_model,
+    get_default_models,
     get_provider_info,
 )
 
@@ -195,6 +207,7 @@ __all__ = [
     "ExtractionResult",
     "TracesResult",
     "VerificationResult",
+    "ScenariosResultNew",
     # Result types (backward compatibility)
     "GenerationResult",
     "ScenariosResult",
@@ -297,8 +310,9 @@ def generate(
         >>> from synkro import SilentReporter
         >>> dataset = synkro.generate(policy, reporter=SilentReporter())
     """
-    from synkro.generation.generator import Generator
     import warnings
+
+    from synkro.generation.generator import Generator
 
     if isinstance(policy, str):
         policy = Policy(text=policy)
@@ -321,13 +335,10 @@ def generate(
         )
         # For backward compat, still return GenerationResult
         should_return_result = True
-        return_pipeline_result = False
     elif return_result:
         should_return_result = True
-        return_pipeline_result = True
     else:
         should_return_result = False
-        return_pipeline_result = False
 
     generator = Generator(
         dataset_type=dataset_type,
@@ -452,9 +463,11 @@ def grade(
         ...         print(f"Failed: {grade.feedback}")
     """
     import asyncio
+
     from synkro.llm.client import LLM
     from synkro.quality.grader import Grader
-    from synkro.types.core import Trace, Message, Scenario as BaseScenario
+    from synkro.types.core import Message, Trace
+    from synkro.types.core import Scenario as BaseScenario
 
     if isinstance(policy, str):
         policy_text = policy
@@ -492,5 +505,3 @@ def grade(
         return await grader.grade(trace, policy_text)
 
     return asyncio.run(_grade())
-
-

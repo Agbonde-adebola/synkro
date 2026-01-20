@@ -1,6 +1,5 @@
 """Dataset class for managing generated traces."""
 
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator
@@ -67,19 +66,13 @@ class Dataset(BaseModel):
         filtered = self.traces
 
         if passed is not None:
-            filtered = [
-                t for t in filtered if t.grade and t.grade.passed == passed
-            ]
+            filtered = [t for t in filtered if t.grade and t.grade.passed == passed]
 
         if category is not None:
-            filtered = [
-                t for t in filtered if t.scenario.category == category
-            ]
+            filtered = [t for t in filtered if t.scenario.category == category]
 
         if min_length is not None:
-            filtered = [
-                t for t in filtered if len(t.assistant_message) >= min_length
-            ]
+            filtered = [t for t in filtered if len(t.assistant_message) >= min_length]
 
         return Dataset(traces=filtered)
 
@@ -149,8 +142,8 @@ class Dataset(BaseModel):
     def _dedupe_semantic(self, threshold: float, field: str) -> "Dataset":
         """Remove semantically similar traces using embeddings."""
         try:
-            from sentence_transformers import SentenceTransformer
             import numpy as np
+            from sentence_transformers import SentenceTransformer
         except ImportError:
             raise ImportError(
                 "sentence-transformers is required for semantic deduplication. "
@@ -194,7 +187,9 @@ class Dataset(BaseModel):
         removed = len(self.traces) - len(unique_traces)
 
         if removed > 0:
-            console.print(f"[yellow]🔍 Dedupe:[/yellow] Removed {removed} semantic duplicates (threshold={threshold})")
+            console.print(
+                f"[yellow]🔍 Dedupe:[/yellow] Removed {removed} semantic duplicates (threshold={threshold})"
+            )
 
         return Dataset(traces=unique_traces)
 
@@ -212,7 +207,9 @@ class Dataset(BaseModel):
         """Get unique categories in the dataset."""
         return list(set(t.scenario.category for t in self.traces if t.scenario.category))
 
-    def save(self, path: str | Path | None = None, format: str = "messages", pretty_print: bool = False) -> "Dataset":
+    def save(
+        self, path: str | Path | None = None, format: str = "messages", pretty_print: bool = False
+    ) -> "Dataset":
         """
         Save dataset to a JSONL file.
 
@@ -238,9 +235,13 @@ class Dataset(BaseModel):
             >>> dataset.save("readable.jsonl", pretty_print=True)  # Human-readable
         """
         from synkro.formatters import (
-            MessagesFormatter, ToolCallFormatter, ChatMLFormatter,
-            QAFormatter, LangSmithFormatter, LangfuseFormatter,
             BERTFormatter,
+            ChatMLFormatter,
+            LangfuseFormatter,
+            LangSmithFormatter,
+            MessagesFormatter,
+            QAFormatter,
+            ToolCallFormatter,
         )
 
         # Auto-generate filename if not provided
@@ -271,12 +272,16 @@ class Dataset(BaseModel):
                 f"Unknown format: {format}. Use 'messages', 'qa', 'langsmith', 'langfuse', "
                 f"'tool_call', 'chatml', or 'bert'/'bert:<task>'"
             )
-        
+
         # Print confirmation
         file_size = path.stat().st_size
-        size_str = f"{file_size / 1024:.1f} KB" if file_size < 1024 * 1024 else f"{file_size / 1024 / 1024:.1f} MB"
+        size_str = (
+            f"{file_size / 1024:.1f} KB"
+            if file_size < 1024 * 1024
+            else f"{file_size / 1024 / 1024:.1f} MB"
+        )
         console.print(f"[green]📁 Saved:[/green] {path} ({size_str})")
-        
+
         return self
 
     def to_jsonl(self, format: str = "messages", pretty_print: bool = False) -> str:
@@ -292,9 +297,13 @@ class Dataset(BaseModel):
             JSONL formatted string
         """
         from synkro.formatters import (
-            MessagesFormatter, ToolCallFormatter, ChatMLFormatter,
-            QAFormatter, LangSmithFormatter, LangfuseFormatter,
             BERTFormatter,
+            ChatMLFormatter,
+            LangfuseFormatter,
+            LangSmithFormatter,
+            MessagesFormatter,
+            QAFormatter,
+            ToolCallFormatter,
         )
 
         if format == "messages":
@@ -345,14 +354,17 @@ class Dataset(BaseModel):
             from datasets import Dataset as HFDataset
         except ImportError:
             raise ImportError(
-                "datasets is required for HuggingFace export. "
-                "Install with: pip install datasets"
+                "datasets is required for HuggingFace export. " "Install with: pip install datasets"
             )
 
         from synkro.formatters import (
-            MessagesFormatter, ToolCallFormatter, ChatMLFormatter,
-            QAFormatter, LangSmithFormatter, LangfuseFormatter,
             BERTFormatter,
+            ChatMLFormatter,
+            LangfuseFormatter,
+            LangSmithFormatter,
+            MessagesFormatter,
+            QAFormatter,
+            ToolCallFormatter,
         )
 
         if format == "messages":
@@ -441,8 +453,8 @@ class Dataset(BaseModel):
             Human-readable summary string
         """
         lines = [
-            f"Dataset Summary",
-            f"===============",
+            "Dataset Summary",
+            "===============",
             f"Total traces: {len(self.traces)}",
             f"Passing rate: {self.passing_rate:.1%}",
             f"Categories: {len(self.categories)}",
@@ -462,4 +474,3 @@ class Dataset(BaseModel):
 
     def __repr__(self) -> str:
         return self.__str__()
-

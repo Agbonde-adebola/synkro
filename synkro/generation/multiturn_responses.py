@@ -1,14 +1,14 @@
 """Multi-turn response generation for complex conversations."""
 
+from synkro.generation.follow_ups import FollowUpGenerator
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.core import Scenario, Trace, Message
 from synkro.prompts.multiturn_templates import (
     MULTI_TURN_INITIAL_PROMPT,
     MULTI_TURN_RESPONSE_PROMPT,
 )
 from synkro.prompts.templates import SYSTEM_PROMPT
-from synkro.generation.follow_ups import FollowUpGenerator
+from synkro.types.core import Message, Scenario, Trace
 
 
 class MultiTurnResponseGenerator:
@@ -125,9 +125,7 @@ class MultiTurnResponseGenerator:
             Trace with multi-turn conversation
         """
         # Generate initial exchange
-        messages = await self._generate_initial_response(
-            policy_text, scenario, target_turns
-        )
+        messages = await self._generate_initial_response(policy_text, scenario, target_turns)
 
         # Generate follow-up turns
         for turn in range(1, target_turns):

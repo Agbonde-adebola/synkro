@@ -26,6 +26,19 @@ Framework for turning unstructured policies, handbooks, and documentation into h
 pip install synkro
 ```
 
+## Development
+
+```bash
+# install dev dependencies
+pip install -e ".[dev]"
+
+# install git hooks
+pre-commit install
+
+# (optional) run on entire repo once
+pre-commit run --all-files
+```
+
 ## Quick Start
 
 ```python

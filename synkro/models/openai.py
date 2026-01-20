@@ -28,4 +28,3 @@ class OpenAI(str, Enum):
     O3_MINI = "o3-mini"
     O1 = "o1"
     O1_MINI = "o1-mini"
-

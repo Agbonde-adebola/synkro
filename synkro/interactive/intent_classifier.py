@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.schemas import HITLIntent
 from synkro.prompts.interactive_templates import HITL_INTENT_CLASSIFIER_PROMPT
+from synkro.schemas import HITLIntent
 
 
 class HITLIntentClassifier:

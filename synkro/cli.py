@@ -1,9 +1,10 @@
 """Synkro CLI - Generate training data from the command line."""
 
 import os
-import typer
 from pathlib import Path
 from typing import Optional
+
+import typer
 from dotenv import load_dotenv
 
 # Load .env file from current directory or parent directories
@@ -53,42 +54,50 @@ def generate(
     ),
     config: Optional[Path] = typer.Option(
         None,
-        "--config", "-c",
+        "--config",
+        "-c",
         help="Pre-ingested config file (from 'synkro ingest'). Skips extraction for faster generation.",
     ),
     output: Optional[Path] = typer.Option(
         None,
-        "--output", "-o",
+        "--output",
+        "-o",
         help="Output file path (auto-generated if not specified)",
     ),
     traces: int = typer.Option(
         20,
-        "--traces", "-n",
+        "--traces",
+        "-n",
         help="Number of traces to generate",
     ),
     format: str = typer.Option(
         "messages",
-        "--format", "-f",
+        "--format",
+        "-f",
         help="Output format: messages, qa, langsmith, langfuse, tool_call, chatml",
     ),
     model: Optional[str] = typer.Option(
         None,
-        "--model", "-m",
+        "--model",
+        "-m",
         help="Model for generation (auto-detects from API key if not specified)",
     ),
     provider: Optional[str] = typer.Option(
         None,
-        "--provider", "-p",
+        "--provider",
+        "-p",
         help="LLM provider for local models (ollama, vllm)",
     ),
     endpoint: Optional[str] = typer.Option(
         None,
-        "--endpoint", "-e",
+        "--endpoint",
+        "-e",
         help="API endpoint URL (e.g., http://localhost:11434)",
     ),
     interactive: bool = typer.Option(
         True,
-        "--interactive/--no-interactive", "-i/-I",
+        "--interactive/--no-interactive",
+        "-i/-I",
         help="Enable interactive Logic Map editing before generation (enabled by default)",
     ),
     fast: bool = typer.Option(
@@ -116,9 +125,10 @@ def generate(
 
         synkro generate policy.pdf --fast  # Skip coverage tracking
     """
-    import synkro
-    from synkro import create_pipeline, Policy
     from rich.console import Console
+
+    import synkro
+    from synkro import Policy, create_pipeline
 
     console = Console()
 
@@ -206,22 +216,26 @@ def ingest(
     ),
     output: Optional[Path] = typer.Option(
         None,
-        "--output", "-o",
+        "--output",
+        "-o",
         help="Output config file path (default: <source_name>_config.json)",
     ),
     model: Optional[str] = typer.Option(
         None,
-        "--model", "-m",
+        "--model",
+        "-m",
         help="Model for rule extraction (default: fast model like gemini-2.0-flash)",
     ),
     review: bool = typer.Option(
         False,
-        "--review", "-r",
+        "--review",
+        "-r",
         help="Interactive review of extracted rules",
     ),
     endpoint: Optional[str] = typer.Option(
         None,
-        "--endpoint", "-e",
+        "--endpoint",
+        "-e",
         help="API endpoint URL for local models",
     ),
 ):
@@ -244,8 +258,9 @@ def ingest(
 
         synkro ingest policy.pdf --model gpt-4o  # Override with stronger model
     """
-    import synkro
     from rich.console import Console
+
+    import synkro
 
     console = Console()
 
@@ -262,7 +277,7 @@ def ingest(
     effective_model = model or _get_ingestion_model()
 
     # Ingest
-    config = synkro.ingest(
+    synkro.ingest(
         source,
         output=output,
         model=effective_model,
@@ -281,7 +296,8 @@ def remove(
     ),
     force: bool = typer.Option(
         False,
-        "--force", "-f",
+        "--force",
+        "-f",
         help="Remove without confirmation",
     ),
 ):
@@ -345,6 +361,7 @@ def configs():
     for path in config_files:
         try:
             from synkro.ingestion import PolicyConfig
+
             config = PolicyConfig.load(path)
             table.add_row(
                 str(path),
@@ -363,9 +380,10 @@ def demo():
     """
     Run a quick demo with a built-in example policy.
     """
+    from rich.console import Console
+
     import synkro
     from synkro.examples import EXPENSE_POLICY
-    from rich.console import Console
 
     console = Console()
     console.print("\n[cyan]Running demo with built-in expense policy...[/cyan]\n")
@@ -380,9 +398,10 @@ def demo():
 @app.command()
 def version():
     """Show version information."""
-    import synkro
     from rich.console import Console
-    
+
+    import synkro
+
     console = Console()
     console.print(f"[cyan]synkro[/cyan] v{synkro.__version__}")
 
@@ -394,4 +413,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

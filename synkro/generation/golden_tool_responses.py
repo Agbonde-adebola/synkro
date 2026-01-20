@@ -4,32 +4,32 @@ Generates tool call traces with grounded reasoning and rule citations.
 This is Stage 3 of the Golden Trace pipeline for TOOL_CALL datasets.
 """
 
+import asyncio
 import json
 import uuid
-import asyncio
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.core import Trace, Message, Scenario
-from synkro.types.tool import ToolDefinition, ToolCall, ToolFunction
-from synkro.types.logic_map import LogicMap, GoldenScenario
-from synkro.prompts.golden_templates import GOLDEN_TOOL_TRACE_PROMPT
 from synkro.prompts.tool_templates import (
     GOLDEN_MULTI_TURN_TOOL_DECISION_PROMPT,
     GOLDEN_MULTI_TURN_TOOL_SYNTHESIS_PROMPT,
 )
+from synkro.types.core import Message, Trace
+from synkro.types.logic_map import GoldenScenario, LogicMap
+from synkro.types.tool import ToolCall, ToolDefinition, ToolFunction
 
 if TYPE_CHECKING:
-    from synkro.generation.tool_simulator import ToolSimulator
     from synkro.generation.follow_ups import FollowUpGenerator
+    from synkro.generation.tool_simulator import ToolSimulator
 
 
 # =============================================================================
 # Pydantic models for structured JSON output
 # =============================================================================
+
 
 class GoldenToolCallRequest(BaseModel):
     """A tool call request with rule citation."""
@@ -46,16 +46,13 @@ class GoldenToolDecision(BaseModel):
     needs_tool: bool = Field(description="Whether a tool call is needed")
     reasoning: str = Field(description="Rule-based explanation of decision")
     rule_ids_evaluated: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs that were evaluated"
+        default_factory=list, description="Rule IDs that were evaluated"
     )
     tool_calls: list[GoldenToolCallRequest] = Field(
-        default_factory=list,
-        description="Tool calls with rule citations"
+        default_factory=list, description="Tool calls with rule citations"
     )
     direct_response: str | None = Field(
-        default=None,
-        description="Direct response if no tool needed"
+        default=None, description="Direct response if no tool needed"
     )
 
 
@@ -64,12 +61,10 @@ class GoldenToolSynthesis(BaseModel):
 
     response: str = Field(description="Natural response incorporating tool results")
     rules_applied: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs applied in the response"
+        default_factory=list, description="Rule IDs applied in the response"
     )
     rules_excluded: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs explicitly excluded"
+        default_factory=list, description="Rule IDs explicitly excluded"
     )
 
 
@@ -79,24 +74,19 @@ class GoldenMultiTurnToolDecision(BaseModel):
     needs_tool: bool = Field(description="Whether a tool call is needed")
     reasoning: str = Field(description="Rule-based explanation of decision")
     rule_ids_evaluated: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs evaluated for this turn"
+        default_factory=list, description="Rule IDs evaluated for this turn"
     )
     tool_calls: list[GoldenToolCallRequest] = Field(
-        default_factory=list,
-        description="Tool calls with rule citations"
+        default_factory=list, description="Tool calls with rule citations"
     )
     direct_response: str | None = Field(
-        default=None,
-        description="Direct response if no tool needed"
+        default=None, description="Direct response if no tool needed"
     )
     rules_applied_this_turn: list[str] = Field(
-        default_factory=list,
-        description="Rules applied in this turn's response"
+        default_factory=list, description="Rules applied in this turn's response"
     )
     rules_excluded_this_turn: list[str] = Field(
-        default_factory=list,
-        description="Rules excluded in this turn"
+        default_factory=list, description="Rules excluded in this turn"
     )
 
 
@@ -105,18 +95,17 @@ class GoldenMultiTurnToolSynthesis(BaseModel):
 
     response: str = Field(description="Natural response for follow-up")
     rules_applied_this_turn: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs applied in this turn"
+        default_factory=list, description="Rule IDs applied in this turn"
     )
     rules_excluded_this_turn: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs excluded in this turn"
+        default_factory=list, description="Rule IDs excluded in this turn"
     )
 
 
 # =============================================================================
 # Golden Tool Call Response Generator
 # =============================================================================
+
 
 class GoldenToolCallResponseGenerator:
     """
@@ -185,6 +174,7 @@ Format:
         """Lazy initialization of follow-up generator for multi-turn."""
         if self._follow_up_gen is None:
             from synkro.generation.follow_ups import FollowUpGenerator
+
             self._follow_up_gen = FollowUpGenerator(llm=self.llm)
         return self._follow_up_gen
 
@@ -205,9 +195,7 @@ Format:
         lines.append("RULES:")
         for rule in logic_map.rules:
             deps = f" [depends on: {', '.join(rule.dependencies)}]" if rule.dependencies else ""
-            lines.append(
-                f"  {rule.rule_id} ({rule.category.value}): {rule.text}{deps}"
-            )
+            lines.append(f"  {rule.rule_id} ({rule.category.value}): {rule.text}{deps}")
             lines.append(f"    IF: {rule.condition}")
             lines.append(f"    THEN: {rule.action}")
         return "\n".join(lines)
@@ -233,18 +221,14 @@ Format:
             Trace with proper tool calling format and rule citations
         """
         if target_turns > 1:
-            return await self._generate_multi_turn(
-                policy_text, logic_map, scenario, target_turns
-            )
+            return await self._generate_multi_turn(policy_text, logic_map, scenario, target_turns)
 
         # Single-turn generation
         tools_desc = self._get_tools_description()
         logic_map_str = self._format_logic_map(logic_map)
 
         # Step 1: Get LLM decision on tool usage with rule grounding
-        decision = await self._get_tool_decision(
-            policy_text, logic_map_str, scenario, tools_desc
-        )
+        decision = await self._get_tool_decision(policy_text, logic_map_str, scenario, tools_desc)
 
         # Step 2: Build the message sequence
         messages = await self._build_message_sequence(
@@ -324,20 +308,15 @@ Follow the policy guidelines to assist customers effectively."""
             tool_calls = []
             for tc in decision.tool_calls:
                 call_id = self._generate_call_id()
-                tool_calls.append(ToolCall(
-                    id=call_id,
-                    type="function",
-                    function=ToolFunction(
-                        name=tc.name,
-                        arguments=tc.arguments
+                tool_calls.append(
+                    ToolCall(
+                        id=call_id,
+                        type="function",
+                        function=ToolFunction(name=tc.name, arguments=tc.arguments),
                     )
-                ))
+                )
 
-            messages.append(Message(
-                role="assistant",
-                content=None,
-                tool_calls=tool_calls
-            ))
+            messages.append(Message(role="assistant", content=None, tool_calls=tool_calls))
 
             # Tool response messages
             tool_results = []
@@ -345,11 +324,7 @@ Follow the policy guidelines to assist customers effectively."""
                 result = await self._simulate_tool_call(tc)
                 tool_results.append(result)
 
-                messages.append(Message(
-                    role="tool",
-                    content=result,
-                    tool_call_id=tc.id
-                ))
+                messages.append(Message(role="tool", content=result, tool_call_id=tc.id))
 
             # Final assistant message synthesizing results
             final_response = await self._synthesize_response(
@@ -377,15 +352,14 @@ Follow the policy guidelines to assist customers effectively."""
             tool = self.tools_by_name[tool_name]
             if tool.mock_responses:
                 import random
+
                 return random.choice(tool.mock_responses)
 
         # Default mock response
         args = json.loads(tool_call.function.arguments)
-        return json.dumps({
-            "status": "success",
-            "result": f"Simulated response for {tool_name}",
-            "query": args
-        })
+        return json.dumps(
+            {"status": "success", "result": f"Simulated response for {tool_name}", "query": args}
+        )
 
     async def _synthesize_response(
         self,
@@ -502,9 +476,7 @@ applying the relevant rules from the Logic Map."""
         cumulative_rules_excluded: list[str] = []
 
         # Step 1: Generate initial response (Turn 1)
-        decision = await self._get_tool_decision(
-            policy_text, logic_map_str, scenario, tools_desc
-        )
+        decision = await self._get_tool_decision(policy_text, logic_map_str, scenario, tools_desc)
         messages = await self._build_message_sequence(
             policy_text, logic_map_str, scenario, tools_desc, decision
         )
@@ -535,16 +507,18 @@ applying the relevant rules from the Logic Map."""
             )
 
             # Build response for this turn
-            turn_messages, turn_rules_applied, turn_rules_excluded = (
-                await self._build_follow_up_message_sequence(
-                    policy_text=policy_text,
-                    logic_map_str=logic_map_str,
-                    messages=messages,
-                    follow_up_question=follow_up.question,
-                    tools_desc=tools_desc,
-                    decision=follow_up_decision,
-                    cumulative_rules_applied=cumulative_rules_applied,
-                )
+            (
+                turn_messages,
+                turn_rules_applied,
+                turn_rules_excluded,
+            ) = await self._build_follow_up_message_sequence(
+                policy_text=policy_text,
+                logic_map_str=logic_map_str,
+                messages=messages,
+                follow_up_question=follow_up.question,
+                tools_desc=tools_desc,
+                decision=follow_up_decision,
+                cumulative_rules_applied=cumulative_rules_applied,
             )
 
             messages.extend(turn_messages)
@@ -576,9 +550,7 @@ applying the relevant rules from the Logic Map."""
                 tool_strs = []
                 for tc in msg.tool_calls:
                     if hasattr(tc, "function"):
-                        tool_strs.append(
-                            f"  - {tc.function.name}({tc.function.arguments})"
-                        )
+                        tool_strs.append(f"  - {tc.function.name}({tc.function.arguments})")
                     elif isinstance(tc, dict) and "function" in tc:
                         func = tc["function"]
                         tool_strs.append(
@@ -586,7 +558,7 @@ applying the relevant rules from the Logic Map."""
                         )
                     else:
                         tool_strs.append(f"  - {tc}")
-                formatted.append(f"ASSISTANT: [Tool Calls]\n" + "\n".join(tool_strs))
+                formatted.append("ASSISTANT: [Tool Calls]\n" + "\n".join(tool_strs))
             elif msg.role == "tool":
                 formatted.append(f"TOOL RESULT [{msg.tool_call_id}]: {msg.content}")
             else:
@@ -654,30 +626,24 @@ applying the relevant rules from the Logic Map."""
                     )
                 )
 
-            new_messages.append(
-                Message(role="assistant", content=None, tool_calls=tool_calls)
-            )
+            new_messages.append(Message(role="assistant", content=None, tool_calls=tool_calls))
 
             # Tool response messages
             tool_results = []
             for tc in tool_calls:
                 result = await self._simulate_tool_call(tc)
                 tool_results.append(result)
-                new_messages.append(
-                    Message(role="tool", content=result, tool_call_id=tc.id)
-                )
+                new_messages.append(Message(role="tool", content=result, tool_call_id=tc.id))
 
             # Final assistant message with rule-grounded synthesis
-            response, rules_applied, rules_excluded = (
-                await self._synthesize_follow_up_response(
-                    policy_text=policy_text,
-                    logic_map_str=logic_map_str,
-                    messages=messages,
-                    follow_up_question=follow_up_question,
-                    tool_calls=tool_calls,
-                    tool_results=tool_results,
-                    cumulative_rules_applied=cumulative_rules_applied,
-                )
+            response, rules_applied, rules_excluded = await self._synthesize_follow_up_response(
+                policy_text=policy_text,
+                logic_map_str=logic_map_str,
+                messages=messages,
+                follow_up_question=follow_up_question,
+                tool_calls=tool_calls,
+                tool_results=tool_results,
+                cumulative_rules_applied=cumulative_rules_applied,
             )
             new_messages.append(Message(role="assistant", content=response))
 
@@ -688,16 +654,14 @@ applying the relevant rules from the Logic Map."""
                 rules_applied = decision.rules_applied_this_turn
                 rules_excluded = decision.rules_excluded_this_turn
             else:
-                response, rules_applied, rules_excluded = (
-                    await self._synthesize_follow_up_response(
-                        policy_text=policy_text,
-                        logic_map_str=logic_map_str,
-                        messages=messages,
-                        follow_up_question=follow_up_question,
-                        tool_calls=[],
-                        tool_results=[],
-                        cumulative_rules_applied=cumulative_rules_applied,
-                    )
+                response, rules_applied, rules_excluded = await self._synthesize_follow_up_response(
+                    policy_text=policy_text,
+                    logic_map_str=logic_map_str,
+                    messages=messages,
+                    follow_up_question=follow_up_question,
+                    tool_calls=[],
+                    tool_results=[],
+                    cumulative_rules_applied=cumulative_rules_applied,
                 )
             new_messages.append(Message(role="assistant", content=response))
 
@@ -746,9 +710,7 @@ applying the relevant rules from the Logic Map."""
         if self.thinking:
             prompt = prompt + self.THINKING_INSTRUCTION
 
-        synthesis = await self.llm.generate_structured(
-            prompt, GoldenMultiTurnToolSynthesis
-        )
+        synthesis = await self.llm.generate_structured(prompt, GoldenMultiTurnToolSynthesis)
         return (
             synthesis.response,
             synthesis.rules_applied_this_turn,
@@ -774,10 +736,7 @@ applying the relevant rules from the Logic Map."""
         Returns:
             List of traces with tool calling format
         """
-        tasks = [
-            self.generate_single(policy_text, logic_map, s, target_turns)
-            for s in scenarios
-        ]
+        tasks = [self.generate_single(policy_text, logic_map, s, target_turns) for s in scenarios]
         return await asyncio.gather(*tasks)
 
 

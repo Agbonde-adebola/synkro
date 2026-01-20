@@ -11,31 +11,30 @@ Comprehensive example demonstrating all Synkro features working together:
 - Real-world workflow from start to finish
 """
 
-import os
+import asyncio
 from pathlib import Path
+
 from dotenv import load_dotenv
+
+from synkro import (
+    LLM,
+    Anthropic,
+    Dataset,
+    FileLoggingReporter,
+    Generator,
+    Grader,
+    OpenAI,
+    Planner,
+    Policy,
+    Refiner,
+    ResponseGenerator,
+    ScenarioGenerator,
+)
+from synkro.examples import EXPENSE_POLICY
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
-
-import asyncio
-from synkro import (
-    Policy,
-    Dataset,
-    DatasetType,
-    Generator,
-    Grader,
-    Refiner,
-    Planner,
-    ScenarioGenerator,
-    ResponseGenerator,
-    LLM,
-    OpenAI,
-    Anthropic,
-    FileLoggingReporter,
-)
-from synkro.examples import EXPENSE_POLICY
 
 
 async def main():
@@ -72,9 +71,9 @@ async def main():
     # Fast/cheap for generation, high-quality for grading
     generator = Generator(
         generation_model=OpenAI.GPT_4O_MINI,  # Fast, cheap
-        grading_model=OpenAI.GPT_4O,          # High quality
+        grading_model=OpenAI.GPT_4O,  # High quality
         max_iterations=3,
-        reporter=reporter,                    # Log to both CLI and file
+        reporter=reporter,  # Log to both CLI and file
     )
 
     # Generate chat format (default)
@@ -153,7 +152,7 @@ async def main():
     print("Step 4: Grading responses...")
     grader = Grader(llm=grading_llm)
     grades = await grader.grade_batch(traces, policy.text)
-    
+
     for trace, grade in zip(traces, grades):
         trace.grade = grade
 
@@ -165,7 +164,7 @@ async def main():
     print("Step 5: Refining failed responses...")
     refiner = Refiner(llm=generation_llm)
     refined_traces = []
-    
+
     for trace, grade in zip(traces, grades):
         if grade.passed:
             refined_traces.append(trace)
@@ -177,7 +176,9 @@ async def main():
             refined_traces.append(refined)
 
     final_passed = sum(1 for t in refined_traces if t.grade and t.grade.passed)
-    print(f"  After refinement: {final_passed}/{len(refined_traces)} passed ({final_passed/len(refined_traces):.1%})")
+    print(
+        f"  After refinement: {final_passed}/{len(refined_traces)} passed ({final_passed/len(refined_traces):.1%})"
+    )
     print()
 
     # Create dataset from custom pipeline
@@ -231,6 +232,7 @@ async def main():
 
     if all_issues:
         from collections import Counter
+
         issue_counts = Counter(all_issues)
         print("  Most common issues:")
         for issue, count in issue_counts.most_common(3):
@@ -279,4 +281,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

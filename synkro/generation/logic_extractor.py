@@ -6,9 +6,9 @@ This is Stage 1 of the Golden Trace pipeline.
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
+from synkro.prompts.golden_templates import LOGIC_EXTRACTION_PROMPT
 from synkro.schemas import LogicMapOutput
 from synkro.types.logic_map import LogicMap, Rule, RuleCategory
-from synkro.prompts.golden_templates import LOGIC_EXTRACTION_PROMPT
 
 
 class LogicExtractor:

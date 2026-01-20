@@ -9,22 +9,22 @@ from asyncio import Semaphore
 from typing import TYPE_CHECKING
 
 from synkro.core.policy import Policy
-from synkro.types.core import Plan, Scenario, Trace
 from synkro.generation.planner import Planner
-from synkro.generation.scenarios import ScenarioGenerator
 from synkro.generation.responses import ResponseGenerator
+from synkro.generation.scenarios import ScenarioGenerator
 from synkro.quality.grader import Grader
 from synkro.quality.refiner import Refiner
+from synkro.types.core import Plan, Scenario, Trace
 
 if TYPE_CHECKING:
-    from synkro.generation.tool_responses import ToolCallResponseGenerator
-    from synkro.generation.logic_extractor import LogicExtractor
-    from synkro.generation.golden_scenarios import GoldenScenarioGenerator
     from synkro.generation.golden_responses import GoldenResponseGenerator
+    from synkro.generation.golden_scenarios import GoldenScenarioGenerator
     from synkro.generation.golden_tool_responses import GoldenToolCallResponseGenerator
-    from synkro.quality.verifier import TraceVerifier
+    from synkro.generation.logic_extractor import LogicExtractor
+    from synkro.generation.tool_responses import ToolCallResponseGenerator
     from synkro.quality.golden_refiner import GoldenRefiner
-    from synkro.types.logic_map import LogicMap, GoldenScenario
+    from synkro.quality.verifier import TraceVerifier
+    from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 class PlanPhase:
@@ -61,10 +61,10 @@ class PlanPhase:
 class ScenarioPhase:
     """
     Scenario generation phase - creates scenarios for each category.
-    
+
     Runs in parallel across categories for efficiency.
     """
-    
+
     async def execute(
         self,
         policy: Policy,
@@ -74,23 +74,24 @@ class ScenarioPhase:
     ) -> list[Scenario]:
         """
         Execute scenario generation.
-        
+
         Args:
             policy: The policy text
             plan: Plan with categories
             generator: ScenarioGenerator component
             semaphore: Semaphore for rate limiting
-            
+
         Returns:
             List of all generated scenarios
         """
+
         async def limited_generate(category):
             async with semaphore:
                 return await generator.generate(policy.text, category.count, category=category)
-        
+
         tasks = [limited_generate(cat) for cat in plan.categories]
         results = await asyncio.gather(*tasks)
-        
+
         # Flatten results
         return [scenario for batch in results for scenario in batch]
 
@@ -124,6 +125,7 @@ class ResponsePhase:
         Returns:
             List of traces with generated responses
         """
+
         async def limited_generate(scenario):
             async with semaphore:
                 return await generator._generate_single(policy.text, scenario, target_turns)
@@ -135,10 +137,10 @@ class ResponsePhase:
 class GradingPhase:
     """
     Grading and refinement phase - evaluates and improves responses.
-    
+
     Includes the refinement loop for failed traces.
     """
-    
+
     async def execute(
         self,
         policy: Policy,
@@ -150,7 +152,7 @@ class GradingPhase:
     ) -> tuple[list[Trace], float]:
         """
         Execute grading and refinement.
-        
+
         Args:
             policy: The policy text
             traces: List of traces to grade
@@ -158,57 +160,57 @@ class GradingPhase:
             refiner: Refiner component
             max_iterations: Maximum refinement iterations
             semaphore: Semaphore for rate limiting
-            
+
         Returns:
             Tuple of (graded traces, pass rate percentage)
         """
+
         async def limited_grade(trace):
             async with semaphore:
                 return await grader.grade(trace, policy.text)
-        
+
         async def limited_refine(trace, grade):
             async with semaphore:
                 return await refiner.refine(trace, grade, policy.text)
-        
+
         # Initial grading
         grade_tasks = [limited_grade(t) for t in traces]
         grades = await asyncio.gather(*grade_tasks)
-        
+
         # Attach grades
         final_traces = list(traces)
         for trace, grade in zip(final_traces, grades):
             trace.grade = grade
-        
+
         # Refinement loop
         for iteration in range(1, max_iterations):
             failed_indices = [i for i, t in enumerate(final_traces) if not t.grade.passed]
-            
+
             if not failed_indices:
                 break
-            
+
             # Refine failed traces
             refine_tasks = [
-                limited_refine(final_traces[i], final_traces[i].grade)
-                for i in failed_indices
+                limited_refine(final_traces[i], final_traces[i].grade) for i in failed_indices
             ]
             refined_traces = await asyncio.gather(*refine_tasks)
-            
+
             # Preserve original scenarios and update traces
             for idx, refined in zip(failed_indices, refined_traces):
                 refined.scenario = final_traces[idx].scenario
                 final_traces[idx] = refined
-            
+
             # Re-grade refined traces
             regrade_tasks = [limited_grade(final_traces[i]) for i in failed_indices]
             new_grades = await asyncio.gather(*regrade_tasks)
-            
+
             for idx, grade in zip(failed_indices, new_grades):
                 final_traces[idx].grade = grade
-        
+
         # Calculate pass rate
         passed_count = sum(1 for t in final_traces if t.grade and t.grade.passed)
         pass_rate = (passed_count / len(final_traces) * 100) if final_traces else 0
-        
+
         return final_traces, pass_rate
 
 
@@ -247,9 +249,12 @@ class ToolCallResponsePhase:
         Returns:
             List of traces with proper tool calling format
         """
+
         async def limited_generate(scenario):
             async with semaphore:
-                return await generator.generate_single(policy.text, scenario, target_turns=target_turns)
+                return await generator.generate_single(
+                    policy.text, scenario, target_turns=target_turns
+                )
 
         tasks = [limited_generate(s) for s in scenarios]
         return await asyncio.gather(*tasks)
@@ -319,6 +324,7 @@ class GoldenScenarioPhase:
         Returns:
             Tuple of (scenarios, type distribution dict)
         """
+
         async def limited_generate(category):
             async with semaphore:
                 return await generator.generate(policy.text, logic_map, category, category.count)
@@ -377,6 +383,7 @@ class GoldenTracePhase:
         Returns:
             List of traces with grounded reasoning
         """
+
         async def limited_generate(scenario):
             async with semaphore:
                 return await generator.generate_single(
@@ -422,6 +429,7 @@ class GoldenToolCallPhase:
         Returns:
             List of traces with tool calling format
         """
+
         async def limited_generate(scenario):
             async with semaphore:
                 return await generator.generate_single(
@@ -472,11 +480,10 @@ class VerificationPhase:
         Returns:
             Tuple of (verified traces, pass rate percentage)
         """
+
         async def limited_verify(trace, scenario):
             async with semaphore:
-                verification, grade = await verifier.verify_and_grade(
-                    trace, logic_map, scenario
-                )
+                verification, grade = await verifier.verify_and_grade(trace, logic_map, scenario)
                 return verification, grade
 
         async def limited_refine(trace, scenario, verification):
@@ -494,6 +501,7 @@ class VerificationPhase:
             if not scenario:
                 # Create a minimal GoldenScenario from the trace scenario
                 from synkro.types.logic_map import GoldenScenario, ScenarioType
+
                 scenario = GoldenScenario(
                     description=trace.scenario.description,
                     context=trace.scenario.context or "",
@@ -515,9 +523,7 @@ class VerificationPhase:
 
         # Refinement loop
         for iteration in range(1, max_iterations):
-            failed_indices = [
-                i for i, v in enumerate(verifications) if not v.passed
-            ]
+            failed_indices = [i for i, v in enumerate(verifications) if not v.passed]
 
             if not failed_indices:
                 break
@@ -528,6 +534,7 @@ class VerificationPhase:
                 scenario = scenario_lookup.get(final_traces[i].scenario.description)
                 if not scenario:
                     from synkro.types.logic_map import GoldenScenario, ScenarioType
+
                     scenario = GoldenScenario(
                         description=final_traces[i].scenario.description,
                         context=final_traces[i].scenario.context or "",
@@ -536,9 +543,7 @@ class VerificationPhase:
                         target_rule_ids=[],
                         expected_outcome="",
                     )
-                refine_tasks.append(
-                    limited_refine(final_traces[i], scenario, verifications[i])
-                )
+                refine_tasks.append(limited_refine(final_traces[i], scenario, verifications[i]))
 
             refined_traces = await asyncio.gather(*refine_tasks)
 
@@ -553,6 +558,7 @@ class VerificationPhase:
                 scenario = scenario_lookup.get(final_traces[i].scenario.description)
                 if not scenario:
                     from synkro.types.logic_map import GoldenScenario, ScenarioType
+
                     scenario = GoldenScenario(
                         description=final_traces[i].scenario.description,
                         context=final_traces[i].scenario.context or "",
@@ -589,4 +595,3 @@ __all__ = [
     "GoldenToolCallPhase",
     "VerificationPhase",
 ]
-

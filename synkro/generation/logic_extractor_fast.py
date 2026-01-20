@@ -17,7 +17,6 @@ from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
 from synkro.types.logic_map import LogicMap, Rule, RuleCategory
 
-
 # Simplified schema for faster extraction
 CHUNK_EXTRACTION_PROMPT = """Extract rules from this SECTION of a policy document.
 
@@ -39,6 +38,7 @@ Output as a JSON array of rules."""
 @dataclass
 class ChunkRule:
     """Rule extracted from a single chunk."""
+
     text: str
     category: str
     condition: str
@@ -114,7 +114,7 @@ class FastLogicExtractor:
     def _split_into_chunks(self, text: str) -> list[str]:
         """Split document into overlapping chunks at paragraph boundaries."""
         # Split by double newlines (paragraphs) or section headers
-        paragraphs = re.split(r'\n\s*\n|\n(?=[A-Z][A-Z\s]+:?\n)', text)
+        paragraphs = re.split(r"\n\s*\n|\n(?=[A-Z][A-Z\s]+:?\n)", text)
 
         chunks = []
         current_chunk = ""
@@ -128,7 +128,11 @@ class FastLogicExtractor:
             if len(current_chunk) + len(para) > self.chunk_size and current_chunk:
                 chunks.append(current_chunk)
                 # Start new chunk with overlap from end of previous
-                overlap_text = current_chunk[-self.chunk_overlap:] if len(current_chunk) > self.chunk_overlap else current_chunk
+                overlap_text = (
+                    current_chunk[-self.chunk_overlap :]
+                    if len(current_chunk) > self.chunk_overlap
+                    else current_chunk
+                )
                 current_chunk = overlap_text + "\n\n" + para
             else:
                 current_chunk = current_chunk + "\n\n" + para if current_chunk else para
@@ -140,8 +144,9 @@ class FastLogicExtractor:
 
     async def _extract_from_chunk(self, chunk: str, chunk_index: int) -> list[ChunkRule]:
         """Extract rules from a single chunk."""
-        from pydantic import BaseModel, Field
         from typing import Literal
+
+        from pydantic import BaseModel, Field
 
         class RuleOutput(BaseModel):
             text: str
@@ -172,6 +177,7 @@ class FastLogicExtractor:
     async def _extract_single(self, policy_text: str) -> LogicMap:
         """Standard extraction for small documents."""
         from synkro.generation.logic_extractor import LogicExtractor
+
         extractor = LogicExtractor(llm=self.llm)
         return await extractor.extract(policy_text)
 
@@ -182,7 +188,7 @@ class FastLogicExtractor:
 
         for rule in rules:
             # Normalize: lowercase, collapse whitespace, first 100 chars
-            normalized = re.sub(r'\s+', ' ', rule.text.lower().strip())[:100]
+            normalized = re.sub(r"\s+", " ", rule.text.lower().strip())[:100]
 
             if normalized not in seen_texts:
                 seen_texts.add(normalized)
@@ -218,10 +224,7 @@ class FastLogicExtractor:
         return LogicMap(rules=logic_rules, root_rules=root_rules)
 
     def _infer_dependencies(
-        self,
-        rule: ChunkRule,
-        all_rules: list[ChunkRule],
-        current_index: int
+        self, rule: ChunkRule, all_rules: list[ChunkRule], current_index: int
     ) -> list[str]:
         """Infer dependencies based on text analysis."""
         dependencies = []
@@ -229,12 +232,12 @@ class FastLogicExtractor:
 
         # Look for references to other rules
         dependency_patterns = [
-            r'if .*(?:approved|granted|met)',
-            r'after .*(?:completing|submitting)',
-            r'subject to',
-            r'in accordance with',
-            r'as specified in',
-            r'per (?:the )?(?:above|previous)',
+            r"if .*(?:approved|granted|met)",
+            r"after .*(?:completing|submitting)",
+            r"subject to",
+            r"in accordance with",
+            r"as specified in",
+            r"per (?:the )?(?:above|previous)",
         ]
 
         # Check if this rule seems to depend on earlier rules
@@ -242,7 +245,7 @@ class FastLogicExtractor:
             if i >= current_index:
                 continue
 
-            other_text_lower = other_rule.text.lower()
+            other_rule.text.lower()
 
             # Check for explicit references
             for pattern in dependency_patterns:
@@ -258,11 +261,24 @@ class FastLogicExtractor:
     def _rules_related(self, rule_a: ChunkRule, rule_b: ChunkRule) -> bool:
         """Check if two rules are semantically related."""
         # Simple heuristic: check for shared key terms
-        key_terms_a = set(re.findall(r'\b[a-z]{4,}\b', rule_a.text.lower()))
-        key_terms_b = set(re.findall(r'\b[a-z]{4,}\b', rule_b.text.lower()))
+        key_terms_a = set(re.findall(r"\b[a-z]{4,}\b", rule_a.text.lower()))
+        key_terms_b = set(re.findall(r"\b[a-z]{4,}\b", rule_b.text.lower()))
 
         # Remove common words
-        common_words = {'must', 'shall', 'should', 'will', 'have', 'been', 'with', 'from', 'that', 'this', 'they', 'their'}
+        common_words = {
+            "must",
+            "shall",
+            "should",
+            "will",
+            "have",
+            "been",
+            "with",
+            "from",
+            "that",
+            "this",
+            "they",
+            "their",
+        }
         key_terms_a -= common_words
         key_terms_b -= common_words
 

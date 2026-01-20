@@ -2,9 +2,9 @@
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.types.core import Plan, Category
-from synkro.prompts.templates import POLICY_PLANNING_PROMPT, POLICY_COMPLEXITY_PROMPT
-from synkro.schemas import PolicyPlan, PolicyComplexity
+from synkro.prompts.templates import POLICY_COMPLEXITY_PROMPT, POLICY_PLANNING_PROMPT
+from synkro.schemas import PolicyComplexity, PolicyPlan
+from synkro.types.core import Category, Plan
 
 
 class Planner:
@@ -122,10 +122,13 @@ Analyze the policy and create a plan with categories for generating training dat
                 categories=[
                     Category(name="Happy Path", description="Clear success cases", count=third),
                     Category(name="Edge Cases", description="Ambiguous situations", count=third),
-                    Category(name="Violations", description="Clear failure cases", count=third + remainder),
+                    Category(
+                        name="Violations",
+                        description="Clear failure cases",
+                        count=third + remainder,
+                    ),
                 ],
                 reasoning="Default plan - unable to parse LLM response",
                 recommended_turns=complexity.recommended_turns if complexity else 1,
                 complexity_level=complexity.complexity_level if complexity else "simple",
             )
-

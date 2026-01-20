@@ -11,10 +11,10 @@ This is Stage 4 of the Golden Trace pipeline.
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
-from synkro.schemas import VerificationOutput
-from synkro.types.core import Trace, GradeResult
-from synkro.types.logic_map import LogicMap, GoldenScenario, VerificationResult
 from synkro.prompts.golden_templates import VERIFICATION_PROMPT
+from synkro.schemas import VerificationOutput
+from synkro.types.core import GradeResult, Trace
+from synkro.types.logic_map import GoldenScenario, LogicMap, VerificationResult
 
 
 class TraceVerifier:
@@ -75,7 +75,9 @@ class TraceVerifier:
         # Format inputs for prompt
         logic_map_str = self._format_logic_map(logic_map)
         trace_messages_str = self._format_trace_messages(trace)
-        reasoning_str = self._format_reasoning_chain(reasoning_chain) if reasoning_chain else "Not provided"
+        reasoning_str = (
+            self._format_reasoning_chain(reasoning_chain) if reasoning_chain else "Not provided"
+        )
 
         # Build prompt
         prompt = VERIFICATION_PROMPT.format(
@@ -109,9 +111,7 @@ class TraceVerifier:
         lines.append("RULES:")
         for rule in logic_map.rules:
             deps = f" [depends on: {', '.join(rule.dependencies)}]" if rule.dependencies else ""
-            lines.append(
-                f"  {rule.rule_id} ({rule.category.value}): {rule.text}{deps}"
-            )
+            lines.append(f"  {rule.rule_id} ({rule.category.value}): {rule.text}{deps}")
             lines.append(f"    IF: {rule.condition}")
             lines.append(f"    THEN: {rule.action}")
 
@@ -131,11 +131,13 @@ class TraceVerifier:
             if msg.tool_calls:
                 tool_info = []
                 for tc in msg.tool_calls:
-                    if hasattr(tc, 'function'):
+                    if hasattr(tc, "function"):
                         tool_info.append(f"  - {tc.function.name}({tc.function.arguments})")
                     elif isinstance(tc, dict):
-                        func = tc.get('function', {})
-                        tool_info.append(f"  - {func.get('name', 'unknown')}({func.get('arguments', '{}')})")
+                        func = tc.get("function", {})
+                        tool_info.append(
+                            f"  - {func.get('name', 'unknown')}({func.get('arguments', '{}')})"
+                        )
                 content = "Tool calls:\n" + "\n".join(tool_info)
 
             # Handle tool responses
@@ -150,7 +152,7 @@ class TraceVerifier:
         """Format reasoning chain for verification prompt."""
         lines = []
         for i, step in enumerate(reasoning_chain, 1):
-            if hasattr(step, 'rule_id'):
+            if hasattr(step, "rule_id"):
                 applies = "APPLIES" if step.applies else "DOES NOT APPLY"
                 lines.append(f"Step {i}: {step.rule_id} - {applies}")
                 lines.append(f"  Rule: {step.rule_text}")
@@ -159,7 +161,7 @@ class TraceVerifier:
                     lines.append(f"  Excludes: {', '.join(step.exclusions)}")
             else:
                 # Handle dict format
-                applies = "APPLIES" if step.get('applies', False) else "DOES NOT APPLY"
+                applies = "APPLIES" if step.get("applies", False) else "DOES NOT APPLY"
                 lines.append(f"Step {i}: {step.get('rule_id', 'unknown')} - {applies}")
                 lines.append(f"  Reasoning: {step.get('reasoning', 'N/A')}")
 
@@ -183,12 +185,14 @@ class TraceVerifier:
             Tuple of (VerificationResult, GradeResult)
         """
         # Extract reasoning chain metadata from trace (if present)
-        reasoning_chain = getattr(trace, 'reasoning_chain', None)
-        rules_applied = getattr(trace, 'rules_applied', None)
-        rules_excluded = getattr(trace, 'rules_excluded', None)
+        reasoning_chain = getattr(trace, "reasoning_chain", None)
+        rules_applied = getattr(trace, "rules_applied", None)
+        rules_excluded = getattr(trace, "rules_excluded", None)
 
         verification = await self.verify(
-            trace, logic_map, scenario,
+            trace,
+            logic_map,
+            scenario,
             reasoning_chain=reasoning_chain,
             rules_applied=rules_applied,
             rules_excluded=rules_excluded,
@@ -214,7 +218,9 @@ class TraceVerifier:
             feedback_parts.append(f"Skipped rules: {', '.join(verification.skipped_rules)}")
 
         if verification.hallucinated_rules:
-            feedback_parts.append(f"Hallucinated rules: {', '.join(verification.hallucinated_rules)}")
+            feedback_parts.append(
+                f"Hallucinated rules: {', '.join(verification.hallucinated_rules)}"
+            )
 
         if verification.contradictions:
             feedback_parts.append(f"Contradictions: {'; '.join(verification.contradictions)}")

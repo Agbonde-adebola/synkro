@@ -10,7 +10,7 @@ This example shows how to:
 3. Generate traces with specialized tool grading & refinement
 4. Save traces in OpenAI function calling format
 
-Tool call traces now use specialized ToolCallGrader 
+Tool call traces now use specialized ToolCallGrader
 and ToolCallRefiner that evaluate tool-specific criteria:
 - Tool Selection: Did they use the right tool?
 - Parameter Accuracy: Were the parameters correct?
@@ -30,15 +30,16 @@ Output format follows OpenAI's function calling format:
 """
 
 from pathlib import Path
+
 from dotenv import load_dotenv
+
+from synkro import DatasetType, ToolDefinition, create_pipeline
+from synkro.models.google import Google
+from synkro.reporting import FileLoggingReporter
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
-
-from synkro import create_pipeline, ToolDefinition, DatasetType
-from synkro.models.google import Google
-from synkro.reporting import FileLoggingReporter
 
 # =============================================================================
 # Step 1: Define your tools
@@ -53,17 +54,17 @@ web_search = ToolDefinition(
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Search query - be specific and include relevant keywords"
+                "description": "Search query - be specific and include relevant keywords",
             }
         },
-        "required": ["query"]
+        "required": ["query"],
     },
     # Example responses help the LLM generate realistic simulated tool outputs
     mock_responses=[
         "Current weather in NYC: 72°F, sunny with light clouds",
         "Bitcoin price: $67,234.56 USD (as of 2:30 PM EST)",
         "Python 3.12 was released on October 2, 2023",
-    ]
+    ],
 )
 
 # Database query tool
@@ -73,21 +74,15 @@ customer_lookup = ToolDefinition(
     parameters={
         "type": "object",
         "properties": {
-            "customer_id": {
-                "type": "string",
-                "description": "Customer ID (format: CUST-XXXXX)"
-            },
-            "email": {
-                "type": "string",
-                "description": "Customer email address"
-            }
-        }
+            "customer_id": {"type": "string", "description": "Customer ID (format: CUST-XXXXX)"},
+            "email": {"type": "string", "description": "Customer email address"},
+        },
     },
     mock_responses=[
         '{"id": "CUST-12345", "name": "Jane Smith", "tier": "Premium", "since": "2022-01-15"}',
         '{"id": "CUST-67890", "name": "John Doe", "tier": "Basic", "since": "2024-06-01"}',
         '{"error": "Customer not found"}',
-    ]
+    ],
 )
 
 # Internal API tool
@@ -97,30 +92,24 @@ create_ticket = ToolDefinition(
     parameters={
         "type": "object",
         "properties": {
-            "customer_id": {
-                "type": "string",
-                "description": "Customer ID for the ticket"
-            },
+            "customer_id": {"type": "string", "description": "Customer ID for the ticket"},
             "priority": {
                 "type": "string",
                 "enum": ["low", "medium", "high", "urgent"],
-                "description": "Ticket priority level"
+                "description": "Ticket priority level",
             },
             "category": {
                 "type": "string",
-                "description": "Issue category (billing, technical, account, other)"
+                "description": "Issue category (billing, technical, account, other)",
             },
-            "description": {
-                "type": "string",
-                "description": "Detailed description of the issue"
-            }
+            "description": {"type": "string", "description": "Detailed description of the issue"},
         },
-        "required": ["customer_id", "priority", "category", "description"]
+        "required": ["customer_id", "priority", "category", "description"],
     },
     mock_responses=[
         '{"ticket_id": "TKT-98765", "status": "created", "estimated_response": "2 hours"}',
         '{"ticket_id": "TKT-11111", "status": "created", "estimated_response": "24 hours"}',
-    ]
+    ],
 )
 
 # =============================================================================
@@ -169,7 +158,7 @@ pipeline = create_pipeline(
     model=Google.GEMINI_25_FLASH,
     grading_model=Google.GEMINI_25_FLASH,
     max_iterations=2,
-    reporter=reporter,                  # Log to both CLI and file
+    reporter=reporter,  # Log to both CLI and file
 )
 
 # Generate training traces
@@ -204,10 +193,9 @@ if len(dataset) > 0:
         else:
             content = msg.content or ""
             print(content[:80] + "..." if len(content) > 80 else content)
-    
+
     # Show grade info if available
     if trace.grade:
         print(f"\n📝 Grade: {'✓ PASS' if trace.grade.passed else '✗ FAIL'}")
         if trace.grade.feedback:
             print(f"   Feedback: {trace.grade.feedback[:100]}...")
-

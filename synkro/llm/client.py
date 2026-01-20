@@ -1,14 +1,16 @@
 """Type-safe LLM wrapper using LiteLLM."""
 
 import warnings
-from typing import TypeVar, Type, overload, TYPE_CHECKING
+from typing import TYPE_CHECKING, Type, TypeVar, overload
+
+import litellm
+from litellm import acompletion, completion_cost, supports_response_schema
+from pydantic import BaseModel
+
+from synkro.models import LocalModel, Model, OpenAI, get_model_string
 
 if TYPE_CHECKING:
     from synkro.types.metrics import Metrics, TrackedLLM
-
-import litellm
-from litellm import acompletion, supports_response_schema, completion_cost
-from pydantic import BaseModel
 
 # Configure litellm
 litellm.suppress_debug_info = True
@@ -31,9 +33,6 @@ warnings.filterwarnings(
     message=".*Expected `StreamingChoices`.*",
     category=UserWarning,
 )
-
-from synkro.models import OpenAI, Model, get_model_string, LocalModel
-
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -139,9 +138,7 @@ class LLM:
         self._track_cost(response)
         return response.choices[0].message.content
 
-    async def generate_batch(
-        self, prompts: list[str], system: str | None = None
-    ) -> list[str]:
+    async def generate_batch(self, prompts: list[str], system: str | None = None) -> list[str]:
         """
         Generate responses for multiple prompts in parallel.
 
@@ -335,4 +332,5 @@ class LLM:
             >>> print(metrics.get_phase("extraction").cost)
         """
         from synkro.types.metrics import TrackedLLM
+
         return TrackedLLM(self, metrics, phase)

@@ -15,16 +15,17 @@ This is the proper workflow for:
 """
 
 from pathlib import Path
+
 from dotenv import load_dotenv
+
+import synkro
+from synkro.examples import EXPENSE_POLICY
+from synkro.models import Google
+from synkro.reporting import FileLoggingReporter
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
-
-import synkro
-from synkro.models import Google
-from synkro.examples import EXPENSE_POLICY
-from synkro.reporting import FileLoggingReporter
 
 # =============================================================================
 # STEP 1: Generate eval scenarios (no synthetic responses)
@@ -40,7 +41,7 @@ result = synkro.generate_scenarios(
     generation_model=Google.GEMINI_25_FLASH,
     temperature=0.8,  # High temp for diverse scenarios
     enable_hitl=False,
-    reporter=reporter,                  # Log to both CLI and file
+    reporter=reporter,  # Log to both CLI and file
 )
 
 print(f"\nGenerated {len(result.scenarios)} scenarios")
@@ -97,7 +98,7 @@ grade_result = synkro.grade(
     model=Google.GEMINI_25_FLASH,
 )
 
-print(f"\n--- Grade Result ---")
+print("\n--- Grade Result ---")
 print(f"Passed: {grade_result.passed}")
 print(f"Feedback: {grade_result.feedback}")
 if grade_result.issues:
@@ -135,4 +136,6 @@ for scenario in result.scenarios:
         failed += 1
         print(f"Failed scenario: {scenario.scenario_type} - {grade.feedback[:50]}...")
 
-print(f"\nResults: {passed}/{len(result.scenarios)} passed ({passed/len(result.scenarios)*100:.0f}%)")
+print(
+    f"\nResults: {passed}/{len(result.scenarios)} passed ({passed/len(result.scenarios)*100:.0f}%)"
+)

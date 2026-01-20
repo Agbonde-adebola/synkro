@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Test streaming with a real policy document."""
+
 import asyncio
-import sys
 import os
+import sys
 
 # Add parent directory to path for development
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -110,6 +111,7 @@ async def main():
     print("=" * 60)
 
     from synkro.core.dataset import Dataset
+
     dataset = Dataset(traces=traces_result.traces)
     dataset.save("test_output.jsonl")
     print(f"✅ Saved {len(dataset)} traces to test_output.jsonl")

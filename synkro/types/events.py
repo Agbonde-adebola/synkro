@@ -8,19 +8,13 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from synkro.types.logic_map import LogicMap, GoldenScenario, Rule
     from synkro.types.core import Trace
-    from synkro.types.metrics import PhaseMetrics
     from synkro.types.coverage import CoverageReport
-    from synkro.types.results import (
-        ExtractionResult,
-        ScenariosResult,
-        TracesResult,
-        VerificationResult,
-    )
+    from synkro.types.logic_map import GoldenScenario, Rule
+    from synkro.types.metrics import PhaseMetrics
 
 
 # Event type literals
@@ -91,13 +85,15 @@ class ProgressEvent(Event):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "phase": self.phase,
-            "message": self.message,
-            "progress": self.progress,
-            "completed": self.completed,
-            "total": self.total,
-        })
+        data.update(
+            {
+                "phase": self.phase,
+                "message": self.message,
+                "progress": self.progress,
+                "completed": self.completed,
+                "total": self.total,
+            }
+        )
         return data
 
 
@@ -119,10 +115,12 @@ class RuleFoundEvent(Event):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "rule": self.rule.model_dump() if self.rule else None,
-            "index": self.index,
-        })
+        data.update(
+            {
+                "rule": self.rule.model_dump() if self.rule else None,
+                "index": self.index,
+            }
+        )
         return data
 
 
@@ -144,10 +142,12 @@ class ScenarioGeneratedEvent(Event):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "scenario": self.scenario.model_dump() if self.scenario else None,
-            "index": self.index,
-        })
+        data.update(
+            {
+                "scenario": self.scenario.model_dump() if self.scenario else None,
+                "index": self.index,
+            }
+        )
         return data
 
 
@@ -169,10 +169,12 @@ class TraceGeneratedEvent(Event):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "trace": self.trace.model_dump() if self.trace else None,
-            "index": self.index,
-        })
+        data.update(
+            {
+                "trace": self.trace.model_dump() if self.trace else None,
+                "index": self.index,
+            }
+        )
         return data
 
 
@@ -198,12 +200,14 @@ class TraceVerifiedEvent(Event):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "trace": self.trace.model_dump() if self.trace else None,
-            "index": self.index,
-            "passed": self.passed,
-            "issues": self.issues,
-        })
+        data.update(
+            {
+                "trace": self.trace.model_dump() if self.trace else None,
+                "index": self.index,
+                "passed": self.passed,
+                "issues": self.issues,
+            }
+        )
         return data
 
 
@@ -227,11 +231,13 @@ class RefinementStartedEvent(Event):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "count": self.count,
-            "iteration": self.iteration,
-            "max_iterations": self.max_iterations,
-        })
+        data.update(
+            {
+                "count": self.count,
+                "iteration": self.iteration,
+                "max_iterations": self.max_iterations,
+            }
+        )
         return data
 
 
@@ -257,12 +263,14 @@ class TraceRefinedEvent(Event):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "trace": self.trace.model_dump() if self.trace else None,
-            "index": self.index,
-            "original_issues": self.original_issues,
-            "passed": self.passed,
-        })
+        data.update(
+            {
+                "trace": self.trace.model_dump() if self.trace else None,
+                "index": self.index,
+                "original_issues": self.original_issues,
+                "passed": self.passed,
+            }
+        )
         return data
 
 
@@ -282,9 +290,11 @@ class CoverageCalculatedEvent(Event):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "coverage": self.coverage.model_dump() if self.coverage else None,
-        })
+        data.update(
+            {
+                "coverage": self.coverage.model_dump() if self.coverage else None,
+            }
+        )
         return data
 
 
@@ -306,10 +316,14 @@ class CompleteEvent(Event):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "result": self.result.to_dict() if hasattr(self.result, "to_dict") else str(self.result),
-            "metrics": self.metrics.to_dict() if self.metrics else None,
-        })
+        data.update(
+            {
+                "result": self.result.to_dict()
+                if hasattr(self.result, "to_dict")
+                else str(self.result),
+                "metrics": self.metrics.to_dict() if self.metrics else None,
+            }
+        )
         return data
 
 
@@ -332,11 +346,13 @@ class ErrorEvent(Event):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data.update({
-            "error": str(self.error) if self.error else None,
-            "message": self.message,
-            "phase": self.phase,
-        })
+        data.update(
+            {
+                "error": str(self.error) if self.error else None,
+                "message": self.message,
+                "phase": self.phase,
+            }
+        )
         return data
 
 

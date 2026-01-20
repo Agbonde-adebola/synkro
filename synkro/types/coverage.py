@@ -5,6 +5,7 @@ sub-categories, similar to code coverage for tests.
 """
 
 from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -29,25 +30,15 @@ class SubCategory(BaseModel):
         ... )
     """
 
-    id: str = Field(
-        description="Unique identifier (e.g., 'SC001', 'SC002')"
-    )
-    name: str = Field(
-        description="Short, descriptive name for the sub-category"
-    )
-    description: str = Field(
-        description="What this sub-category covers"
-    )
-    parent_category: str = Field(
-        description="Name of the parent category this belongs to"
-    )
+    id: str = Field(description="Unique identifier (e.g., 'SC001', 'SC002')")
+    name: str = Field(description="Short, descriptive name for the sub-category")
+    description: str = Field(description="What this sub-category covers")
+    parent_category: str = Field(description="Name of the parent category this belongs to")
     related_rule_ids: list[str] = Field(
-        default_factory=list,
-        description="Rule IDs from LogicMap that relate to this sub-category"
+        default_factory=list, description="Rule IDs from LogicMap that relate to this sub-category"
     )
     priority: Literal["high", "medium", "low"] = Field(
-        default="medium",
-        description="Coverage priority based on policy importance"
+        default="medium", description="Coverage priority based on policy importance"
     )
 
 
@@ -66,12 +57,8 @@ class SubCategoryTaxonomy(BaseModel):
         >>> refund_scs = taxonomy.get_by_category("Refund Policy")
     """
 
-    sub_categories: list[SubCategory] = Field(
-        description="All extracted sub-categories"
-    )
-    reasoning: str = Field(
-        description="Explanation of how the taxonomy was organized"
-    )
+    sub_categories: list[SubCategory] = Field(description="All extracted sub-categories")
+    reasoning: str = Field(description="Explanation of how the taxonomy was organized")
 
     def get_by_id(self, sc_id: str) -> SubCategory | None:
         """Get a sub-category by its ID."""
@@ -111,35 +98,24 @@ class SubCategoryCoverage(BaseModel):
         ... )
     """
 
-    sub_category_id: str = Field(
-        description="ID of the sub-category"
-    )
-    sub_category_name: str = Field(
-        description="Name of the sub-category"
-    )
-    parent_category: str = Field(
-        default="",
-        description="Parent category name"
-    )
+    sub_category_id: str = Field(description="ID of the sub-category")
+    sub_category_name: str = Field(description="Name of the sub-category")
+    parent_category: str = Field(default="", description="Parent category name")
     scenario_count: int = Field(
-        default=0,
-        description="Number of scenarios covering this sub-category"
+        default=0, description="Number of scenarios covering this sub-category"
     )
     scenario_ids: list[str] = Field(
-        default_factory=list,
-        description="IDs/indices of scenarios that cover this sub-category"
+        default_factory=list, description="IDs/indices of scenarios that cover this sub-category"
     )
     coverage_percent: float = Field(
-        default=0.0,
-        description="Percentage of expected coverage achieved (0-100)"
+        default=0.0, description="Percentage of expected coverage achieved (0-100)"
     )
     coverage_status: Literal["covered", "partial", "uncovered"] = Field(
-        default="uncovered",
-        description="Coverage status based on thresholds"
+        default="uncovered", description="Coverage status based on thresholds"
     )
     type_distribution: dict[str, int] = Field(
         default_factory=dict,
-        description="Count by scenario type (positive/negative/edge_case/irrelevant)"
+        description="Count by scenario type (positive/negative/edge_case/irrelevant)",
     )
 
     @property
@@ -169,22 +145,20 @@ class CoverageThresholds(BaseModel):
         default=0.8,
         ge=0.0,
         le=1.0,
-        description="Minimum percentage to be considered 'covered' (default: 80%)"
+        description="Minimum percentage to be considered 'covered' (default: 80%)",
     )
     partial_threshold: float = Field(
         default=0.3,
         ge=0.0,
         le=1.0,
-        description="Minimum percentage to be considered 'partial' (default: 30%)"
+        description="Minimum percentage to be considered 'partial' (default: 30%)",
     )
     min_scenarios_per_sub_category: int = Field(
-        default=2,
-        ge=1,
-        description="Minimum scenarios expected per sub-category"
+        default=2, ge=1, description="Minimum scenarios expected per sub-category"
     )
     priority_multipliers: dict[str, float] = Field(
         default_factory=lambda: {"high": 2.0, "medium": 1.0, "low": 0.5},
-        description="Multipliers for expected scenarios based on priority"
+        description="Multipliers for expected scenarios based on priority",
     )
 
 
@@ -210,42 +184,27 @@ class CoverageReport(BaseModel):
         >>> print(f"Coverage: {report.overall_coverage_percent}%")
     """
 
-    total_scenarios: int = Field(
-        description="Total number of scenarios in the dataset"
-    )
-    total_sub_categories: int = Field(
-        description="Total number of sub-categories in the taxonomy"
-    )
-    covered_count: int = Field(
-        description="Number of sub-categories with full coverage"
-    )
-    partial_count: int = Field(
-        description="Number of sub-categories with partial coverage"
-    )
-    uncovered_count: int = Field(
-        description="Number of sub-categories with no coverage"
-    )
-    overall_coverage_percent: float = Field(
-        description="Overall coverage percentage (0-100)"
-    )
+    total_scenarios: int = Field(description="Total number of scenarios in the dataset")
+    total_sub_categories: int = Field(description="Total number of sub-categories in the taxonomy")
+    covered_count: int = Field(description="Number of sub-categories with full coverage")
+    partial_count: int = Field(description="Number of sub-categories with partial coverage")
+    uncovered_count: int = Field(description="Number of sub-categories with no coverage")
+    overall_coverage_percent: float = Field(description="Overall coverage percentage (0-100)")
 
     sub_category_coverage: list[SubCategoryCoverage] = Field(
-        default_factory=list,
-        description="Detailed coverage for each sub-category"
+        default_factory=list, description="Detailed coverage for each sub-category"
     )
 
     gaps: list[str] = Field(
-        default_factory=list,
-        description="Identified coverage gaps (uncovered or underrepresented)"
+        default_factory=list, description="Identified coverage gaps (uncovered or underrepresented)"
     )
     suggestions: list[str] = Field(
-        default_factory=list,
-        description="Actionable suggestions to improve coverage"
+        default_factory=list, description="Actionable suggestions to improve coverage"
     )
 
     heatmap_data: dict[str, dict[str, float]] = Field(
         default_factory=dict,
-        description="Nested dict: category -> sub_category -> coverage_percent"
+        description="Nested dict: category -> sub_category -> coverage_percent",
     )
 
     def get_coverage_for(self, sub_category_id: str) -> SubCategoryCoverage | None:
@@ -270,8 +229,8 @@ class CoverageReport(BaseModel):
     def to_summary_string(self) -> str:
         """Generate a human-readable summary of the coverage report."""
         lines = [
-            f"Coverage Report",
-            f"=" * 40,
+            "Coverage Report",
+            "=" * 40,
             f"Overall: {self.overall_coverage_percent:.1f}%",
             f"Sub-categories: {self.covered_count} covered, {self.partial_count} partial, {self.uncovered_count} uncovered",
             f"Total scenarios: {self.total_scenarios}",
@@ -285,7 +244,7 @@ class CoverageReport(BaseModel):
                 lines.append(f"  ... and {len(self.gaps) - 5} more")
 
         if self.suggestions:
-            lines.append(f"\nSuggestions:")
+            lines.append("\nSuggestions:")
             for i, sugg in enumerate(self.suggestions[:3], 1):
                 lines.append(f"  {i}. {sugg}")
 
@@ -321,6 +280,7 @@ class CoverageReport(BaseModel):
             >>> print(json_str)
         """
         import json
+
         return json.dumps(self.model_dump(), indent=indent)
 
     def print(self) -> None:
@@ -335,6 +295,7 @@ class CoverageReport(BaseModel):
             >>> result.coverage_report.print()
         """
         from synkro.reporting import RichReporter
+
         reporter = RichReporter()
         reporter.on_coverage_calculated(self)
 
@@ -362,30 +323,24 @@ class CoverageIntent(BaseModel):
 
     # For view operations
     view_mode: Literal["summary", "gaps", "heatmap", "detail"] | None = Field(
-        default=None,
-        description="What to display (for view operations)"
+        default=None, description="What to display (for view operations)"
     )
 
     # For increase/target operations
     target_sub_category: str | None = Field(
-        default=None,
-        description="Sub-category name or ID to target"
+        default=None, description="Sub-category name or ID to target"
     )
     target_percent: int | None = Field(
-        default=None,
-        ge=0,
-        le=100,
-        description="Target coverage percentage (for target operations)"
+        default=None, ge=0, le=100, description="Target coverage percentage (for target operations)"
     )
     increase_amount: int | None = Field(
         default=None,
         ge=1,
         le=100,
-        description="Percentage points to increase (for increase operations)"
+        description="Percentage points to increase (for increase operations)",
     )
     scenario_type: str | None = Field(
-        default=None,
-        description="Specific scenario type to add (positive/negative/edge_case)"
+        default=None, description="Specific scenario type to add (positive/negative/edge_case)"
     )
 
 

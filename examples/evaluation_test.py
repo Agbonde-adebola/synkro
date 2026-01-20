@@ -10,15 +10,16 @@ This demonstrates:
 """
 
 from pathlib import Path
+
 from dotenv import load_dotenv
+
+import synkro
+from synkro.examples import EXPENSE_POLICY
+from synkro.models import Google
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
-
-import synkro
-from synkro.models import Google
-from synkro.examples import EXPENSE_POLICY
 
 # Generate 5 eval scenarios (no synthetic responses)
 result = synkro.generate_scenarios(

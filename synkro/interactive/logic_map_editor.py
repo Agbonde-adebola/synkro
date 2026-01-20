@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
+from synkro.prompts.interactive_templates import LOGIC_MAP_REFINEMENT_PROMPT
 from synkro.schemas import RefinedLogicMapOutput
 from synkro.types.logic_map import LogicMap, Rule, RuleCategory
-from synkro.prompts.interactive_templates import LOGIC_MAP_REFINEMENT_PROMPT
 
 if TYPE_CHECKING:
     pass

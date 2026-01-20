@@ -6,15 +6,15 @@ providing a detailed coverage report with gaps and suggestions.
 
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
+from synkro.prompts.coverage_templates import COVERAGE_SUGGESTIONS_PROMPT
 from synkro.schemas import CoverageSuggestionsOutput
 from synkro.types.coverage import (
-    SubCategoryTaxonomy,
-    SubCategoryCoverage,
     CoverageReport,
     CoverageThresholds,
+    SubCategoryCoverage,
+    SubCategoryTaxonomy,
 )
 from synkro.types.logic_map import GoldenScenario, LogicMap
-from synkro.prompts.coverage_templates import COVERAGE_SUGGESTIONS_PROMPT
 
 
 class CoverageCalculator:
@@ -74,21 +74,13 @@ class CoverageCalculator:
             CoverageReport with detailed metrics
         """
         # Calculate coverage for each sub-category
-        sub_category_coverage = self._calculate_sub_category_coverage(
-            scenarios, taxonomy
-        )
+        sub_category_coverage = self._calculate_sub_category_coverage(scenarios, taxonomy)
 
         # Calculate overall metrics
         total_sub_categories = len(taxonomy.sub_categories)
-        covered_count = sum(
-            1 for c in sub_category_coverage if c.coverage_status == "covered"
-        )
-        partial_count = sum(
-            1 for c in sub_category_coverage if c.coverage_status == "partial"
-        )
-        uncovered_count = sum(
-            1 for c in sub_category_coverage if c.coverage_status == "uncovered"
-        )
+        covered_count = sum(1 for c in sub_category_coverage if c.coverage_status == "covered")
+        partial_count = sum(1 for c in sub_category_coverage if c.coverage_status == "partial")
+        uncovered_count = sum(1 for c in sub_category_coverage if c.coverage_status == "uncovered")
 
         # Calculate overall coverage percentage
         if total_sub_categories > 0:
@@ -177,9 +169,7 @@ class CoverageCalculator:
     def _expected_scenarios(self, sub_category) -> int:
         """Calculate expected scenarios for a sub-category."""
         base = self.thresholds.min_scenarios_per_sub_category
-        multiplier = self.thresholds.priority_multipliers.get(
-            sub_category.priority, 1.0
-        )
+        multiplier = self.thresholds.priority_multipliers.get(sub_category.priority, 1.0)
         # Add bonus for more related rules
         rule_bonus = len(sub_category.related_rule_ids) * 0.5
         return int(base * multiplier + rule_bonus)
@@ -269,17 +259,18 @@ class CoverageCalculator:
 
         # Generate suggestions in priority order
         for cov, sc in uncovered_high[:3]:
-            rules_str = ", ".join(sc.related_rule_ids[:3]) if sc.related_rule_ids else "related rules"
+            rules_str = (
+                ", ".join(sc.related_rule_ids[:3]) if sc.related_rule_ids else "related rules"
+            )
             suggestions.append(
-                f"Add 3+ scenarios for '{sc.name}' (HIGH priority) "
-                f"testing {rules_str}"
+                f"Add 3+ scenarios for '{sc.name}' (HIGH priority) " f"testing {rules_str}"
             )
 
         for cov, sc in uncovered_medium[:3]:
-            rules_str = ", ".join(sc.related_rule_ids[:3]) if sc.related_rule_ids else "related rules"
-            suggestions.append(
-                f"Add 2+ scenarios for '{sc.name}' testing {rules_str}"
+            rules_str = (
+                ", ".join(sc.related_rule_ids[:3]) if sc.related_rule_ids else "related rules"
             )
+            suggestions.append(f"Add 2+ scenarios for '{sc.name}' testing {rules_str}")
 
         for cov, sc in partial[:3]:
             # Check what types are missing
@@ -323,7 +314,8 @@ class CoverageCalculator:
             covered_count=sum(1 for c in coverage if c.coverage_status == "covered"),
             partial_count=sum(1 for c in coverage if c.coverage_status == "partial"),
             uncovered_count=sum(1 for c in coverage if c.coverage_status == "uncovered"),
-            overall_coverage_percent=sum(c.coverage_percent for c in coverage) / max(len(coverage), 1),
+            overall_coverage_percent=sum(c.coverage_percent for c in coverage)
+            / max(len(coverage), 1),
             covered_threshold=int(self.thresholds.covered_threshold * 100),
             partial_threshold=int(self.thresholds.partial_threshold * 100),
             coverage_details=coverage_details,
@@ -351,9 +343,7 @@ class CoverageCalculator:
                 "uncovered": "X",
             }[cov.coverage_status]
 
-            types_str = ", ".join(
-                f"{t}:{c}" for t, c in cov.type_distribution.items()
-            ) or "none"
+            types_str = ", ".join(f"{t}:{c}" for t, c in cov.type_distribution.items()) or "none"
 
             lines.append(
                 f"[{status_icon}] {cov.sub_category_name} {priority}: "

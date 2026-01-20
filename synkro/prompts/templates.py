@@ -11,11 +11,11 @@ Analyze the given policy and determine the optimal number of conversation turns 
 Guidelines:
 - **Simple (1-2 turns)**: Policy has 1 clear variable/rule. Single query → Straight answer.
   Example: "All data must be encrypted" - just one rule to check.
-  
+
 - **Conditional (3 turns)**: Policy has 2-3 variables/conditions. Query → Clarification → Verdict.
   Example: "Data can be shared IF consent is given AND purpose is specified" - needs clarification.
-  
-- **Complex (5+ turns)**: Policy has 4+ nested variables, exceptions, or conditions. 
+
+- **Complex (5+ turns)**: Policy has 4+ nested variables, exceptions, or conditions.
   Multiple rounds of validation before final sign-off.
   Example: "Data retention varies by type, region, consent status, and business need" - needs deep exploration.
 
@@ -196,7 +196,7 @@ For EACH scenario with feedback below, fix ALL issues while keeping what was cor
 
 You will receive structured feedback with:
 - policy_violations: Rules you violated or misinterpreted - FIX THESE
-- missing_citations: Policy sections you should cite - ADD THESE  
+- missing_citations: Policy sections you should cite - ADD THESE
 - incomplete_reasoning: Gaps in your logic - FILL THESE IN
 - vague_recommendations: Things that need to be more specific - MAKE CONCRETE
 
@@ -209,7 +209,7 @@ Requirements:
 
 Output in MESSAGES FORMAT with exactly 3 messages:
 1. "system" - The system prompt defining the assistant's role
-2. "user" - The scenario and context as the user's question  
+2. "user" - The scenario and context as the user's question
 3. "assistant" - Your IMPROVED guidance
 
 Respond with a JSON array where each object has:
@@ -278,4 +278,3 @@ Respond with ONLY a JSON object:
   "vague_recommendations": ["<vague 1>", ...],
   "feedback": "<summary of issues or 'Correct'>"
 }}"""
-

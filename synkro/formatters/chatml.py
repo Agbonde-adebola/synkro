@@ -57,10 +57,12 @@ class ChatMLFormatter:
                     # Convert tool calls to XML format
                     tool_call_xmls = []
                     for tc in m.tool_calls:
-                        tool_call_json = json.dumps({
-                            "name": tc.function.name,
-                            "arguments": json.loads(tc.function.arguments)
-                        })
+                        tool_call_json = json.dumps(
+                            {
+                                "name": tc.function.name,
+                                "arguments": json.loads(tc.function.arguments),
+                            }
+                        )
                         tool_call_xmls.append(f"<tool_call>\n{tool_call_json}\n</tool_call>")
 
                     content = "\n".join(tool_call_xmls)
@@ -73,10 +75,7 @@ class ChatMLFormatter:
 
                 # Regular messages (system, user, assistant without tools)
                 else:
-                    messages.append({
-                        "role": m.role,
-                        "content": m.content or ""
-                    })
+                    messages.append({"role": m.role, "content": m.content or ""})
 
             example = {"messages": messages}
 

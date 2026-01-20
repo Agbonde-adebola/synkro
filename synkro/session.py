@@ -19,14 +19,14 @@ Examples:
 
 from __future__ import annotations
 
-import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, AsyncIterator
 
-from synkro.core.policy import Policy
 from synkro.core.dataset import Dataset
+from synkro.core.policy import Policy
+from synkro.types.events import Event
 from synkro.types.metrics import Metrics
 from synkro.types.results import (
     ExtractionResult,
@@ -34,13 +34,12 @@ from synkro.types.results import (
     TracesResult,
     VerificationResult,
 )
-from synkro.types.events import Event
 from synkro.utils.model_detection import get_default_models
 
 if TYPE_CHECKING:
-    from synkro.types.logic_map import LogicMap, GoldenScenario
     from synkro.types.core import Trace
     from synkro.types.coverage import CoverageReport
+    from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 @dataclass
@@ -241,7 +240,9 @@ class Session:
 
         return result
 
-    async def edit_scenarios(self, instruction: str) -> tuple[list["GoldenScenario"], dict[str, int], str]:
+    async def edit_scenarios(
+        self, instruction: str
+    ) -> tuple[list["GoldenScenario"], dict[str, int], str]:
         """
         Edit scenarios using natural language.
 
@@ -515,7 +516,9 @@ class Session:
         """Save current state to history."""
         snapshot = SessionSnapshot(
             logic_map_json=self.logic_map.model_dump_json() if self.logic_map else None,
-            scenarios_json=json.dumps([s.model_dump() for s in self.scenarios]) if self.scenarios else None,
+            scenarios_json=json.dumps([s.model_dump() for s in self.scenarios])
+            if self.scenarios
+            else None,
             traces_json=json.dumps([t.model_dump() for t in self.traces]) if self.traces else None,
             description=description,
         )
@@ -545,8 +548,8 @@ class Session:
 
     def _restore_snapshot(self, snapshot: SessionSnapshot) -> None:
         """Restore state from a snapshot."""
-        from synkro.types.logic_map import LogicMap, GoldenScenario
         from synkro.types.core import Trace
+        from synkro.types.logic_map import GoldenScenario, LogicMap
 
         if snapshot.logic_map_json:
             self.logic_map = LogicMap.model_validate_json(snapshot.logic_map_json)
@@ -606,7 +609,9 @@ class Session:
             "scenarios": [s.model_dump() for s in self.scenarios] if self.scenarios else None,
             "distribution": self.distribution,
             "traces": [t.model_dump() for t in self.traces] if self.traces else None,
-            "verified_traces": [t.model_dump() for t in self.verified_traces] if self.verified_traces else None,
+            "verified_traces": [t.model_dump() for t in self.verified_traces]
+            if self.verified_traces
+            else None,
             "metrics": self.metrics.to_dict(),
             "model": self.model,
             "grading_model": self.grading_model,
@@ -627,8 +632,8 @@ class Session:
         Returns:
             Restored Session instance
         """
-        from synkro.types.logic_map import LogicMap, GoldenScenario
         from synkro.types.core import Trace
+        from synkro.types.logic_map import GoldenScenario, LogicMap
 
         path = Path(path)
 
@@ -739,7 +744,7 @@ class Session:
         """
         parts = []
 
-        parts.append(f"Session State:")
+        parts.append("Session State:")
 
         if self.policy:
             parts.append(f"- Policy: {self.policy.text[:100]}...")

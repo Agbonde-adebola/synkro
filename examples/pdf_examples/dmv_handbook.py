@@ -10,15 +10,16 @@ This example demonstrates:
 """
 
 from pathlib import Path
+
 from dotenv import load_dotenv
+
+from synkro import DatasetType, Policy, create_pipeline
+from synkro.models.google import Google
+from synkro.reporting import FileLoggingReporter
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / ".env"
 load_dotenv(env_path)
-
-from synkro import create_pipeline, Policy, DatasetType
-from synkro.models.google import Google
-from synkro.reporting import FileLoggingReporter
 
 # =============================================================================
 # Load the DMV Handbook PDF
@@ -48,7 +49,7 @@ print()
 # =============================================================================
 
 print("=" * 80)
-print(f"Generating 20 Traces from DMV Handbook")
+print("Generating 20 Traces from DMV Handbook")
 print("=" * 80)
 print()
 
@@ -56,12 +57,12 @@ print()
 reporter = FileLoggingReporter(log_dir="./logs")
 
 pipeline = create_pipeline(
-    model=Google.GEMINI_25_FLASH,           # Fast generation
-    grading_model=Google.GEMINI_25_FLASH,   # Quality grading
+    model=Google.GEMINI_25_FLASH,  # Fast generation
+    grading_model=Google.GEMINI_25_FLASH,  # Quality grading
     dataset_type=DatasetType.CONVERSATION,  # Chat format for fine-tuning
-    skip_grading=True,                      # Skip grading for faster generation
-    enable_hitl=False,                      # Skip interactive session for speed
-    reporter=reporter,                      # Log to both CLI and file
+    skip_grading=True,  # Skip grading for faster generation
+    enable_hitl=False,  # Skip interactive session for speed
+    reporter=reporter,  # Log to both CLI and file
 )
 
 # Generate 20 traces - this will:
