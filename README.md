@@ -2,7 +2,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/synkro.svg)](https://pypi.org/project/synkro/)
 [![Downloads](https://static.pepy.tech/badge/synkro)](https://pepy.tech/project/synkro)
-[![Downloads/Month](https://static.pepy.tech/badge/synkro/month)](https://pepy.tech/project/synkro)
+[![Downloads/Week](https://static.pepy.tech/badge/synkro/week)](https://pepy.tech/project/synkro)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Documentation](https://img.shields.io/badge/docs-synkro.sh-purple.svg)](https://synkro.sh/docs)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
