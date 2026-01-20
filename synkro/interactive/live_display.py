@@ -110,7 +110,9 @@ class LiveProgressDisplay:
                 pct = (s.progress_current / s.progress_total) * 100
                 filled = int(pct / 5)  # 20 char bar
                 bar = "█" * filled + "░" * (20 - filled)
-                phase_row.append(f"  {bar}  {s.progress_current}/{s.progress_total} {pct:.0f}%", style="cyan")
+                phase_row.append(
+                    f"  {bar}  {s.progress_current}/{s.progress_total} {pct:.0f}%", style="cyan"
+                )
 
         content_lines.append(phase_row)
         content_lines.append(Text(""))
@@ -121,7 +123,9 @@ class LiveProgressDisplay:
             if len(s.rule_ids) > 5:
                 ids += f" (+{len(s.rule_ids) - 5} more)"
             content_lines.append(Text(f"  📜 Found: {ids}", style="white"))
-        elif (s.positive_count > 0 or s.negative_count > 0 or s.edge_count > 0) and not s.is_complete:
+        elif (
+            s.positive_count > 0 or s.negative_count > 0 or s.edge_count > 0
+        ) and not s.is_complete:
             dist = Text("  ")
             dist.append("✓", style="green")
             dist.append(f" {s.positive_count} positive  ", style="white")
@@ -159,7 +163,9 @@ class LiveProgressDisplay:
             content_lines.append(Text(f"  ├─ 📜 {s.rules_count} rules extracted", style="dim"))
 
             # Scenarios with distribution
-            dist_str = f"({s.positive_count}+ {s.negative_count}- {s.edge_count}⚡ {s.irrelevant_count}○)"
+            dist_str = (
+                f"({s.positive_count}+ {s.negative_count}- {s.edge_count}⚡ {s.irrelevant_count}○)"
+            )
             content_lines.append(
                 Text(f"  ├─ 📋 {s.scenarios_count} scenarios {dist_str}", style="dim")
             )
@@ -169,7 +175,9 @@ class LiveProgressDisplay:
 
             # Pass rate
             if s.pass_rate is not None:
-                rate_style = "green" if s.pass_rate >= 80 else "yellow" if s.pass_rate >= 50 else "red"
+                rate_style = (
+                    "green" if s.pass_rate >= 80 else "yellow" if s.pass_rate >= 50 else "red"
+                )
                 line = Text("  └─ ⚖️  ")
                 line.append(f"{s.pass_rate:.0f}%", style=rate_style)
                 line.append(" passed verification", style="dim")
@@ -348,7 +356,11 @@ class LiveProgressDisplay:
         if scenarios:
             dist: dict[str, int] = {}
             for s in scenarios:
-                t = s.scenario_type.value if hasattr(s.scenario_type, "value") else str(s.scenario_type)
+                t = (
+                    s.scenario_type.value
+                    if hasattr(s.scenario_type, "value")
+                    else str(s.scenario_type)
+                )
                 dist[t] = dist.get(t, 0) + 1
 
             scenarios_line = Text(f"  📋 Scenarios ({len(scenarios)})", style="bold white")
@@ -375,7 +387,13 @@ class LiveProgressDisplay:
         # Coverage and Turns row
         coverage_line = Text("  ")
         if coverage:
-            cov_style = "green" if coverage.overall_coverage_percent >= 80 else "yellow" if coverage.overall_coverage_percent >= 50 else "red"
+            cov_style = (
+                "green"
+                if coverage.overall_coverage_percent >= 80
+                else "yellow"
+                if coverage.overall_coverage_percent >= 50
+                else "red"
+            )
             coverage_line.append("📊 Coverage: ", style="dim")
             coverage_line.append(f"{coverage.overall_coverage_percent:.0f}%", style=cov_style)
             coverage_line.append(f"  ({len(coverage.gaps)} gaps)  ", style="dim")
@@ -480,7 +498,7 @@ class LiveProgressDisplay:
         content_lines.append(Text(f"  [bold]Category:[/bold]   {cat}"))
 
         # Wrap text if long
-        text_lines = [rule.text[i:i+60] for i in range(0, len(rule.text), 60)]
+        text_lines = [rule.text[i : i + 60] for i in range(0, len(rule.text), 60)]
         content_lines.append(Text(f"  [bold]Text:[/bold]       {text_lines[0]}"))
         for line in text_lines[1:]:
             content_lines.append(Text(f"               {line}"))
@@ -544,12 +562,18 @@ class LiveProgressDisplay:
         # Scenario details
         content_lines.append(Text(f"  [bold]ID:[/bold]           S{idx + 1}"))
 
-        stype = scenario.scenario_type.value if hasattr(scenario.scenario_type, "value") else str(scenario.scenario_type)
+        stype = (
+            scenario.scenario_type.value
+            if hasattr(scenario.scenario_type, "value")
+            else str(scenario.scenario_type)
+        )
         type_display = stype.replace("_", " ").title()
         content_lines.append(Text(f"  [bold]Type:[/bold]         {type_display}"))
 
         # Wrap description if long
-        desc_lines = [scenario.description[i:i+55] for i in range(0, len(scenario.description), 55)]
+        desc_lines = [
+            scenario.description[i : i + 55] for i in range(0, len(scenario.description), 55)
+        ]
         content_lines.append(Text(f"  [bold]Description:[/bold]  {desc_lines[0]}"))
         for line in desc_lines[1:]:
             content_lines.append(Text(f"                  {line}"))
@@ -558,10 +582,15 @@ class LiveProgressDisplay:
             content_lines.append(Text(f"  [bold]Context:[/bold]      {scenario.context[:55]}"))
 
         if scenario.target_rule_ids:
-            content_lines.append(Text(f"  [bold]Target Rules:[/bold] {', '.join(scenario.target_rule_ids)}"))
+            content_lines.append(
+                Text(f"  [bold]Target Rules:[/bold] {', '.join(scenario.target_rule_ids)}")
+            )
 
         if scenario.expected_outcome:
-            exp_lines = [scenario.expected_outcome[i:i+55] for i in range(0, len(scenario.expected_outcome), 55)]
+            exp_lines = [
+                scenario.expected_outcome[i : i + 55]
+                for i in range(0, len(scenario.expected_outcome), 55)
+            ]
             content_lines.append(Text(f"  [bold]Expected:[/bold]     {exp_lines[0]}"))
             for line in exp_lines[1:]:
                 content_lines.append(Text(f"                  {line}"))
@@ -614,14 +643,14 @@ class LiveProgressDisplay:
 
             elif target == "scenarios" and scenarios:
                 # Show all scenarios
-                items = [(f"S{i+1}", s.description) for i, s in enumerate(scenarios)]
+                items = [(f"S{i + 1}", s.description) for i, s in enumerate(scenarios)]
                 page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
                 self.render_paginated_list("Scenarios", items, page)
                 return True
 
             elif target == "gaps" and coverage:
                 # Show coverage gaps
-                items = [(f"G{i+1}", gap) for i, gap in enumerate(coverage.gaps)]
+                items = [(f"G{i + 1}", gap) for i, gap in enumerate(coverage.gaps)]
                 if not items:
                     self.console.print("[green]No coverage gaps![/green]")
                 else:
@@ -674,7 +703,7 @@ class LiveProgressDisplay:
                 return False
 
             # Search query
-            query = " ".join(parts[1:]).strip('"\'')
+            query = " ".join(parts[1:]).strip("\"'")
 
             # Search rules
             matching_rules = [
@@ -691,7 +720,7 @@ class LiveProgressDisplay:
             # Search scenarios if available
             if scenarios:
                 matching_scenarios = [
-                    (f"S{i+1}", s.description)
+                    (f"S{i + 1}", s.description)
                     for i, s in enumerate(scenarios)
                     if query.lower() in s.description.lower()
                 ]

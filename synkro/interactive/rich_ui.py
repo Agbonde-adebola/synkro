@@ -152,9 +152,9 @@ class LogicMapDisplay:
         content = f"""[bold]ID:[/bold] {rule.rule_id}
 [bold]Text:[/bold] {rule.text}
 [bold]Category:[/bold] {rule.category}
-[bold]Condition:[/bold] {rule.condition or 'N/A'}
-[bold]Action:[/bold] {rule.action or 'N/A'}
-[bold]Dependencies:[/bold] {', '.join(rule.dependencies) if rule.dependencies else 'None (root rule)'}"""
+[bold]Condition:[/bold] {rule.condition or "N/A"}
+[bold]Action:[/bold] {rule.action or "N/A"}
+[bold]Dependencies:[/bold] {", ".join(rule.dependencies) if rule.dependencies else "None (root rule)"}"""
 
         self.console.print(Panel(content, title=f"Rule {rule_id}", border_style="cyan"))
 
@@ -284,7 +284,7 @@ class LogicMapDisplay:
                         for sc in sub_cats[:2]:
                             tags_parts.append(f"[yellow][{sc[:12]}][/yellow]")
                         if len(sub_cats) > 2:
-                            tags_parts.append(f"[dim]+{len(sub_cats)-2}[/dim]")
+                            tags_parts.append(f"[dim]+{len(sub_cats) - 2}[/dim]")
 
                     if tags_parts:
                         tags = " ".join(tags_parts)
@@ -330,10 +330,10 @@ class LogicMapDisplay:
 
         scenario = scenarios[idx]
         content = f"""[bold]ID:[/bold] S{idx + 1}
-[bold]Type:[/bold] {scenario.scenario_type.value.replace('_', ' ').title()}
+[bold]Type:[/bold] {scenario.scenario_type.value.replace("_", " ").title()}
 [bold]Description:[/bold] {scenario.description}
-[bold]Context:[/bold] {scenario.context or 'N/A'}
-[bold]Target Rules:[/bold] {', '.join(scenario.target_rule_ids) if scenario.target_rule_ids else 'None'}
+[bold]Context:[/bold] {scenario.context or "N/A"}
+[bold]Target Rules:[/bold] {", ".join(scenario.target_rule_ids) if scenario.target_rule_ids else "None"}
 [bold]Expected Outcome:[/bold] {scenario.expected_outcome}"""
 
         self.console.print(Panel(content, title=f"Scenario S{idx + 1}", border_style="green"))
@@ -536,9 +536,7 @@ class LogicMapDisplay:
         Delegates to LiveProgressDisplay if available.
         """
         if self._live_display:
-            return self._live_display.handle_show_command(
-                command, logic_map, scenarios, coverage
-            )
+            return self._live_display.handle_show_command(command, logic_map, scenarios, coverage)
 
         # Fallback: handle basic show commands
         parts = command.lower().split()

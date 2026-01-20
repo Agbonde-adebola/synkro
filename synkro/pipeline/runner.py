@@ -984,7 +984,9 @@ class GenerationPipeline:
                 )
                 if not handled:
                     # Fallback to basic show for specific items
-                    target = feedback.split()[1].strip().upper() if len(feedback.split()) > 1 else ""
+                    target = (
+                        feedback.split()[1].strip().upper() if len(feedback.split()) > 1 else ""
+                    )
                     if target.startswith("S") and session.current_scenarios:
                         display.display_scenario(target, session.current_scenarios)
                     elif target.startswith("R"):
