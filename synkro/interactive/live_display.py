@@ -526,9 +526,10 @@ class LiveProgressDisplay:
         self._refresh()
 
     def _refresh(self) -> None:
-        """Refresh the live display."""
+        """Refresh the live display - triggers re-render of the callable."""
         if self._live and not self._hitl_mode:
-            self._live.update(self._render())
+            # Use refresh() to trigger re-render, NOT update() which replaces the callable
+            self._live.refresh()
 
     # =========================================================================
     # HITL Mode Methods
