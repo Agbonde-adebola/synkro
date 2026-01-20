@@ -64,12 +64,16 @@ class _NoOpContextManager:
 class LiveProgressDisplay:
     """Polished live-updating display with spinners, colors, and progress bars."""
 
+    # Braille spinner frames for smooth animation
+    SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
     def __init__(self) -> None:
         self.console = Console()
         self._live: Live | None = None
         self._state = DisplayState()
         self._hitl_mode = False
         self._start_time: float | None = None
+        self._frame_idx = 0
 
     @property
     def state(self) -> DisplayState:
@@ -79,6 +83,9 @@ class LiveProgressDisplay:
     def _render(self) -> Panel:
         """Render the current state as a styled Panel."""
         s = self._state
+
+        # Advance spinner frame
+        self._frame_idx += 1
 
         # Update elapsed time
         if self._start_time and not s.is_complete:
@@ -97,15 +104,17 @@ class LiveProgressDisplay:
         content_lines.append(header)
         content_lines.append(Text(""))
 
-        # Phase row with status indicator
+        # Phase row with animated spinner or completion indicator
         if s.is_complete:
             phase_row = Text()
-            phase_row.append("  [OK] Complete", style="bold green")
+            phase_row.append("  ✓ Complete", style="bold green")
             phase_row.append("  " + " " * 30 + "100%", style="dim")
             content_lines.append(phase_row)
         else:
             phase_row = Text()
-            phase_row.append("  [..] ", style="cyan")
+            # Animated spinner
+            spinner_char = self.SPINNER_FRAMES[self._frame_idx % len(self.SPINNER_FRAMES)]
+            phase_row.append(f"  {spinner_char} ", style="cyan")
             phase_row.append(s.phase, style="bold cyan")
 
             # Progress bar
@@ -188,20 +197,22 @@ class LiveProgressDisplay:
         """Start the live display."""
         self._state = DisplayState(model=model)
         self._start_time = time.time()
+        self._frame_idx = 0
         self._live = Live(
             self._render(),
             console=self.console,
-            refresh_per_second=4,
-            transient=False,
-            vertical_overflow="visible",
+            refresh_per_second=10,  # Higher rate for smooth spinner
+            transient=True,  # Replace in place, don't stack
         )
         self._live.start()
 
     def stop(self) -> None:
-        """Stop the live display."""
+        """Stop the live display and print final panel."""
         if self._live:
             self._live.stop()
             self._live = None
+            # Print final panel since transient=True clears it
+            self.console.print(self._render())
 
     def update_phase(self, phase: str, message: str = "") -> None:
         """Update the current phase."""
@@ -285,12 +296,12 @@ class LiveProgressDisplay:
     def exit_hitl_mode(self) -> None:
         """Resume live display after HITL."""
         self._hitl_mode = False
+        self._frame_idx = 0
         self._live = Live(
             self._render(),
             console=self.console,
-            refresh_per_second=4,
-            transient=False,
-            vertical_overflow="visible",
+            refresh_per_second=10,
+            transient=True,
         )
         self._live.start()
 
