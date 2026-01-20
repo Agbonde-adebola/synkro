@@ -380,6 +380,12 @@ class GenerationPipeline:
         self.reporter.on_start(traces, model, dataset_type)
         self._transition_phase(PipelinePhase.PLANNING, "Analyzing policy...")
 
+        # Set up live cost tracking if reporter supports it
+        if hasattr(self.reporter, "set_cost_source"):
+            self.reporter.set_cost_source(
+                lambda: self.factory.generation_llm.total_cost + self.factory.grading_llm.total_cost
+            )
+
         # Create components via factory (only what's needed)
         golden_scenario_gen = self.factory.create_golden_scenario_generator()
         verifier = self.factory.create_verifier()
@@ -804,6 +810,12 @@ class GenerationPipeline:
 
         # Report start (using a simplified message)
         self.reporter.on_start(count, model, "scenarios")
+
+        # Set up live cost tracking if reporter supports it
+        if hasattr(self.reporter, "set_cost_source"):
+            self.reporter.set_cost_source(
+                lambda: self.factory.generation_llm.total_cost + self.factory.grading_llm.total_cost
+            )
 
         # Create components via factory
         planner = self.factory.create_planner()

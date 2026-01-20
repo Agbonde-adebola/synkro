@@ -32,6 +32,8 @@ class DisplayState:
     elapsed_seconds: float = 0.0
     cost: float = 0.0
     model: str = ""
+    dataset_type: str = ""  # CONVERSATION, QA, INSTRUCTION, etc.
+    traces_target: int = 0  # Target number of traces to generate
     is_complete: bool = False
 
     # Summary counts
@@ -79,6 +81,8 @@ class LiveProgressDisplay:
     SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
     def __init__(self) -> None:
+        from typing import Callable
+
         self.console = Console()
         self._live: Live | None = None
         self._state = DisplayState()
@@ -86,6 +90,11 @@ class LiveProgressDisplay:
         self._start_time: float | None = None
         self._frame_idx = 0
         self._is_active = False  # Track if display is in active mode
+        self._cost_source: Callable[[], float] | None = None  # Live cost polling
+
+    def set_cost_source(self, cost_fn) -> None:
+        """Set a function to poll for live cost updates."""
+        self._cost_source = cost_fn
 
     @property
     def is_active(self) -> bool:
@@ -111,6 +120,13 @@ class LiveProgressDisplay:
         # Update elapsed time
         if self._start_time and not s.is_complete:
             s.elapsed_seconds = time.time() - self._start_time
+
+        # Update cost from live source (polled on each render)
+        if self._cost_source and not s.is_complete:
+            try:
+                s.cost = self._cost_source()
+            except Exception:
+                pass  # Ignore errors from cost polling
 
         # Build the full layout
         content_parts: list = []
@@ -140,10 +156,27 @@ class LiveProgressDisplay:
         )
 
     def _render_title_with_status(self) -> Text:
-        """Render title line with SYNKRO and status info."""
+        """Render title line with SYNKRO, model, type, traces, and status info."""
         s = self._state
         title = Text()
         title.append("SYNKRO", style="bold cyan")
+
+        # Model name (shortened if needed)
+        if s.model:
+            title.append("  │  ", style="dim")
+            model_short = s.model.split("/")[-1]  # Remove provider prefix if present
+            title.append(model_short, style="cyan")
+
+        # Dataset type
+        if s.dataset_type:
+            title.append("  │  ", style="dim")
+            title.append(s.dataset_type, style="magenta")
+
+        # Traces target
+        if s.traces_target > 0:
+            title.append("  │  ", style="dim")
+            title.append(f"{s.traces_target} traces", style="green")
+
         title.append("  │  ", style="dim")
 
         # Phase with appropriate color
@@ -404,9 +437,11 @@ class LiveProgressDisplay:
             )
             self._live.start()
 
-    def start(self, model: str = "") -> None:
+    def start(self, model: str = "", dataset_type: str = "", traces_target: int = 0) -> None:
         """Start the live display with auto-animating spinner."""
-        self._state = DisplayState(model=model)
+        self._state = DisplayState(
+            model=model, dataset_type=dataset_type, traces_target=traces_target
+        )
         self._start_time = time.time()
         self._frame_idx = 0
         self._is_active = True  # Mark as active

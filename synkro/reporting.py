@@ -11,6 +11,7 @@ Enhanced for Golden Trace pipeline with:
 
 from typing import TYPE_CHECKING, Callable, Protocol
 
+# Re-export Callable so it's available for type hints within strings
 from synkro.types.core import Plan, Scenario, Trace
 
 if TYPE_CHECKING:
@@ -217,6 +218,20 @@ class RichReporter:
         self._start_time: float | None = None
         self._model: str = ""
         self._traces_target: int = 0
+        self._cost_source: "Callable[[], float] | None" = None
+
+    def set_cost_source(self, cost_fn: "Callable[[], float]") -> None:
+        """Set a function that returns the current total cost.
+
+        This enables live cost updates in the display. The function will
+        be called on each display refresh to get the latest cost.
+
+        Args:
+            cost_fn: A callable that returns the current total cost as a float.
+        """
+        self._cost_source = cost_fn
+        # Also set on display for live rendering updates
+        self._display.set_cost_source(cost_fn)
 
     @property
     def display(self) -> "LiveProgressDisplay":
@@ -244,8 +259,8 @@ class RichReporter:
         self._start_time = time.time()
         self._model = model
         self._traces_target = traces
-        self._display.start(model=model)
-        self._display.update_phase("Starting", f"{traces} {dataset_type} traces")
+        self._display.start(model=model, dataset_type=dataset_type, traces_target=traces)
+        self._display.update_phase("Starting")
         self._display.add_event(f"START: Generating {traces} {dataset_type} traces")
 
     def on_plan_complete(self, plan: Plan) -> None:
@@ -359,12 +374,16 @@ class RichReporter:
         )
 
     def _update_elapsed(self) -> None:
-        """Update elapsed time in the display."""
+        """Update elapsed time and cost in the display."""
         import time
 
         if self._start_time:
             elapsed = time.time() - self._start_time
             self._display._state.elapsed_seconds = elapsed
+
+        # Update cost from source if available
+        if self._cost_source:
+            self._display._state.cost = self._cost_source()
 
 
 class CallbackReporter:
