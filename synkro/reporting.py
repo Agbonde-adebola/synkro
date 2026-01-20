@@ -241,6 +241,7 @@ class RichReporter:
         self._traces_target = traces
         self._display.start(model=model)
         self._display.update_phase("Starting", f"{traces} {dataset_type} traces")
+        self._display.add_event(f"START: Generating {traces} {dataset_type} traces")
 
     def on_plan_complete(self, plan: Plan) -> None:
         """Update phase to show planning is complete."""
@@ -249,6 +250,7 @@ class RichReporter:
             cat_names += f" +{len(plan.categories) - 3}"
         self._display.update_phase("Planning Complete")
         self._display.add_activity(f"{len(plan.categories)} categories: {cat_names}")
+        self._display.add_event(f"PLAN: {len(plan.categories)} categories defined")
         self._update_elapsed()
 
     def on_scenario_progress(self, completed: int, total: int) -> None:
@@ -258,6 +260,8 @@ class RichReporter:
     def on_response_progress(self, completed: int, total: int) -> None:
         self._display.update_phase("Generating Traces")
         self._display.update_progress(completed, total)
+        if completed == 1 or completed == total or completed % 5 == 0:
+            self._display.add_event(f"TRACE: Processing {completed}/{total}...")
         self._update_elapsed()
 
     def on_grading_progress(self, completed: int, total: int) -> None:
@@ -270,6 +274,7 @@ class RichReporter:
         self._display.update_phase("Verification Complete")
         passed = sum(1 for t in traces if t.grade and t.grade.passed)
         self._display.add_activity(f"{passed}/{len(traces)} passed ({pass_rate:.0f}%)")
+        self._display.add_event(f"VERIFY: {passed}/{len(traces)} passed ({pass_rate:.0f}%)")
         self._update_elapsed()
 
     def on_refinement_start(self, iteration: int, failed_count: int) -> None:
@@ -307,6 +312,7 @@ class RichReporter:
         self._display.set_logic_map(logic_map)
         self._display.update_phase("Rules Extracted")
         self._display.add_activity(f"{len(logic_map.rules)} rules found")
+        self._display.add_event(f"RULES: Extracted {len(logic_map.rules)} rules from policy")
         self._update_elapsed()
 
     def on_golden_scenarios_complete(self, scenarios, distribution) -> None:
@@ -314,6 +320,7 @@ class RichReporter:
         self._display.set_scenarios(scenarios, distribution)
         self._display.update_phase("Scenarios Generated")
         self._display.add_activity(f"{len(scenarios)} scenarios created")
+        self._display.add_event(f"SCEN: Generated {len(scenarios)} golden scenarios")
         self._update_elapsed()
 
     def on_responses_complete(self, traces: list[Trace]) -> None:
@@ -321,6 +328,7 @@ class RichReporter:
         self._display._state.traces_count = len(traces)
         self._display.update_phase("Traces Complete")
         self._display.add_activity(f"{len(traces)} traces synthesized")
+        self._display.add_event(f"DONE: Synthesized {len(traces)} traces")
         self._update_elapsed()
 
     def on_taxonomy_extracted(self, taxonomy) -> None:
@@ -333,6 +341,7 @@ class RichReporter:
         # Store coverage data in live display - it will be shown as a section
         self._display.set_coverage(report)
         self._display.add_activity(f"Coverage: {report.overall_coverage_percent:.0f}%")
+        self._display.add_event(f"COV: Coverage at {report.overall_coverage_percent:.0f}%")
         self._update_elapsed()
 
         if show_suggestions and report.suggestions:

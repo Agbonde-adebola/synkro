@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 
 if TYPE_CHECKING:
@@ -54,6 +55,12 @@ class DisplayState:
     logic_map: "LogicMap | None" = None
     coverage_percent: float | None = None
     coverage_sub_categories: int = 0
+    covered_count: int = 0
+    partial_count: int = 0
+    uncovered_count: int = 0
+
+    # Event log for activity feed
+    events: list[str] = field(default_factory=list)
 
 
 class _NoOpContextManager:
@@ -86,7 +93,7 @@ class LiveProgressDisplay:
         return self._state
 
     def _render(self) -> Panel:
-        """Render the current state as a styled Panel."""
+        """Render the current state as a styled grid-based Panel."""
         s = self._state
 
         # Advance spinner frame
@@ -96,131 +103,308 @@ class LiveProgressDisplay:
         if self._start_time and not s.is_complete:
             s.elapsed_seconds = time.time() - self._start_time
 
-        # Build content lines
-        content_lines: list[Text] = []
+        # Build the full layout
+        content_parts: list = []
 
-        # Header row: branding + model
-        header = Text()
-        header.append("  SYNKRO", style="bold cyan")
+        # Header: subtitle with model name
         if s.model:
-            padding = 50 - len(s.model)
-            header.append(" " * max(padding, 2), style="")
-            header.append(s.model, style="dim")
-        content_lines.append(header)
-        content_lines.append(Text(""))
+            subtitle = Text(f"Creating synthetic traces with {s.model}", style="dim")
+            content_parts.append(subtitle)
+            content_parts.append(Text(""))
 
-        # Phase row with animated spinner or completion indicator
         if s.is_complete:
-            phase_row = Text()
-            phase_row.append("  ✓ Complete", style="bold green")
-            phase_row.append("  " + " " * 30 + "100%", style="dim")
-            content_lines.append(phase_row)
+            # Completion view - simple summary
+            content_parts.extend(self._render_complete_view())
         else:
-            phase_row = Text()
-            # Animated spinner
-            spinner_char = self.SPINNER_FRAMES[self._frame_idx % len(self.SPINNER_FRAMES)]
-            phase_row.append(f"  {spinner_char} ", style="cyan")
-            phase_row.append(s.phase, style="bold cyan")
+            # Active view - grid layout
+            content_parts.extend(self._render_active_view())
 
-            # Progress bar
-            if s.progress_total > 0:
-                pct = (s.progress_current / s.progress_total) * 100
-                filled = int(pct / 5)  # 20 char bar
-                bar = "[" + "=" * filled + "-" * (20 - filled) + "]"
-                phase_row.append(f"  {bar}  {s.progress_current}/{s.progress_total} {pct:.0f}%", style="cyan")
-            content_lines.append(phase_row)
+        return Panel(
+            Group(*content_parts),
+            title="[bold cyan]SYNKRO[/bold cyan]",
+            subtitle=self._render_status_bar(),
+            border_style="green" if s.is_complete else "cyan",
+            padding=(0, 1),
+        )
 
-        content_lines.append(Text(""))
+    def _render_active_view(self) -> list:
+        """Render the active (non-complete) view with grid layout."""
+        s = self._state
+        content_parts: list = []
 
-        # Rules section (if logic_map available)
-        if s.logic_map and s.rules_count > 0 and not s.is_complete:
-            content_lines.append(
-                Text(f"  ─────────────────── Rules ({s.rules_count}) ───────────────────", style="dim")
-            )
+        # Create main grid table (2 columns)
+        grid = Table.grid(padding=(0, 2))
+        grid.add_column("left", ratio=2)
+        grid.add_column("right", ratio=1)
+
+        # Build left column content (Rules + Scenarios)
+        left_content = self._render_left_column()
+
+        # Build right column content (Status + Coverage boxes)
+        right_content = self._render_right_column()
+
+        grid.add_row(left_content, right_content)
+        content_parts.append(grid)
+
+        # Events section (full width)
+        if s.events:
+            content_parts.append(Text(""))
+            content_parts.append(self._render_events())
+
+        return content_parts
+
+    def _render_left_column(self) -> Group:
+        """Render Rules + Scenarios sections for left column."""
+        s = self._state
+        lines: list = []
+
+        # Rules section
+        if s.logic_map and s.rules_count > 0:
+            rules_header = Text(f"─── Rules ({s.rules_count}) ───", style="bold white")
+            lines.append(rules_header)
+
             # Group by category
             categories: dict[str, list[str]] = {}
             for rule in s.logic_map.rules:
                 cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
                 categories.setdefault(cat, []).append(rule.rule_id)
+
             for cat, ids in sorted(categories.items()):
-                ids_str = ", ".join(ids[:5])
-                if len(ids) > 5:
-                    ids_str += f" (+{len(ids) - 5})"
-                line = Text(f"  {cat} ({len(ids)}): ", style="bold")
-                line.append(ids_str, style="cyan")
-                content_lines.append(line)
-            content_lines.append(Text(""))
+                line = Text()
+                line.append(f"{cat} ", style="cyan")
+                line.append(f"({len(ids)}): ", style="dim")
+                ids_display = ", ".join(ids[:4])
+                line.append(ids_display, style="white")
+                if len(ids) > 4:
+                    line.append(f" (+{len(ids) - 4})", style="dim")
+                lines.append(line)
 
-        # Scenarios section (if available)
-        if s.scenarios_count > 0 and not s.is_complete:
-            content_lines.append(Text("  ─────────────────── Scenarios ───────────────────", style="dim"))
-            dist = Text("  ")
-            dist.append(f"[+] {s.positive_count} positive  ", style="green")
-            dist.append(f"[-] {s.negative_count} negative  ", style="red")
-            dist.append(f"[!] {s.edge_count} edge  ", style="yellow")
-            dist.append(f"[o] {s.irrelevant_count} irrelevant", style="dim")
-            content_lines.append(dist)
-            content_lines.append(Text(""))
+            lines.append(Text(""))
 
-        # Coverage section (if available)
-        if s.coverage_percent is not None and not s.is_complete:
-            content_lines.append(Text("  ─────────────────── Coverage ────────────────────", style="dim"))
-            cov_style = "green" if s.coverage_percent >= 70 else "yellow"
-            cov_line = Text(f"  {s.coverage_percent:.0f}% overall", style=cov_style)
-            if s.coverage_sub_categories > 0:
-                cov_line.append(f" ({s.coverage_sub_categories} sub-categories)", style="dim")
-            content_lines.append(cov_line)
-            content_lines.append(Text(""))
+        # Scenarios section
+        if s.scenarios_count > 0:
+            scen_header = Text("─── Scenarios ───", style="bold white")
+            lines.append(scen_header)
 
-        # Latest activity
-        if s.latest_activity and not s.is_complete:
-            activity = Text("  ")
-            activity.append("Latest: ", style="cyan")
-            activity_text = s.latest_activity[:60]
-            if len(s.latest_activity) > 60:
-                activity_text += "..."
-            activity.append(activity_text, style="white")
-            content_lines.append(activity)
-            content_lines.append(Text(""))
+            dist1 = Text()
+            dist1.append(f"[+] {s.positive_count} positive  ", style="green")
+            dist1.append(f"[-] {s.negative_count} negative", style="red")
+            lines.append(dist1)
 
-        # Completion summary
-        if s.is_complete:
-            content_lines.append(Text(""))
-            elapsed_str = f"{int(s.elapsed_seconds)}s"
-            if s.elapsed_seconds >= 60:
-                elapsed_str = f"{int(s.elapsed_seconds) // 60}m {int(s.elapsed_seconds) % 60}s"
-            content_lines.append(Text(f"  Generated {s.traces_count} traces in {elapsed_str}", style="white"))
-            content_lines.append(Text(f"  |-- {s.rules_count} rules extracted", style="dim"))
-            dist_str = f"({s.positive_count}+ {s.negative_count}- {s.edge_count}! {s.irrelevant_count}o)"
-            content_lines.append(Text(f"  |-- {s.scenarios_count} scenarios {dist_str}", style="dim"))
-            content_lines.append(Text(f"  |-- {s.traces_count} traces synthesized", style="dim"))
-            if s.pass_rate is not None:
-                rate_style = "green" if s.pass_rate >= 80 else "yellow" if s.pass_rate >= 50 else "red"
-                line = Text("  `-- ")
-                line.append(f"{s.pass_rate:.0f}%", style=rate_style)
-                line.append(" passed verification", style="dim")
-                content_lines.append(line)
+            dist2 = Text()
+            dist2.append(f"[!] {s.edge_count} edge  ", style="yellow")
+            dist2.append(f"[o] {s.irrelevant_count} irrelevant", style="dim")
+            lines.append(dist2)
 
-        content_lines.append(Text(""))
+        # If nothing to show yet, display placeholder
+        if not lines:
+            lines.append(Text("Initializing...", style="dim"))
 
-        # Footer: metrics
-        footer = Text("  ")
-        footer.append(f"Time: {s.elapsed_seconds:.0f}s", style="dim")
-        footer.append("  |  ", style="dim")
-        footer.append(f"Cost: ${s.cost:.4f}", style="dim")
-        if s.output_file:
-            footer.append("  |  ", style="dim")
-            footer.append(s.output_file, style="cyan")
-        elif not s.is_complete:
-            footer.append("  |  ", style="dim")
-            footer.append("Ctrl+C to cancel", style="dim")
-        content_lines.append(footer)
+        return Group(*lines)
 
-        return Panel(
-            Group(*content_lines),
-            border_style="green" if s.is_complete else "cyan",
+    def _render_right_column(self) -> Group:
+        """Render Status + Coverage boxes for right column."""
+        s = self._state
+        panels: list = []
+
+        # Status box
+        status_table = Table.grid(padding=(0, 1))
+        status_table.add_column("label", style="dim")
+        status_table.add_column("value", style="cyan")
+
+        status_table.add_row("Phase:", s.phase)
+        if s.progress_total > 0:
+            status_table.add_row("Progress:", f"{s.progress_current}/{s.progress_total}")
+        status_table.add_row("Elapsed:", self._format_time(s.elapsed_seconds))
+        status_table.add_row("Cost:", f"${s.cost:.4f}")
+
+        status_panel = Panel(
+            status_table,
+            title="[dim]Status[/dim]",
+            border_style="dim",
             padding=(0, 1),
         )
+        panels.append(status_panel)
+
+        # Coverage box (if available)
+        if s.coverage_percent is not None:
+            cov_table = Table.grid(padding=(0, 1))
+            cov_table.add_column("label", style="dim")
+            cov_table.add_column("value")
+
+            cov_style = "green" if s.coverage_percent >= 70 else "yellow"
+            cov_table.add_row("Overall:", Text(f"{s.coverage_percent:.0f}%", style=cov_style))
+            cov_table.add_row("Covered:", str(s.covered_count))
+            cov_table.add_row("Partial:", str(s.partial_count))
+            cov_table.add_row("Uncovered:", str(s.uncovered_count))
+
+            coverage_panel = Panel(
+                cov_table,
+                title="[dim]Coverage[/dim]",
+                border_style="dim",
+                padding=(0, 1),
+            )
+            panels.append(coverage_panel)
+
+        return Group(*panels)
+
+    def _render_events(self) -> Panel:
+        """Render scrolling events log."""
+        s = self._state
+        # Keep last 4 events
+        recent_events = s.events[-4:] if s.events else []
+        lines = [Text(e, style="dim") for e in recent_events]
+
+        if not lines:
+            lines = [Text("No events yet...", style="dim")]
+
+        return Panel(
+            Group(*lines),
+            title="[dim]Events[/dim]",
+            border_style="dim",
+            padding=(0, 1),
+        )
+
+    def _render_status_bar(self) -> Text:
+        """Render bottom status bar with spinner."""
+        s = self._state
+
+        if s.is_complete:
+            bar = Text()
+            bar.append("✓ ", style="green")
+            bar.append("Complete", style="bold green")
+            bar.append(f"  {s.traces_count} traces", style="dim")
+            bar.append(f"  {self._format_time(s.elapsed_seconds)}", style="dim")
+            return bar
+
+        spinner = self.SPINNER_FRAMES[self._frame_idx % len(self.SPINNER_FRAMES)]
+        bar = Text()
+        bar.append(f"{spinner} ", style="cyan")
+        bar.append(s.phase, style="bold")
+        if s.progress_total > 0:
+            bar.append(f"  {s.progress_current}/{s.progress_total}", style="dim")
+        bar.append(f"  {self._format_time(s.elapsed_seconds)}", style="dim")
+        return bar
+
+    def _render_complete_view(self) -> list:
+        """Render the completion summary view."""
+        s = self._state
+        lines: list = []
+
+        lines.append(Text(""))
+
+        # Main summary
+        summary = Text()
+        summary.append(f"Generated {s.traces_count} traces", style="bold white")
+        summary.append(f" in {self._format_time(s.elapsed_seconds)}", style="dim")
+        lines.append(summary)
+
+        lines.append(Text(""))
+
+        # Breakdown
+        lines.append(Text(f"├─ {s.rules_count} rules extracted", style="dim"))
+
+        dist_str = f"({s.positive_count}+ {s.negative_count}- {s.edge_count}! {s.irrelevant_count}o)"
+        lines.append(Text(f"├─ {s.scenarios_count} scenarios {dist_str}", style="dim"))
+
+        lines.append(Text(f"├─ {s.traces_count} traces synthesized", style="dim"))
+
+        if s.pass_rate is not None:
+            rate_style = "green" if s.pass_rate >= 80 else "yellow" if s.pass_rate >= 50 else "red"
+            rate_line = Text("└─ ")
+            rate_line.append(f"{s.pass_rate:.0f}%", style=rate_style)
+            rate_line.append(" passed verification", style="dim")
+            lines.append(rate_line)
+        else:
+            lines.append(Text(f"└─ Cost: ${s.cost:.4f}", style="dim"))
+
+        if s.output_file:
+            lines.append(Text(""))
+            lines.append(Text(f"Output: {s.output_file}", style="cyan"))
+
+        lines.append(Text(""))
+
+        return lines
+
+    def _format_time(self, seconds: float) -> str:
+        """Format seconds into human-readable time."""
+        if seconds >= 60:
+            return f"{int(seconds) // 60}m {int(seconds) % 60}s"
+        return f"{seconds:.0f}s"
+
+    def _render_input_section(self) -> Panel:
+        """Render the commands and input hint section."""
+        lines: list = []
+
+        # Commands row
+        cmd_line = Text()
+        cmd_line.append("Commands: ", style="dim")
+        cmd_line.append("done", style="cyan")
+        cmd_line.append(" · ", style="dim")
+        cmd_line.append("undo", style="cyan")
+        cmd_line.append(" · ", style="dim")
+        cmd_line.append("reset", style="cyan")
+        cmd_line.append(" · ", style="dim")
+        cmd_line.append("show rules", style="cyan")
+        cmd_line.append(" · ", style="dim")
+        cmd_line.append("show coverage", style="cyan")
+        cmd_line.append(" · ", style="dim")
+        cmd_line.append("help", style="cyan")
+        lines.append(cmd_line)
+
+        # Feedback examples
+        feedback_line = Text()
+        feedback_line.append("Feedback: ", style="dim")
+        feedback_line.append('"add rule for..." "remove R005" "improve coverage" "shorter"', style="yellow")
+        lines.append(feedback_line)
+
+        return Panel(
+            Group(*lines),
+            title="[dim]Input[/dim]",
+            border_style="dim",
+            padding=(0, 1),
+        )
+
+    def _render_with_input(self) -> Group:
+        """Render the full panel with input section below."""
+        main_panel = self._render()
+        input_section = self._render_input_section()
+        return Group(main_panel, input_section)
+
+    def prompt_for_input(self, prompt: str = "synkro> ") -> str:
+        """
+        Pause the live display, show panel with input section, and get user input.
+
+        Returns the user's input string.
+        """
+        # Stop live display if running
+        was_live = self._live is not None
+        if self._live:
+            self._live.stop()
+            self._live = None
+
+        # Render the panel with input section
+        self.console.print(self._render_with_input())
+
+        # Get input
+        try:
+            user_input = self.console.input(f"[cyan]{prompt}[/cyan]")
+        except (KeyboardInterrupt, EOFError):
+            user_input = "done"
+            self.console.print()
+
+        return user_input.strip()
+
+    def resume_live(self) -> None:
+        """Resume the live display after input."""
+        if not self._live and not self._hitl_mode:
+            self._live = Live(
+                self._render,
+                console=self.console,
+                refresh_per_second=10,
+                transient=True,
+            )
+            self._live.start()
 
     def start(self, model: str = "") -> None:
         """Start the live display with auto-animating spinner."""
@@ -328,6 +512,17 @@ class LiveProgressDisplay:
         """Store coverage for section rendering."""
         self._state.coverage_percent = report.overall_coverage_percent
         self._state.coverage_sub_categories = len(report.sub_category_coverage)
+        self._state.covered_count = report.covered_count
+        self._state.partial_count = report.partial_count
+        self._state.uncovered_count = report.uncovered_count
+        self._refresh()
+
+    def add_event(self, event: str) -> None:
+        """Add an event to the scrolling log."""
+        self._state.events.append(event)
+        # Keep last 10 events
+        if len(self._state.events) > 10:
+            self._state.events = self._state.events[-10:]
         self._refresh()
 
     def _refresh(self) -> None:
