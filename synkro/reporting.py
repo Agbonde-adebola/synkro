@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Callable, Protocol
 from synkro.types.core import Plan, Scenario, Trace
 
 if TYPE_CHECKING:
+    from synkro.interactive.live_display import LiveProgressDisplay
     from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
     from synkro.types.logic_map import GoldenScenario, LogicMap
 
@@ -199,83 +200,85 @@ class SilentReporter:
 
 class RichReporter:
     """
-    Rich console reporter with progress bars and formatted output.
+    Rich console reporter with live-updating display, spinners, and colors.
 
-    This is the default reporter that provides the familiar synkro CLI experience.
+    Uses LiveProgressDisplay for a polished, single-panel UI that updates in-place
+    with spinners, progress bars, and emoji indicators. This is the default reporter
+    that provides the familiar synkro CLI experience.
     """
 
     def __init__(self):
         from rich.console import Console
 
+        from synkro.interactive.live_display import LiveProgressDisplay
+
         self.console = Console()
-        self._progress = None
-        self._current_task = None
+        self._display = LiveProgressDisplay()
+        self._start_time: float | None = None
+        self._model: str = ""
+        self._traces_target: int = 0
+
+    @property
+    def display(self) -> "LiveProgressDisplay":
+        """Get the live display instance for HITL integration."""
+        return self._display
 
     def spinner(self, message: str = "Thinking..."):
         """Context manager that shows a loading spinner.
 
-        Usage:
-            with reporter.spinner("Thinking..."):
-                await some_llm_call()
+        Note: During live display, the spinner is built into the panel.
+        This method is for compatibility when live display is paused (e.g., HITL).
         """
         from rich.status import Status
 
         return Status(f"[cyan]{message}[/cyan]", spinner="dots", console=self.console)
 
     def on_start(self, traces: int, model: str, dataset_type: str) -> None:
-        self.console.print(
-            f"\n[cyan]⚡ Generating {traces} traces[/cyan] "
-            f"[dim]| {dataset_type.upper()} | {model}[/dim]"
-        )
+        import time
+
+        self._start_time = time.time()
+        self._model = model
+        self._traces_target = traces
+        self._display.start(model=model)
+        self._display.update_phase("Starting", f"{traces} {dataset_type} traces")
 
     def on_plan_complete(self, plan: Plan) -> None:
-        """Categories now shown in scenarios table, so just show count here."""
+        """Update phase to show planning is complete."""
         cat_names = ", ".join(c.name for c in plan.categories[:3])
         if len(plan.categories) > 3:
             cat_names += f" +{len(plan.categories) - 3}"
-        self.console.print(
-            f"[green]📋 Planning[/green] [dim]{len(plan.categories)} categories: {cat_names}[/dim]"
-        )
+        self._display.update_phase("Planning Complete")
+        self._display.add_activity(f"{len(plan.categories)} categories: {cat_names}")
+        self._update_elapsed()
 
     def on_scenario_progress(self, completed: int, total: int) -> None:
-        pass
+        self._display.update_progress(completed, total)
+        self._update_elapsed()
 
     def on_response_progress(self, completed: int, total: int) -> None:
-        pass
+        self._display.update_phase("Generating Traces")
+        self._display.update_progress(completed, total)
+        self._update_elapsed()
 
     def on_grading_progress(self, completed: int, total: int) -> None:
-        pass  # Progress shown in on_grading_complete
+        self._display.update_phase("Verifying")
+        self._display.update_progress(completed, total)
+        self._update_elapsed()
 
     def on_grading_complete(self, traces: list[Trace], pass_rate: float) -> None:
-        self.console.print(f"[green]⚖️  Grading[/green] [dim]{pass_rate:.0f}% passed[/dim]")
-        for idx, trace in enumerate(traces, 1):
-            scenario_preview = (
-                trace.scenario.description[:40] + "..."
-                if len(trace.scenario.description) > 40
-                else trace.scenario.description
-            )
-            if trace.grade and trace.grade.passed:
-                self.console.print(
-                    f"  [dim]#{idx}[/dim] [cyan]{scenario_preview}[/cyan] [green]✓ Passed[/green]"
-                )
-            else:
-                issues = (
-                    ", ".join(trace.grade.issues[:2])
-                    if trace.grade and trace.grade.issues
-                    else "No specific issues"
-                )
-                issues_preview = issues[:40] + "..." if len(issues) > 40 else issues
-                self.console.print(
-                    f"  [dim]#{idx}[/dim] [cyan]{scenario_preview}[/cyan] [red]✗ Failed[/red] [dim]{issues_preview}[/dim]"
-                )
+        self._display._state.pass_rate = pass_rate
+        self._display.update_phase("Verification Complete")
+        passed = sum(1 for t in traces if t.grade and t.grade.passed)
+        self._display.add_activity(f"{passed}/{len(traces)} passed ({pass_rate:.0f}%)")
+        self._update_elapsed()
 
     def on_refinement_start(self, iteration: int, failed_count: int) -> None:
-        self.console.print(
-            f"  [yellow]↻ Refining {failed_count} failed traces (iteration {iteration})...[/yellow]"
-        )
+        self._display.update_phase("Refining")
+        self._display.add_activity(f"Iteration {iteration}: {failed_count} failed traces")
+        self._update_elapsed()
 
     def on_grading_skipped(self) -> None:
-        self.console.print("  [dim]⚖️  Grading skipped[/dim]")
+        self._display.add_activity("Grading skipped")
 
     def on_complete(
         self,
@@ -291,100 +294,55 @@ class RichReporter:
         hitl_calls: int | None = None,
         coverage_calls: int | None = None,
     ) -> None:
-        from rich.panel import Panel
-        from rich.table import Table
-
-        elapsed_str = (
-            f"{int(elapsed_seconds) // 60}m {int(elapsed_seconds) % 60}s"
-            if elapsed_seconds >= 60
-            else f"{int(elapsed_seconds)}s"
+        self._display.set_complete(
+            traces_count=dataset_size,
+            elapsed_seconds=elapsed_seconds,
+            cost=total_cost or 0,
+            pass_rate=pass_rate,
         )
-
-        self.console.print()
-        summary = Table.grid(padding=(0, 2))
-        summary.add_column(style="green")
-        summary.add_column()
-        summary.add_row("✅ Done!", f"Generated {dataset_size} traces in {elapsed_str}")
-        if pass_rate is not None:
-            summary.add_row("📊 Quality:", f"{pass_rate:.0f}% passed verification")
-        if total_cost is not None and total_cost > 0:
-            summary.add_row("💰 Cost:", f"${total_cost:.4f}")
-        if scenario_calls is not None and response_calls is not None:
-            calls_str = f"{scenario_calls} scenario"
-            if coverage_calls is not None and coverage_calls > 0:
-                calls_str += f" + {coverage_calls} coverage"
-            if hitl_calls is not None and hitl_calls > 0:
-                calls_str += f" + {hitl_calls} hitl"
-            calls_str += f" + {response_calls} response"
-            if refinement_calls is not None and refinement_calls > 0:
-                calls_str += f" + {refinement_calls} refinement"
-            if grading_calls is not None and grading_calls > 0:
-                calls_str += f" + {grading_calls} grading"
-            summary.add_row("🔄 LLM Calls:", calls_str)
-        elif generation_calls is not None:
-            calls_str = f"{generation_calls} generation"
-            if grading_calls is not None and grading_calls > 0:
-                calls_str += f" + {grading_calls} grading"
-            summary.add_row("🔄 LLM Calls:", calls_str)
-        self.console.print(Panel(summary, border_style="green", title="[green]Complete[/green]"))
-        self.console.print()
+        self._display.stop()
 
     def on_logic_map_complete(self, logic_map) -> None:
-        """Logic Map details shown in HITL session."""
-        pass
+        """Update display with extracted rules."""
+        self._display._state.rules_count = len(logic_map.rules)
+        self._display._state.rule_ids = [r.rule_id for r in logic_map.rules]
+        self._display.update_phase("Rules Extracted")
+        self._display.add_activity(f"{len(logic_map.rules)} rules found")
+        self._update_elapsed()
 
     def on_golden_scenarios_complete(self, scenarios, distribution) -> None:
-        """Scenario details shown in HITL session."""
-        pass
+        """Update display with scenario distribution."""
+        self._display._state.scenarios_count = len(scenarios)
+        self._display._state.positive_count = distribution.get("positive", 0)
+        self._display._state.negative_count = distribution.get("negative", 0)
+        self._display._state.edge_count = distribution.get("edge_case", 0)
+        self._display._state.irrelevant_count = distribution.get("irrelevant", 0)
+        self._display.update_phase("Scenarios Generated")
+        self._display.add_activity(f"{len(scenarios)} scenarios created")
+        self._update_elapsed()
 
     def on_responses_complete(self, traces: list[Trace]) -> None:
-        """Enhanced to show category and type for each trace."""
-        self.console.print(f"\n[green]✍️  Traces[/green] [dim]{len(traces)} generated[/dim]")
-
-        # Group by category
-        by_category = {}
-        for trace in traces:
-            cat = trace.scenario.category or "uncategorized"
-            by_category.setdefault(cat, []).append(trace)
-
-        for cat_name, cat_traces in by_category.items():
-            self.console.print(f"\n  [cyan]📁 {cat_name}[/cyan] ({len(cat_traces)} traces)")
-
-            for trace in cat_traces[:3]:  # Show first 3 per category
-                # Try to get scenario type if available
-                scenario_type = getattr(trace.scenario, "scenario_type", None)
-                if scenario_type:
-                    type_indicator = {
-                        "positive": "[green]✓[/green]",
-                        "negative": "[red]✗[/red]",
-                        "edge_case": "[yellow]⚡[/yellow]",
-                        "irrelevant": "[dim]○[/dim]",
-                    }.get(
-                        scenario_type if isinstance(scenario_type, str) else scenario_type.value,
-                        "[white]?[/white]",
-                    )
-                else:
-                    type_indicator = "[white]•[/white]"
-
-                user_preview = (
-                    trace.user_message[:50] + "..."
-                    if len(trace.user_message) > 50
-                    else trace.user_message
-                )
-                self.console.print(f"    {type_indicator} [blue]{user_preview}[/blue]")
-
-            if len(cat_traces) > 3:
-                self.console.print(f"    [dim]... and {len(cat_traces) - 3} more[/dim]")
+        """Update display with trace count."""
+        self._display._state.traces_count = len(traces)
+        self._display.update_phase("Traces Complete")
+        self._display.add_activity(f"{len(traces)} traces synthesized")
+        self._update_elapsed()
 
     def on_taxonomy_extracted(self, taxonomy) -> None:
-        """Taxonomy info now shown in scenarios table, so this is a no-op."""
-        pass
+        """Taxonomy extraction is part of coverage phase."""
+        self._display.add_activity(f"{len(taxonomy.sub_categories)} sub-categories")
+        self._update_elapsed()
 
     def on_coverage_calculated(self, report, show_suggestions: bool = True) -> None:
-        """Display coverage report as a table with totals at bottom."""
+        """Display coverage report (shown after live display completes or in HITL)."""
         from rich.table import Table
 
-        # Coverage table
+        # If live display is still running, just add activity
+        if self._display._live:
+            self._display.add_activity(f"Coverage: {report.overall_coverage_percent:.0f}%")
+            return
+
+        # Otherwise show full table (for non-live scenarios)
         table = Table(show_header=True, header_style="bold cyan", title="📊 Coverage")
         table.add_column("Sub-Category")
         table.add_column("Coverage", justify="right")
@@ -410,7 +368,6 @@ class RichReporter:
                 "",
             )
 
-        # Add totals row at bottom
         table.add_row("", "", "", end_section=True)
         table.add_row(
             f"[bold]Total ({report.covered_count}✓ {report.partial_count}~ {report.uncovered_count}✗)[/bold]",
@@ -420,7 +377,6 @@ class RichReporter:
 
         self.console.print(table)
 
-        # Show suggestions separately (can be disabled for HITL where it goes in session details)
         if show_suggestions and report.suggestions:
             self.console.print("\n[cyan]Suggestions:[/cyan]")
             for i, sugg in enumerate(report.suggestions[:3], 1):
@@ -428,12 +384,17 @@ class RichReporter:
 
     def on_coverage_improved(self, before, after, added_scenarios) -> None:
         """Display coverage improvement."""
-        improvement = after.overall_coverage_percent - before.overall_coverage_percent
-        self.console.print(
-            f"\n[green]📈 Coverage Improved[/green] "
-            f"[dim]{before.overall_coverage_percent:.0f}% → {after.overall_coverage_percent:.0f}% "
-            f"(+{improvement:.0f}%, {added_scenarios} scenarios added)[/dim]"
+        self._display.add_activity(
+            f"Coverage: {before.overall_coverage_percent:.0f}% → {after.overall_coverage_percent:.0f}% (+{added_scenarios})"
         )
+
+    def _update_elapsed(self) -> None:
+        """Update elapsed time in the display."""
+        import time
+
+        if self._start_time:
+            elapsed = time.time() - self._start_time
+            self._display._state.elapsed_seconds = elapsed
 
 
 class CallbackReporter:

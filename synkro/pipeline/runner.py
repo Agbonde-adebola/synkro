@@ -904,7 +904,14 @@ class GenerationPipeline:
         session = HITLSession(original_logic_map=logic_map)
         session.set_scenarios(scenarios, distribution)
 
-        display = LogicMapDisplay()
+        # Get LiveProgressDisplay from reporter if available (for compact HITL mode)
+        live_display = None
+        if hasattr(self.reporter, "display"):
+            live_display = self.reporter.display
+            # Enter HITL mode (pause live updates)
+            live_display.enter_hitl_mode()
+
+        display = LogicMapDisplay(live_display=live_display)
         prompt = InteractivePrompt()
         classifier = HITLIntentClassifier(llm=self.factory.generation_llm)
 
@@ -966,15 +973,22 @@ class GenerationPipeline:
                 prompt.show_unified_instructions()
                 continue
 
-            if feedback.lower().startswith("show "):
-                target = feedback[5:].strip().upper()
-                if target.startswith("S") and target[1:].isdigit():
-                    # Show scenario
-                    if session.current_scenarios:
+            if feedback.lower().startswith("show ") or feedback.lower().startswith("find "):
+                # Use enhanced command handling (supports show rules, show scenarios,
+                # show gaps, show coverage, find, and single item views)
+                handled = display.handle_show_command(
+                    feedback,
+                    session.current_logic_map,
+                    session.current_scenarios,
+                    coverage_report,
+                )
+                if not handled:
+                    # Fallback to basic show for specific items
+                    target = feedback.split()[1].strip().upper() if len(feedback.split()) > 1 else ""
+                    if target.startswith("S") and session.current_scenarios:
                         display.display_scenario(target, session.current_scenarios)
-                else:
-                    # Show rule
-                    display.display_rule(target, session.current_logic_map)
+                    elif target.startswith("R"):
+                        display.display_rule(target, session.current_logic_map)
                 continue
 
             # Empty input
@@ -1232,6 +1246,10 @@ class GenerationPipeline:
             f"{session.scenario_change_count} scenario change(s), "
             f"{current_turns} turns"
         )
+
+        # Exit HITL mode (resume live display)
+        if live_display:
+            live_display.exit_hitl_mode()
 
         return (
             session.current_logic_map,

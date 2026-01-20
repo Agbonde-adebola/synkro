@@ -5,18 +5,23 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from synkro.interactive.live_display import LiveProgressDisplay
     from synkro.types.core import Plan
     from synkro.types.coverage import CoverageReport
     from synkro.types.logic_map import GoldenScenario, LogicMap
 
 
 class LogicMapDisplay:
-    """Rich-based display for Logic Maps."""
+    """Rich-based display for Logic Maps.
 
-    def __init__(self) -> None:
+    Can optionally integrate with LiveProgressDisplay for HITL rendering.
+    """
+
+    def __init__(self, live_display: "LiveProgressDisplay | None" = None) -> None:
         from rich.console import Console
 
         self.console = Console()
+        self._live_display = live_display
 
     def display_full(self, logic_map: "LogicMap") -> None:
         """Display the complete Logic Map with all details."""
@@ -168,6 +173,10 @@ class LogicMapDisplay:
             with display.spinner("Applying changes..."):
                 await some_llm_call()
         """
+        # Use LiveProgressDisplay's HITL spinner if available
+        if self._live_display:
+            return self._live_display.hitl_spinner(message)
+
         from rich.status import Status
 
         return Status(f"[cyan]{message}[/cyan]", spinner="dots", console=self.console)
@@ -463,9 +472,23 @@ class LogicMapDisplay:
         distribution: dict[str, int] | None,
         coverage_report: "CoverageReport | None" = None,
     ) -> None:
-        """Display logic map, scenarios, coverage table, and session details with suggestions."""
+        """Display logic map, scenarios, coverage table, and session details with suggestions.
+
+        Uses LiveProgressDisplay's compact HITL layout if available.
+        """
         from rich.panel import Panel
 
+        # Use compact HITL layout if LiveProgressDisplay is available
+        if self._live_display and scenarios:
+            self._live_display.render_hitl_state(
+                logic_map,
+                scenarios,
+                coverage_report,
+                current_turns,
+            )
+            return
+
+        # Fallback to traditional multi-panel display
         # Display logic map first
         self.display_full(logic_map)
 
@@ -500,6 +523,37 @@ class LogicMapDisplay:
                 border_style="cyan",
             )
         )
+
+    def handle_show_command(
+        self,
+        command: str,
+        logic_map: "LogicMap",
+        scenarios: list["GoldenScenario"] | None,
+        coverage: "CoverageReport | None",
+    ) -> bool:
+        """Parse and handle show/find/filter commands. Returns True if handled.
+
+        Delegates to LiveProgressDisplay if available.
+        """
+        if self._live_display:
+            return self._live_display.handle_show_command(
+                command, logic_map, scenarios, coverage
+            )
+
+        # Fallback: handle basic show commands
+        parts = command.lower().split()
+        if not parts or parts[0] != "show" or len(parts) < 2:
+            return False
+
+        target = parts[1].upper()
+        if target.startswith("S") and scenarios:
+            self.display_scenario(target, scenarios)
+            return True
+        elif target.startswith("R"):
+            self.display_rule(target, logic_map)
+            return True
+
+        return False
 
 
 class InteractivePrompt:
