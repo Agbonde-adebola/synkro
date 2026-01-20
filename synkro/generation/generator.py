@@ -128,11 +128,6 @@ class Generator:
             if turns == "auto" and self.policy_config:
                 self.turns = self.policy_config.complexity.recommended_turns
 
-        # Create checkpoint manager if checkpointing enabled
-        self.checkpoint_manager = (
-            CheckpointManager(self.checkpoint_dir) if self.checkpoint_dir else None
-        )
-
         # HITL configuration
         self.enable_hitl = enable_hitl
 
@@ -165,6 +160,20 @@ class Generator:
 
         # Reporter for progress output
         self.reporter = reporter or RichReporter()
+
+        # Create checkpoint manager if checkpointing enabled
+        # Create it after reporter so we can route messages through the event log
+        checkpoint_logger = None
+        if hasattr(self.reporter, "_display") and self.reporter._display:
+
+            def checkpoint_logger(msg):
+                return self.reporter._display.add_event(msg)
+
+        self.checkpoint_manager = (
+            CheckpointManager(self.checkpoint_dir, logger=checkpoint_logger)
+            if self.checkpoint_dir
+            else None
+        )
 
         # Auto-scale workers based on provider
         model_str = (

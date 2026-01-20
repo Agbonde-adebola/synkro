@@ -4,16 +4,16 @@ import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from pydantic import BaseModel, Field
-from rich.console import Console
 
 if TYPE_CHECKING:
     from synkro.types.core import Trace
     from synkro.types.logic_map import GoldenScenario, LogicMap
 
-console = Console()
+# Type for optional logger callback
+LogCallback = Callable[[str], None] | None
 
 # Hash length for policy matching (first 16 chars of SHA256)
 HASH_LENGTH = 16
@@ -64,17 +64,24 @@ class CheckpointManager:
         ...     completed = checkpoint.completed_scenario_indices
     """
 
-    def __init__(self, checkpoint_dir: str | Path):
+    def __init__(self, checkpoint_dir: str | Path, logger: LogCallback = None):
         """
         Initialize the checkpoint manager.
 
         Args:
             checkpoint_dir: Directory to store checkpoint files
+            logger: Optional callback for logging messages (avoids console.print stacking)
         """
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoint_file = self.checkpoint_dir / "checkpoint.json"
         self._data: CheckpointData | None = None
+        self._logger = logger
+
+    def _log(self, message: str) -> None:
+        """Log a message using the callback if provided."""
+        if self._logger:
+            self._logger(message)
 
     def _load_or_create(self) -> CheckpointData:
         """Load existing checkpoint or create new one."""
@@ -131,7 +138,7 @@ class CheckpointManager:
         data.dataset_type = dataset_type
         data.logic_map_data = logic_map.model_dump()
         self._save()
-        console.print("[dim]💾 Checkpoint: Logic Map saved[/dim]")
+        self._log("CKPT: Logic Map saved")
 
     def save_scenarios(
         self,
@@ -143,7 +150,7 @@ class CheckpointManager:
         data.scenarios_data = [s.model_dump() for s in scenarios]
         data.scenario_distribution = distribution
         self._save()
-        console.print("[dim]💾 Checkpoint: Scenarios saved[/dim]")
+        self._log("CKPT: Scenarios saved")
 
     def save_trace(self, trace: "Trace", scenario_index: int) -> None:
         """Save a generated trace (incremental Stage 3)."""
@@ -159,7 +166,7 @@ class CheckpointManager:
             data.traces_data.append(trace.model_dump())
             data.completed_scenario_indices.append(idx)
         self._save()
-        console.print(f"[dim]💾 Checkpoint: {len(traces)} traces saved[/dim]")
+        self._log(f"CKPT: {len(traces)} traces saved")
 
     def save_verified_traces(self, traces: list["Trace"]) -> None:
         """Save verified traces (Stage 4 complete)."""
@@ -167,7 +174,7 @@ class CheckpointManager:
         data.verified_traces_data = [t.model_dump() for t in traces]
         data.verification_complete = True
         self._save()
-        console.print("[dim]💾 Checkpoint: Verification complete[/dim]")
+        self._log("CKPT: Verification complete")
 
     def get_logic_map(self) -> "LogicMap | None":
         """Retrieve Logic Map from checkpoint."""
@@ -223,7 +230,7 @@ class CheckpointManager:
         if self.checkpoint_file.exists():
             self.checkpoint_file.unlink()
         self._data = None
-        console.print("[dim]🗑️ Checkpoint cleared[/dim]")
+        self._log("CKPT: Checkpoint cleared")
 
     @property
     def stage(self) -> str:

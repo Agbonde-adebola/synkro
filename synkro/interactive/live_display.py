@@ -98,6 +98,10 @@ class LiveProgressDisplay:
         """Get the current display state."""
         return self._state
 
+    def __rich__(self) -> Panel:
+        """Rich protocol method - called by Live on each refresh to get renderable."""
+        return self._render()
+
     def _render(self) -> Panel:
         """Render the current state as a styled grid-based Panel."""
         s = self._state
@@ -408,7 +412,7 @@ class LiveProgressDisplay:
         """Resume the live display after input."""
         if not self._live and not self._hitl_mode:
             self._live = Live(
-                self._render,
+                self,  # Pass self - Rich calls __rich__() on each refresh
                 console=self.console,
                 refresh_per_second=10,
                 transient=True,
@@ -421,10 +425,9 @@ class LiveProgressDisplay:
         self._start_time = time.time()
         self._frame_idx = 0
         self._is_active = True  # Mark as active
-        # Pass callable (not result) so Live calls _render() on each refresh
-        # This makes the spinner animate automatically
+        # Pass self - Rich calls __rich__() on each refresh for animation
         self._live = Live(
-            self._render,  # callable, not self._render()
+            self,  # Rich calls __rich__() on each refresh
             console=self.console,
             refresh_per_second=10,  # Higher rate for smooth spinner
             transient=True,  # Replace in place, don't stack
@@ -558,7 +561,7 @@ class LiveProgressDisplay:
         self._hitl_mode = False
         self._frame_idx = 0
         self._live = Live(
-            self._render,  # callable for auto-animation
+            self,  # Rich calls __rich__() on each refresh for animation
             console=self.console,
             refresh_per_second=10,
             transient=True,

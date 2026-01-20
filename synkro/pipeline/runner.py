@@ -395,12 +395,11 @@ class GenerationPipeline:
         # FAST PATH: Use pre-computed PolicyConfig (skips planning + extraction)
         # =====================================================================
         if policy_config is not None:
-            from rich.console import Console
-
             from synkro.types.core import Plan
 
-            console = Console()
-            console.print("[green]⚡ Using pre-computed Logic Map (fast path)[/green]")
+            # Route through reporter to avoid stacking when Live display is active
+            if hasattr(self.reporter, "_display") and self.reporter._display:
+                self.reporter._display.add_event("FAST: Using pre-computed Logic Map")
 
             # Use pre-computed logic map and categories
             logic_map = policy_config.logic_map
