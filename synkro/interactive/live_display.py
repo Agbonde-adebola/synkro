@@ -86,6 +86,12 @@ class LiveProgressDisplay:
         self._hitl_mode = False
         self._start_time: float | None = None
         self._frame_idx = 0
+        self._is_active = False  # Track if display is in active mode
+
+    @property
+    def is_active(self) -> bool:
+        """Check if the live display is currently active (should suppress external prints)."""
+        return self._is_active and not self._hitl_mode
 
     @property
     def state(self) -> DisplayState:
@@ -414,6 +420,7 @@ class LiveProgressDisplay:
         self._state = DisplayState(model=model)
         self._start_time = time.time()
         self._frame_idx = 0
+        self._is_active = True  # Mark as active
         # Pass callable (not result) so Live calls _render() on each refresh
         # This makes the spinner animate automatically
         self._live = Live(
@@ -426,6 +433,7 @@ class LiveProgressDisplay:
 
     def stop(self) -> None:
         """Stop the live display and print final panel."""
+        self._is_active = False  # Mark as inactive
         if self._live:
             self._live.stop()
             self._live = None

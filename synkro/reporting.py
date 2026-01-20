@@ -230,7 +230,7 @@ class RichReporter:
         instead of showing a separate spinner (which would stack panels).
         """
         # If live display is running, don't show separate spinner - update phase instead
-        if self._display._live is not None:
+        if self._display.is_active:
             self._display.update_phase(message.replace("...", ""))
             return _NoOpContextManager()
 

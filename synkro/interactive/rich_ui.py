@@ -173,7 +173,14 @@ class LogicMapDisplay:
             with display.spinner("Applying changes..."):
                 await some_llm_call()
         """
-        # Use LiveProgressDisplay's HITL spinner if available
+        # If live display is active, return no-op to prevent stacking
+        if self._live_display and self._live_display.is_active:
+            self._live_display.update_phase(message.replace("...", ""))
+            from synkro.reporting import _NoOpContextManager
+
+            return _NoOpContextManager()
+
+        # Use LiveProgressDisplay's HITL spinner if available (when not in active mode)
         if self._live_display:
             return self._live_display.hitl_spinner(message)
 
