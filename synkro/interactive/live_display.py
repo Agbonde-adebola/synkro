@@ -641,9 +641,8 @@ class LiveProgressDisplay:
         # =====================================================================
         # SCENARIOS SECTION
         # =====================================================================
+        content_lines.append(Text("  --- Scenarios ---", style="bold white"))
         if scenarios:
-            content_lines.append(Text("  --- Scenarios ---", style="bold white"))
-
             # Calculate distribution
             dist: dict[str, int] = {}
             for s in scenarios:
@@ -668,7 +667,9 @@ class LiveProgressDisplay:
                 dist_line.append(f"{dist.get('irrelevant', 0)} irrelevant", style="dim")
             content_lines.append(dist_line)
             content_lines.append(Text(f"    Total: {len(scenarios)} scenarios", style="cyan"))
-            content_lines.append(Text(""))
+        else:
+            content_lines.append(Text("    [dim]No scenarios yet[/dim]", style="dim"))
+        content_lines.append(Text(""))
 
         # =====================================================================
         # COVERAGE SECTION
@@ -749,7 +750,7 @@ class LiveProgressDisplay:
     def hitl_get_input(
         self,
         logic_map: "LogicMap",
-        scenarios: list["GoldenScenario"],
+        scenarios: list["GoldenScenario"] | None,
         coverage: "CoverageReport | None",
         current_turns: int,
         prompt: str = "synkro> ",
@@ -763,8 +764,8 @@ class LiveProgressDisplay:
         # Clear console to prevent stacking
         self.console.clear()
 
-        # Render the current state
-        self.render_hitl_state(logic_map, scenarios, coverage, current_turns)
+        # Render the current state (handle None scenarios)
+        self.render_hitl_state(logic_map, scenarios or [], coverage, current_turns)
 
         # Get input
         try:

@@ -479,57 +479,22 @@ class LogicMapDisplay:
         distribution: dict[str, int] | None,
         coverage_report: "CoverageReport | None" = None,
     ) -> None:
-        """Display logic map, scenarios, coverage table, and session details with suggestions.
+        """Display logic map, scenarios, coverage table, and session details.
 
-        Uses LiveProgressDisplay's compact HITL layout if available.
+        Always uses LiveProgressDisplay's compact HITL layout to prevent panel stacking.
         """
-        from rich.panel import Panel
-
-        # Use compact HITL layout if LiveProgressDisplay is available
-        if self._live_display and scenarios:
+        # Always use LiveProgressDisplay to prevent stacking issues
+        if self._live_display:
+            self.console.clear()  # Clear first to prevent any stacking
             self._live_display.render_hitl_state(
                 logic_map,
-                scenarios,
+                scenarios or [],
                 coverage_report,
                 current_turns,
             )
-            return
-
-        # Fallback to traditional multi-panel display
-        # Display logic map first
-        self.display_full(logic_map)
-
-        # Display scenarios with sub-category tags if available
-        if scenarios:
-            self.display_scenarios(scenarios, coverage_report=coverage_report)
-
-        # Display coverage table (above session details)
-        if coverage_report:
-            self.display_coverage_table(coverage_report)
-
-        # Build suggestions section for session details
-        suggestions_text = ""
-        if coverage_report and coverage_report.suggestions:
-            suggestions_text = "\n\n[bold]Suggestions:[/bold]"
-            for i, sugg in enumerate(coverage_report.suggestions[:2], 1):
-                # Truncate long suggestions
-                sugg_short = sugg[:80] + "..." if len(sugg) > 80 else sugg
-                suggestions_text += f"\n  {i}. [dim]{sugg_short}[/dim]"
-
-        # Session Details panel at bottom (instructions + settings + suggestions)
-        session_details = f"""[bold]Commands:[/bold] [cyan]done[/cyan] | [cyan]undo[/cyan] | [cyan]reset[/cyan] | [cyan]show R001[/cyan] | [cyan]show S3[/cyan] | [cyan]help[/cyan]
-
-[bold]Feedback:[/bold] [yellow]"shorter"[/yellow] [yellow]"5 turns"[/yellow] [yellow]"remove R005"[/yellow] [yellow]"add scenario for..."[/yellow] [yellow]"delete S3"[/yellow] [yellow]"improve coverage"[/yellow]
-
-[dim]Complexity:[/dim] [cyan]{plan.complexity_level.title()}[/cyan]    [dim]Turns:[/dim] [green]{current_turns}[/green]{suggestions_text}"""
-
-        self.console.print(
-            Panel(
-                session_details,
-                title="[bold cyan]Session Details[/bold cyan]",
-                border_style="cyan",
-            )
-        )
+        else:
+            # If no live_display, just show a simple message
+            self.console.print("[yellow]HITL session active. Type 'done' to continue.[/yellow]")
 
     def handle_show_command(
         self,

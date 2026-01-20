@@ -929,26 +929,14 @@ class GenerationPipeline:
         current_turns = initial_turns
         turns_history: list[int] = []  # For undo support
 
-        # Use unified HITL input if live_display available, otherwise fallback
+        # Always use live_display for HITL - it has proper screen clearing
         def get_hitl_input() -> str:
-            if live_display and session.current_scenarios:
-                return live_display.hitl_get_input(
-                    session.current_logic_map,
-                    session.current_scenarios,
-                    coverage_report,
-                    current_turns,
-                )
-            else:
-                # Fallback to traditional display + prompt
-                display.display_full_session_state(
-                    plan,
-                    session.current_logic_map,
-                    current_turns,
-                    session.current_scenarios,
-                    session.current_distribution,
-                    coverage_report=coverage_report,
-                )
-                return prompt.get_feedback().strip()
+            return live_display.hitl_get_input(
+                session.current_logic_map,
+                session.current_scenarios or [],  # Pass empty list if None
+                coverage_report,
+                current_turns,
+            )
 
         while True:
             feedback = get_hitl_input()
@@ -1003,31 +991,35 @@ class GenerationPipeline:
             if not feedback:
                 continue
 
-            # Classify intent via LLM
-            scenario_count = len(session.current_scenarios) if session.current_scenarios else 0
-            history = session.get_history_for_prompt()
+            # Classify intent via LLM (wrap in try/except to handle errors gracefully)
+            try:
+                scenario_count = len(session.current_scenarios) if session.current_scenarios else 0
+                history = session.get_history_for_prompt()
 
-            # Build coverage summary for classifier context
-            coverage_summary = "Not available"
-            if coverage_report:
-                coverage_summary = (
-                    f"{coverage_report.overall_coverage_percent:.0f}% overall, "
-                    f"{coverage_report.covered_count} covered, "
-                    f"{coverage_report.partial_count} partial, "
-                    f"{coverage_report.uncovered_count} uncovered, "
-                    f"{len(coverage_report.gaps)} gaps"
-                )
+                # Build coverage summary for classifier context
+                coverage_summary = "Not available"
+                if coverage_report:
+                    coverage_summary = (
+                        f"{coverage_report.overall_coverage_percent:.0f}% overall, "
+                        f"{coverage_report.covered_count} covered, "
+                        f"{coverage_report.partial_count} partial, "
+                        f"{coverage_report.uncovered_count} uncovered, "
+                        f"{len(coverage_report.gaps)} gaps"
+                    )
 
-            with display.spinner("Processing..."):
-                intent = await classifier.classify(
-                    feedback,
-                    current_turns,
-                    plan.complexity_level,
-                    len(session.current_logic_map.rules),
-                    scenario_count=scenario_count,
-                    conversation_history=history,
-                    coverage_summary=coverage_summary,
-                )
+                with display.spinner("Processing..."):
+                    intent = await classifier.classify(
+                        feedback,
+                        current_turns,
+                        plan.complexity_level,
+                        len(session.current_logic_map.rules),
+                        scenario_count=scenario_count,
+                        conversation_history=history,
+                        coverage_summary=coverage_summary,
+                    )
+            except Exception as e:
+                display.show_error(f"Failed to process: {e}")
+                continue
 
             if intent.intent_type == "turns" and intent.target_turns is not None:
                 # Handle turns change
