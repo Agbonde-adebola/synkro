@@ -740,167 +740,6 @@ class LiveProgressDisplay:
 
         return user_input.strip()
 
-    def render_paginated_list(
-        self,
-        title: str,
-        items: list[tuple[str, str]],
-        page: int = 1,
-        per_page: int = 20,
-    ) -> None:
-        """Render paginated list with navigation."""
-        total_pages = max(1, (len(items) + per_page - 1) // per_page)
-        page = max(1, min(page, total_pages))
-
-        start = (page - 1) * per_page
-        end = start + per_page
-        page_items = items[start:end]
-
-        content_lines: list[Text] = []
-        content_lines.append(Text(""))
-
-        for item_id, description in page_items:
-            line = Text("  ")
-            line.append(item_id, style="cyan")
-            line.append(f"  {description[:60]}", style="white")
-            if len(description) > 60:
-                line.append("...", style="dim")
-            content_lines.append(line)
-
-        content_lines.append(Text(""))
-
-        footer = Text("  ")
-        footer.append(f"Page {page}/{total_pages} ({per_page} per page)", style="dim")
-        footer.append(" | ", style="dim")
-        footer.append("n", style="cyan")
-        footer.append(" next | ", style="dim")
-        footer.append("p", style="cyan")
-        footer.append(" prev | ", style="dim")
-        footer.append("q", style="cyan")
-        footer.append(" back", style="dim")
-        content_lines.append(footer)
-
-        panel = Panel(
-            Group(*content_lines),
-            title=f"[bold]{title} ({len(items)})[/bold]",
-            border_style="cyan",
-            padding=(0, 1),
-        )
-
-        self.console.print(panel)
-
-    def render_rule_detail(
-        self,
-        rule_id: str,
-        logic_map: "LogicMap",
-        tested_by: list[str] | None = None,
-    ) -> None:
-        """Render single rule detail view."""
-        rule = logic_map.get_rule(rule_id)
-        if not rule:
-            self.console.print(f"[red]Rule {rule_id} not found[/red]")
-            return
-
-        content_lines: list[Text] = []
-        content_lines.append(Text(""))
-        content_lines.append(Text(f"  ID:         {rule.rule_id}", style="white"))
-
-        cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
-        content_lines.append(Text(f"  Category:   {cat}", style="white"))
-
-        text_lines = [rule.text[i : i + 60] for i in range(0, len(rule.text), 60)]
-        content_lines.append(Text(f"  Text:       {text_lines[0]}", style="white"))
-        for line in text_lines[1:]:
-            content_lines.append(Text(f"              {line}", style="white"))
-
-        if rule.condition:
-            content_lines.append(Text(f"  Condition:  {rule.condition}", style="dim"))
-        if rule.action:
-            content_lines.append(Text(f"  Action:     {rule.action}", style="dim"))
-        if rule.dependencies:
-            content_lines.append(Text(f"  Depends on: {', '.join(rule.dependencies)}", style="dim"))
-
-        if tested_by:
-            content_lines.append(Text(""))
-            content_lines.append(Text(f"  Tested by:  {', '.join(tested_by[:6])}", style="dim"))
-            if len(tested_by) > 6:
-                content_lines.append(Text(f"              +{len(tested_by) - 6} more", style="dim"))
-
-        content_lines.append(Text(""))
-
-        panel = Panel(
-            Group(*content_lines),
-            title=f"[bold]Rule {rule_id}[/bold]",
-            border_style="cyan",
-            padding=(0, 1),
-        )
-
-        self.console.print(panel)
-
-    def render_scenario_detail(
-        self,
-        scenario_id: str,
-        scenarios: list["GoldenScenario"],
-    ) -> None:
-        """Render single scenario detail view."""
-        try:
-            idx = int(scenario_id.upper().replace("S", "")) - 1
-            if idx < 0 or idx >= len(scenarios):
-                self.console.print(
-                    f"[red]Scenario {scenario_id} not found (valid: S1-S{len(scenarios)})[/red]"
-                )
-                return
-        except ValueError:
-            self.console.print(f"[red]Invalid scenario ID: {scenario_id}[/red]")
-            return
-
-        scenario = scenarios[idx]
-        content_lines: list[Text] = []
-        content_lines.append(Text(""))
-        content_lines.append(Text(f"  ID:          S{idx + 1}", style="white"))
-
-        stype = (
-            scenario.scenario_type.value
-            if hasattr(scenario.scenario_type, "value")
-            else str(scenario.scenario_type)
-        )
-        type_display = stype.replace("_", " ").title()
-        content_lines.append(Text(f"  Type:        {type_display}", style="white"))
-
-        desc_lines = [
-            scenario.description[i : i + 55] for i in range(0, len(scenario.description), 55)
-        ]
-        content_lines.append(Text(f"  Description: {desc_lines[0]}", style="white"))
-        for line in desc_lines[1:]:
-            content_lines.append(Text(f"               {line}", style="white"))
-
-        if scenario.context:
-            content_lines.append(Text(f"  Context:     {scenario.context[:55]}", style="dim"))
-
-        if scenario.target_rule_ids:
-            content_lines.append(
-                Text(f"  Target Rules: {', '.join(scenario.target_rule_ids)}", style="dim")
-            )
-
-        if scenario.expected_outcome:
-            exp_lines = [
-                scenario.expected_outcome[i : i + 55]
-                for i in range(0, len(scenario.expected_outcome), 55)
-            ]
-            content_lines.append(Text(f"  Expected:    {exp_lines[0]}", style="dim"))
-            for line in exp_lines[1:]:
-                content_lines.append(Text(f"               {line}", style="dim"))
-
-        content_lines.append(Text(""))
-
-        panel = Panel(
-            Group(*content_lines),
-            title=f"[bold]Scenario S{idx + 1}[/bold]",
-            border_style="green",
-            padding=(0, 1),
-        )
-
-        self.console.print(panel)
-
     def handle_show_command(
         self,
         command: str,
@@ -908,7 +747,11 @@ class LiveProgressDisplay:
         scenarios: list["GoldenScenario"] | None,
         coverage: "CoverageReport | None",
     ) -> bool:
-        """Parse and handle show/find/filter commands. Returns True if handled."""
+        """Parse and handle show/find/filter commands. Returns True if handled.
+
+        IMPORTANT: All output goes through _hitl_print which clears screen first
+        to prevent stacking.
+        """
         parts = command.lower().split()
         if not parts:
             return False
@@ -922,59 +765,33 @@ class LiveProgressDisplay:
             if target == "rules":
                 items = [(r.rule_id, r.text) for r in logic_map.rules]
                 page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
-                self.render_paginated_list("Rules", items, page)
+                self._hitl_print_list("Rules", items, page)
                 return True
 
             elif target == "scenarios" and scenarios:
                 items = [(f"S{i + 1}", s.description) for i, s in enumerate(scenarios)]
                 page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
-                self.render_paginated_list("Scenarios", items, page)
+                self._hitl_print_list("Scenarios", items, page)
                 return True
 
             elif target == "gaps" and coverage:
                 items = [(f"G{i + 1}", gap) for i, gap in enumerate(coverage.gaps)]
                 if not items:
-                    self.console.print("[green]No coverage gaps![/green]")
+                    self._hitl_print(Text("[green]No coverage gaps![/green]"))
                 else:
-                    self.render_paginated_list("Coverage Gaps", items)
+                    self._hitl_print_list("Coverage Gaps", items)
                 return True
 
             elif target == "coverage" and coverage:
-                from rich.table import Table
-
-                table = Table(show_header=True, header_style="bold cyan", title="Coverage")
-                table.add_column("Sub-Category")
-                table.add_column("Coverage", justify="right")
-                table.add_column("Status")
-
-                for cov in coverage.sub_category_coverage:
-                    status_icon = {
-                        "covered": "[green]+[/green]",
-                        "partial": "[yellow]~[/yellow]",
-                        "uncovered": "[red]-[/red]",
-                    }.get(cov.coverage_status, "?")
-
-                    table.add_row(
-                        cov.sub_category_name,
-                        f"{cov.coverage_percent:.0f}% ({cov.scenario_count})",
-                        status_icon,
-                    )
-
-                table.add_row("", "", "", end_section=True)
-                table.add_row(
-                    f"[bold]Total ({coverage.covered_count}+ {coverage.partial_count}~ {coverage.uncovered_count}-)[/bold]",
-                    f"[bold]{coverage.overall_coverage_percent:.0f}%[/bold]",
-                    "",
-                )
-                self.console.print(table)
+                self._hitl_print_coverage(coverage)
                 return True
 
             elif target.upper().startswith("R"):
-                self.render_rule_detail(target.upper(), logic_map)
+                self._hitl_print_rule(target.upper(), logic_map)
                 return True
 
             elif target.upper().startswith("S") and scenarios:
-                self.render_scenario_detail(target.upper(), scenarios)
+                self._hitl_print_scenario(target.upper(), scenarios)
                 return True
 
         elif parts[0] == "find":
@@ -982,6 +799,7 @@ class LiveProgressDisplay:
                 return False
 
             query = " ".join(parts[1:]).strip("\"'")
+            results: list = []
 
             matching_rules = [
                 (r.rule_id, r.text)
@@ -990,9 +808,7 @@ class LiveProgressDisplay:
             ]
 
             if matching_rules:
-                self.render_paginated_list(f"Rules matching '{query}'", matching_rules)
-            else:
-                self.console.print(f"[dim]No rules matching '{query}'[/dim]")
+                results.append((f"Rules matching '{query}'", matching_rules))
 
             if scenarios:
                 matching_scenarios = [
@@ -1001,11 +817,172 @@ class LiveProgressDisplay:
                     if query.lower() in s.description.lower()
                 ]
                 if matching_scenarios:
-                    self.render_paginated_list(f"Scenarios matching '{query}'", matching_scenarios)
+                    results.append((f"Scenarios matching '{query}'", matching_scenarios))
+
+            if results:
+                self._hitl_print_search_results(results)
+            else:
+                self._hitl_print(Text(f"[dim]No matches for '{query}'[/dim]"))
 
             return True
 
         return False
+
+    # =========================================================================
+    # HITL Print Helpers - Always clear screen first to prevent stacking
+    # =========================================================================
+
+    def _hitl_print(self, content) -> None:
+        """Print content in HITL mode - clears screen first to prevent stacking."""
+        self.console.clear()
+        self.console.print(content)
+        self.console.print("\n[dim]Press Enter to continue...[/dim]")
+        try:
+            self.console.input()
+        except (KeyboardInterrupt, EOFError):
+            pass
+
+    def _hitl_print_list(self, title: str, items: list[tuple[str, str]], page: int = 1) -> None:
+        """Print paginated list in HITL mode."""
+        per_page = 15
+        total_pages = max(1, (len(items) + per_page - 1) // per_page)
+        page = max(1, min(page, total_pages))
+
+        start = (page - 1) * per_page
+        end = start + per_page
+        page_items = items[start:end]
+
+        content_lines: list = [Text("")]
+        for item_id, description in page_items:
+            line = Text("  ")
+            line.append(item_id, style="cyan")
+            line.append(f"  {description[:60]}", style="white")
+            if len(description) > 60:
+                line.append("...", style="dim")
+            content_lines.append(line)
+
+        content_lines.append(Text(""))
+        content_lines.append(Text(f"  Page {page}/{total_pages} ({len(items)} total)", style="dim"))
+
+        panel = Panel(
+            Group(*content_lines),
+            title=f"[bold]{title}[/bold]",
+            border_style="cyan",
+        )
+        self._hitl_print(panel)
+
+    def _hitl_print_coverage(self, coverage: "CoverageReport") -> None:
+        """Print coverage table in HITL mode."""
+        from rich.table import Table
+
+        table = Table(show_header=True, header_style="bold cyan", title="Coverage")
+        table.add_column("Sub-Category")
+        table.add_column("Coverage", justify="right")
+        table.add_column("Status")
+
+        for cov in coverage.sub_category_coverage:
+            status_icon = {
+                "covered": "[green]✓[/green]",
+                "partial": "[yellow]~[/yellow]",
+                "uncovered": "[red]✗[/red]",
+            }.get(cov.coverage_status, "?")
+            table.add_row(
+                cov.sub_category_name,
+                f"{cov.coverage_percent:.0f}% ({cov.scenario_count})",
+                status_icon,
+            )
+
+        table.add_row("", "", "", end_section=True)
+        table.add_row(
+            "[bold]Total[/bold]",
+            f"[bold]{coverage.overall_coverage_percent:.0f}%[/bold]",
+            f"({coverage.covered_count}✓ {coverage.partial_count}~ {coverage.uncovered_count}✗)",
+        )
+        self._hitl_print(table)
+
+    def _hitl_print_rule(self, rule_id: str, logic_map: "LogicMap") -> None:
+        """Print rule detail in HITL mode."""
+        rule = logic_map.get_rule(rule_id)
+        if not rule:
+            self._hitl_print(Text(f"[red]Rule {rule_id} not found[/red]"))
+            return
+
+        content_lines: list = [Text("")]
+        content_lines.append(Text(f"  ID:       {rule.rule_id}", style="cyan"))
+        cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
+        content_lines.append(Text(f"  Category: {cat}", style="white"))
+        content_lines.append(Text(f"  Text:     {rule.text}", style="white"))
+        if rule.condition:
+            content_lines.append(Text(f"  Condition: {rule.condition}", style="dim"))
+        if rule.action:
+            content_lines.append(Text(f"  Action:   {rule.action}", style="dim"))
+        content_lines.append(Text(""))
+
+        panel = Panel(
+            Group(*content_lines),
+            title=f"[bold]Rule {rule_id}[/bold]",
+            border_style="cyan",
+        )
+        self._hitl_print(panel)
+
+    def _hitl_print_scenario(self, scenario_id: str, scenarios: list["GoldenScenario"]) -> None:
+        """Print scenario detail in HITL mode."""
+        try:
+            idx = int(scenario_id.upper().replace("S", "")) - 1
+            if idx < 0 or idx >= len(scenarios):
+                self._hitl_print(Text(f"[red]Scenario {scenario_id} not found[/red]"))
+                return
+        except ValueError:
+            self._hitl_print(Text(f"[red]Invalid scenario ID: {scenario_id}[/red]"))
+            return
+
+        scenario = scenarios[idx]
+        content_lines: list = [Text("")]
+        content_lines.append(Text(f"  ID:          S{idx + 1}", style="cyan"))
+        stype = (
+            scenario.scenario_type.value
+            if hasattr(scenario.scenario_type, "value")
+            else str(scenario.scenario_type)
+        )
+        content_lines.append(Text(f"  Type:        {stype}", style="white"))
+        content_lines.append(Text(f"  Description: {scenario.description}", style="white"))
+        if scenario.context:
+            content_lines.append(Text(f"  Context:     {scenario.context}", style="dim"))
+        if scenario.target_rule_ids:
+            content_lines.append(
+                Text(f"  Rules:       {', '.join(scenario.target_rule_ids)}", style="dim")
+            )
+        content_lines.append(Text(""))
+
+        panel = Panel(
+            Group(*content_lines),
+            title=f"[bold]Scenario S{idx + 1}[/bold]",
+            border_style="green",
+        )
+        self._hitl_print(panel)
+
+    def _hitl_print_search_results(self, results: list[tuple[str, list]]) -> None:
+        """Print search results in HITL mode."""
+        content_lines: list = [Text("")]
+        for title, items in results:
+            content_lines.append(Text(f"  {title}:", style="bold cyan"))
+            for item_id, desc in items[:5]:
+                line = Text("    ")
+                line.append(item_id, style="cyan")
+                line.append(f"  {desc[:50]}", style="white")
+                if len(desc) > 50:
+                    line.append("...", style="dim")
+                content_lines.append(line)
+            if len(items) > 5:
+                content_lines.append(Text(f"    ... +{len(items) - 5} more", style="dim"))
+            content_lines.append(Text(""))
+
+        panel = Panel(
+            Group(*content_lines),
+            title="[bold]Search Results[/bold]",
+            border_style="cyan",
+        )
+        self._hitl_print(panel)
 
 
 __all__ = ["LiveProgressDisplay", "DisplayState"]
