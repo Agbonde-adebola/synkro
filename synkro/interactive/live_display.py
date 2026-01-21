@@ -10,9 +10,12 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from rich.columns import Columns
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
+from rich.progress_bar import ProgressBar
+from rich.table import Table
 from rich.text import Text
 
 if TYPE_CHECKING:
@@ -205,103 +208,25 @@ class LiveProgressDisplay:
         )
 
     def _render_hitl_main(self) -> Panel:
-        """Render HITL main view using the same panel style as active view."""
+        """Render HITL main view with two-column colorful layout."""
         s = self._state
-        content_parts: list = []
+
+        # Build panels using helpers
+        rules_panel = self._build_rules_panel(show_diff=True)
+        scenarios_panel = self._build_scenarios_panel(show_diff=True)
+        coverage_panel = self._build_coverage_panel()
+        settings_panel = self._build_settings_panel()
+
+        # Two-column rows
+        row1 = Columns([rules_panel, scenarios_panel], equal=True, expand=True)
+        row2 = Columns([coverage_panel, settings_panel], equal=True, expand=True)
 
         # Subtitle with model name
-        if s.model:
-            subtitle = Text(f"Interactive review with {s.model}", style="dim")
-            content_parts.append(subtitle)
-            content_parts.append(Text(""))
+        subtitle = Text(f"Interactive review with {s.model}", style="dim") if s.model else Text("")
 
-        # Rules section
-        if s.logic_map and s.rules_count > 0:
-            # Build header with diff counts
-            rules_header = Text()
-            rules_header.append(f"─── Rules ({s.rules_count})", style="bold white")
-            if s.added_rule_ids:
-                rules_header.append(f" +{len(s.added_rule_ids)}", style="bold green")
-            if s.removed_rule_ids:
-                rules_header.append(f" -{len(s.removed_rule_ids)}", style="bold red")
-            rules_header.append(" ───", style="bold white")
-            content_parts.append(rules_header)
-
-            # Group by category
-            categories: dict[str, list[str]] = {}
-            for rule in s.logic_map.rules:
-                cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
-                categories.setdefault(cat, []).append(rule.rule_id)
-
-            for cat, ids in sorted(categories.items()):
-                line = Text()
-                line.append(f"{cat} ", style="cyan")
-                line.append(f"({len(ids)})", style="dim")
-                content_parts.append(line)
-
-            content_parts.append(Text(""))
-
-        # Scenarios section
-        if s.scenarios_count > 0:
-            # Build header with diff counts
-            scen_header = Text()
-            scen_header.append(f"─── Scenarios ({s.scenarios_count})", style="bold white")
-            if s.added_scenario_indices:
-                scen_header.append(f" +{len(s.added_scenario_indices)}", style="bold green")
-            if s.removed_scenario_indices:
-                scen_header.append(f" -{len(s.removed_scenario_indices)}", style="bold red")
-            scen_header.append(" ───", style="bold white")
-            content_parts.append(scen_header)
-
-            dist_line = Text()
-            if s.positive_count:
-                dist_line.append(f"{s.positive_count} positive  ", style="green")
-            if s.negative_count:
-                dist_line.append(f"{s.negative_count} negative  ", style="red")
-            if s.edge_count:
-                dist_line.append(f"{s.edge_count} edge  ", style="yellow")
-            if s.irrelevant_count:
-                dist_line.append(f"{s.irrelevant_count} irrelevant", style="dim")
-            content_parts.append(dist_line)
-            content_parts.append(Text(""))
-
-        # Coverage section
-        if s.coverage_percent is not None:
-            cov_header = Text("─── Coverage ───", style="bold white")
-            content_parts.append(cov_header)
-
-            cov_style = (
-                "green"
-                if s.coverage_percent >= 70
-                else "yellow"
-                if s.coverage_percent >= 50
-                else "red"
-            )
-            cov_line = Text()
-            cov_line.append(f"{s.coverage_percent:.0f}%", style=f"bold {cov_style}")
-            cov_line.append(
-                f"  ({s.covered_count} covered, {s.partial_count} partial, {s.uncovered_count} uncovered)",
-                style="dim",
-            )
-            content_parts.append(cov_line)
-            content_parts.append(Text(""))
-
-        # Settings section
-        settings_header = Text("─── Settings ───", style="bold white")
-        content_parts.append(settings_header)
-        settings_line = Text()
-        settings_line.append("Turns: ", style="dim")
-        settings_line.append(str(s.hitl_turns), style="cyan")
-        settings_line.append("    Complexity: ", style="dim")
-        settings_line.append(s.hitl_complexity.title(), style="cyan")
-        content_parts.append(settings_line)
-        content_parts.append(Text(""))
-
-        # Commands section
-        cmd_header = Text("─── Commands ───", style="bold white")
-        content_parts.append(cmd_header)
+        # Commands footer
         cmd_line = Text()
-        cmd_line.append("done", style="cyan")
+        cmd_line.append("done", style="bold cyan")
         cmd_line.append(" │ ", style="dim")
         cmd_line.append("show rules", style="cyan")
         cmd_line.append(" │ ", style="dim")
@@ -314,14 +239,12 @@ class LiveProgressDisplay:
         cmd_line.append("undo", style="cyan")
         cmd_line.append(" │ ", style="dim")
         cmd_line.append("help", style="cyan")
-        content_parts.append(cmd_line)
 
-        # Build HITL title
-        title = self._render_hitl_title()
+        content = [subtitle, Text(""), row1, row2, Text(""), cmd_line]
 
         return Panel(
-            Group(*content_parts),
-            title=title,
+            Group(*content),
+            title=self._render_hitl_title(),
             subtitle="[dim]Enter feedback or command[/dim]",
             border_style="cyan",
             padding=(0, 1),
@@ -347,10 +270,150 @@ class LiveProgressDisplay:
 
         return title
 
+    # ─── Panel Builder Helpers (two-column layout) ───────────────────────────
+
+    def _build_rules_panel(self, show_diff: bool = False) -> Panel:
+        """Build rules panel with category table."""
+        s = self._state
+
+        CATEGORY_COLORS = {
+            "constraint": "red",
+            "exception": "yellow",
+            "permission": "green",
+            "procedure": "blue",
+            "eligibility": "magenta",
+            "requirement": "cyan",
+        }
+
+        if not s.logic_map or s.rules_count == 0:
+            return Panel(
+                Text("No rules", style="dim"),
+                title=Text("Rules", style="bold magenta"),
+                title_align="left",
+                border_style="magenta",
+                padding=(0, 1),
+            )
+
+        categories: dict[str, list[str]] = {}
+        for rule in s.logic_map.rules:
+            cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
+            categories.setdefault(cat, []).append(rule.rule_id)
+
+        table = Table(box=None, show_header=False, expand=True, padding=(0, 1))
+        table.add_column("Category", no_wrap=True)
+        table.add_column("Count", justify="right", style="bold white")
+
+        for cat, ids in sorted(categories.items()):
+            color = CATEGORY_COLORS.get(cat, "white")
+            table.add_row(f"[{color}]{cat}[/]", str(len(ids)))
+
+        title = Text("Rules", style="bold magenta")
+        title.append(f" ({s.rules_count})", style="magenta")
+        if show_diff and s.added_rule_ids:
+            title.append(f" +{len(s.added_rule_ids)}", style="bold green")
+        if show_diff and s.removed_rule_ids:
+            title.append(f" -{len(s.removed_rule_ids)}", style="bold red")
+
+        return Panel(table, title=title, title_align="left", border_style="magenta", padding=(0, 1))
+
+    def _build_scenarios_panel(self, show_diff: bool = False) -> Panel:
+        """Build scenarios panel with colored bullets."""
+        s = self._state
+        lines = []
+        if s.positive_count:
+            lines.append(
+                Text.assemble(("● ", "bold green"), (f"{s.positive_count} positive", "green"))
+            )
+        if s.negative_count:
+            lines.append(Text.assemble(("● ", "bold red"), (f"{s.negative_count} negative", "red")))
+        if s.edge_count:
+            lines.append(Text.assemble(("● ", "bold yellow"), (f"{s.edge_count} edge", "yellow")))
+        if s.irrelevant_count:
+            lines.append(Text.assemble(("● ", "dim"), (f"{s.irrelevant_count} irrelevant", "dim")))
+
+        title = Text("Scenarios", style="bold blue")
+        title.append(f" ({s.scenarios_count})", style="blue")
+        if show_diff and s.added_scenario_indices:
+            title.append(f" +{len(s.added_scenario_indices)}", style="bold green")
+        if show_diff and s.removed_scenario_indices:
+            title.append(f" -{len(s.removed_scenario_indices)}", style="bold red")
+
+        content = Group(*lines) if lines else Text("No scenarios", style="dim")
+        return Panel(content, title=title, title_align="left", border_style="blue", padding=(0, 1))
+
+    def _build_coverage_panel(self) -> Panel:
+        """Build coverage panel with progress bar and stats."""
+        s = self._state
+        if s.coverage_percent is None:
+            return Panel(
+                Text("No coverage data", style="dim"),
+                title=Text("Coverage", style="dim"),
+                title_align="left",
+                border_style="dim",
+                padding=(0, 1),
+            )
+
+        color = (
+            "green" if s.coverage_percent >= 70 else "yellow" if s.coverage_percent >= 50 else "red"
+        )
+
+        bar = ProgressBar(
+            total=100, completed=int(s.coverage_percent), width=None, complete_style=color
+        )
+
+        stats = Table(box=None, show_header=False, padding=(0, 0))
+        stats.add_column("Label", style="dim")
+        stats.add_column("Value", justify="right")
+        stats.add_row("covered", f"[green]{s.covered_count}[/]")
+        stats.add_row("partial", f"[yellow]{s.partial_count}[/]")
+        stats.add_row("uncovered", f"[red]{s.uncovered_count}[/]")
+
+        title = Text()
+        title.append(f"{s.coverage_percent:.0f}%", style=f"bold {color}")
+        title.append(" Coverage", style=f"bold {color}")
+
+        return Panel(
+            Group(bar, Text(""), stats),
+            title=title,
+            title_align="left",
+            border_style=color,
+            padding=(0, 1),
+        )
+
+    def _build_settings_panel(self) -> Panel:
+        """Build settings panel for HITL mode."""
+        s = self._state
+        table = Table(box=None, show_header=False, expand=True, padding=(0, 1))
+        table.add_column("Key", style="dim")
+        table.add_column("Value", style="bold cyan")
+        table.add_row("Turns", str(s.hitl_turns))
+        table.add_row("Complexity", s.hitl_complexity.title())
+
+        return Panel(
+            table,
+            title=Text("Settings", style="bold cyan"),
+            title_align="left",
+            border_style="cyan",
+            padding=(0, 1),
+        )
+
+    def _build_events_panel(self) -> Panel:
+        """Build events panel for active view."""
+        s = self._state
+        recent = s.events[-4:] if s.events else []
+        lines = [Text(e, style="dim") for e in recent] or [Text("No events yet...", style="dim")]
+
+        return Panel(
+            Group(*lines),
+            title="[dim]Events[/]",
+            title_align="left",
+            border_style="dim",
+            padding=(0, 1),
+        )
+
     def _render_rules_detail(self) -> Panel:
         """Render full rules list with pagination using Rich Table."""
         from rich import box
-        from rich.table import Table
 
         s = self._state
         content_parts: list = []
@@ -442,7 +505,6 @@ class LiveProgressDisplay:
     def _render_scenarios_detail(self) -> Panel:
         """Render full scenarios list with pagination using Rich Table."""
         from rich import box
-        from rich.table import Table
 
         s = self._state
         content_parts: list = []
@@ -636,7 +698,6 @@ class LiveProgressDisplay:
     def _render_coverage_detail(self) -> Panel:
         """Render coverage breakdown using Rich Table."""
         from rich import box
-        from rich.table import Table
 
         s = self._state
         content_parts: list = []
@@ -752,103 +813,32 @@ class LiveProgressDisplay:
 
     def _render_active_view(self) -> list:
         """Render the active (non-complete) view - content only, status is in title."""
-        s = self._state
         content_parts: list = []
 
-        # Content area (Rules + Scenarios + Coverage) - full width, no status box
+        # Two-column content area (Rules + Scenarios + Coverage + Events)
         content_parts.append(self._render_content_column())
-
-        # Events section (full width)
-        if s.events:
-            content_parts.append(Text(""))
-            content_parts.append(self._render_events())
 
         return content_parts
 
     def _render_content_column(self) -> Group:
-        """Render Rules + Scenarios + Coverage as a single unified content area."""
-        s = self._state
-        lines: list = []
+        """Render two-column colorful layout for active view."""
+        parts: list = []
 
-        # Rules section
-        if s.logic_map and s.rules_count > 0:
-            rules_header = Text(f"─── Rules ({s.rules_count}) ───", style="bold white")
-            lines.append(rules_header)
+        # Build panels using helpers
+        rules_panel = self._build_rules_panel(show_diff=False)
+        scenarios_panel = self._build_scenarios_panel(show_diff=False)
+        coverage_panel = self._build_coverage_panel()
+        events_panel = self._build_events_panel()
 
-            # Group by category
-            categories: dict[str, list[str]] = {}
-            for rule in s.logic_map.rules:
-                cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
-                categories.setdefault(cat, []).append(rule.rule_id)
+        # Row 1: Rules | Scenarios
+        row1 = Columns([rules_panel, scenarios_panel], equal=True, expand=True)
+        parts.append(row1)
 
-            for cat, ids in sorted(categories.items()):
-                line = Text()
-                line.append(f"{cat} ", style="cyan")
-                line.append(f"({len(ids)}): ", style="dim")
-                ids_display = ", ".join(ids[:5])
-                line.append(ids_display, style="white")
-                if len(ids) > 5:
-                    line.append(f" (+{len(ids) - 5})", style="dim")
-                lines.append(line)
+        # Row 2: Coverage | Events
+        row2 = Columns([coverage_panel, events_panel], equal=True, expand=True)
+        parts.append(row2)
 
-            lines.append(Text(""))
-
-        # Scenarios section
-        if s.scenarios_count > 0:
-            scen_header = Text("─── Scenarios ───", style="bold white")
-            lines.append(scen_header)
-
-            dist1 = Text()
-            dist1.append(f"[+] {s.positive_count} positive  ", style="green")
-            dist1.append(f"[-] {s.negative_count} negative", style="red")
-            lines.append(dist1)
-
-            dist2 = Text()
-            dist2.append(f"[!] {s.edge_count} edge  ", style="yellow")
-            dist2.append(f"[o] {s.irrelevant_count} irrelevant", style="dim")
-            lines.append(dist2)
-
-            lines.append(Text(""))
-
-        # Coverage section (integrated into content, not separate box)
-        if s.coverage_percent is not None:
-            cov_header = Text("─── Coverage ───", style="bold white")
-            lines.append(cov_header)
-
-            cov_style = "green" if s.coverage_percent >= 70 else "yellow"
-            cov_line = Text()
-            cov_line.append(f"{s.coverage_percent:.0f}%", style=f"bold {cov_style}")
-            cov_line.append(" overall  ", style="dim")
-            cov_line.append(f"{s.covered_count}", style="green")
-            cov_line.append(" covered  ", style="dim")
-            cov_line.append(f"{s.partial_count}", style="yellow")
-            cov_line.append(" partial  ", style="dim")
-            cov_line.append(f"{s.uncovered_count}", style="red")
-            cov_line.append(" uncovered", style="dim")
-            lines.append(cov_line)
-
-        # If nothing to show yet, display placeholder
-        if not lines:
-            lines.append(Text("Initializing...", style="dim"))
-
-        return Group(*lines)
-
-    def _render_events(self) -> Panel:
-        """Render scrolling events log."""
-        s = self._state
-        # Keep last 4 events
-        recent_events = s.events[-4:] if s.events else []
-        lines = [Text(e, style="dim") for e in recent_events]
-
-        if not lines:
-            lines = [Text("No events yet...", style="dim")]
-
-        return Panel(
-            Group(*lines),
-            title="[dim]Events[/dim]",
-            border_style="dim",
-            padding=(0, 1),
-        )
+        return Group(*parts)
 
     def _render_status_bar(self) -> Text:
         """Render bottom status bar with spinner, phase, time, and cost."""
@@ -1782,8 +1772,6 @@ class LiveProgressDisplay:
 
     def _hitl_print_coverage(self, coverage: "CoverageReport") -> None:
         """Print coverage table in HITL mode."""
-        from rich.table import Table
-
         table = Table(show_header=True, header_style="bold cyan", title="Coverage")
         table.add_column("Sub-Category")
         table.add_column("Coverage", justify="right")
