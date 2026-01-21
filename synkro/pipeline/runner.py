@@ -1148,6 +1148,10 @@ class GenerationPipeline:
                                     generate_suggestions=True,
                                 )
 
+                            # Update display state with new coverage for live refresh
+                            if live_display:
+                                live_display.update_coverage(coverage_report)
+
                             display.show_success(f"Added {len(new_scenarios)} coverage scenarios")
                             self.reporter.on_coverage_improved(
                                 old_coverage,

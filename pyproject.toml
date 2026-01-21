@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synkro"
-version = "0.4.82"
+version = "0.4.83"
 description = "Framework for turning unstructured policies into training data for LLMs"
 readme = "README.md"
 license = "Apache-2.0"
@@ -39,6 +39,7 @@ dependencies = [
     "httpx>=0.25",
     "beautifulsoup4>=4.12",
     "html2text>=2020.1",
+    "readchar>=4.0",
 ]
 
 [project.optional-dependencies]

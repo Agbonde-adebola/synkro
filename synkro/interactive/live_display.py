@@ -162,6 +162,8 @@ class LiveProgressDisplay:
             return self._render_scenarios_detail()
         elif s.view_mode == "logic_map_detail":
             return self._render_logic_map_detail()
+        elif s.view_mode == "coverage_detail":
+            return self._render_coverage_detail()
 
         # Fallback to active view
         return self._render_active()
@@ -360,10 +362,14 @@ class LiveProgressDisplay:
         return title
 
     def _render_rules_detail(self) -> Panel:
-        """Render full rules list with pagination and diff highlighting."""
+        """Render full rules list with pagination using Rich Table."""
+        from rich import box
+        from rich.table import Table
+
         s = self._state
         content_parts: list = []
         page_info = ""
+        total_pages = 1
 
         if not s.logic_map:
             content_parts.append(Text("No rules available", style="dim"))
@@ -380,7 +386,7 @@ class LiveProgressDisplay:
 
             # Show diff summary if there are changes
             if s.added_rule_ids or s.removed_rule_ids:
-                diff_line = Text("  Changes: ")
+                diff_line = Text("Changes: ")
                 if s.added_rule_ids:
                     diff_line.append(f"+{len(s.added_rule_ids)} added", style="bold green")
                 if s.added_rule_ids and s.removed_rule_ids:
@@ -390,47 +396,37 @@ class LiveProgressDisplay:
                 content_parts.append(diff_line)
                 content_parts.append(Text(""))
 
-            # Group by category
-            by_cat: dict[str, list] = {}
+            # Create table with full width
+            table = Table(
+                expand=True,
+                box=box.SIMPLE,
+                show_header=True,
+                header_style="bold cyan",
+                padding=(0, 1),
+            )
+            table.add_column("", width=1)  # Status indicator
+            table.add_column("ID", style="cyan", width=6)
+            table.add_column("Category", width=12)
+            table.add_column("Rule", ratio=1, overflow="fold")
+
             for rule in page_rules:
+                is_added = rule.rule_id in s.added_rule_ids
+                status = "[green]+[/green]" if is_added else ""
+                id_style = "bold green" if is_added else "cyan"
+                text_style = "green" if is_added else "white"
                 cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
-                by_cat.setdefault(cat, []).append(rule)
 
-            for cat, cat_rules in sorted(by_cat.items()):
-                content_parts.append(Text(f"─── {cat} ───", style="bold white"))
-                for rule in cat_rules:
-                    # Check if this rule was added (green) or is original (white)
-                    is_added = rule.rule_id in s.added_rule_ids
-                    id_style = "bold green" if is_added else "cyan"
-                    text_style = "green" if is_added else "white"
-                    detail_style = "green dim" if is_added else "dim"
+                # Truncate rule text for display
+                text_preview = rule.text[:80] + "..." if len(rule.text) > 80 else rule.text
 
-                    id_line = Text()
-                    if is_added:
-                        id_line.append("+ ", style="bold green")
-                    else:
-                        id_line.append("  ", style="")
-                    id_line.append(rule.rule_id, style=id_style)
-                    text_preview = (
-                        rule.text[:63] if len(rule.text) <= 63 else rule.text[:60] + "..."
-                    )
-                    id_line.append(f"  {text_preview}", style=text_style)
-                    content_parts.append(id_line)
+                table.add_row(
+                    status,
+                    f"[{id_style}]{rule.rule_id}[/{id_style}]",
+                    cat,
+                    f"[{text_style}]{text_preview}[/{text_style}]",
+                )
 
-                    if rule.condition:
-                        cond_preview = (
-                            rule.condition[:53]
-                            if len(rule.condition) <= 53
-                            else rule.condition[:50] + "..."
-                        )
-                        content_parts.append(Text(f"      IF: {cond_preview}", style=detail_style))
-                    if rule.action:
-                        act_preview = (
-                            rule.action[:53] if len(rule.action) <= 53 else rule.action[:50] + "..."
-                        )
-                        content_parts.append(Text(f"      THEN: {act_preview}", style=detail_style))
-                content_parts.append(Text(""))
-
+            content_parts.append(table)
             page_info = f"Page {page}/{total_pages} ({len(rules)} total)"
 
         title = Text()
@@ -440,9 +436,14 @@ class LiveProgressDisplay:
         if s.removed_rule_ids:
             title.append(f"  (-{len(s.removed_rule_ids)})", style="bold red")
 
+        # Arrow key navigation hints
         subtitle = Text()
         subtitle.append(page_info if s.logic_map else "", style="dim")
-        subtitle.append("  │  Enter/q to return  │  'page N' to navigate", style="dim")
+        subtitle.append("  │  ", style="dim")
+        subtitle.append("←/→", style="cyan")
+        subtitle.append(" navigate  │  ", style="dim")
+        subtitle.append("Enter", style="cyan")
+        subtitle.append(" return", style="dim")
 
         return Panel(
             Group(*content_parts),
@@ -453,11 +454,15 @@ class LiveProgressDisplay:
         )
 
     def _render_scenarios_detail(self) -> Panel:
-        """Render full scenarios list with pagination and diff highlighting."""
+        """Render full scenarios list with pagination using Rich Table."""
+        from rich import box
+        from rich.table import Table
+
         s = self._state
         content_parts: list = []
         scenarios = s.scenarios_list
         page_info = ""
+        total_pages = 1
 
         if not scenarios:
             content_parts.append(Text("No scenarios available", style="dim"))
@@ -473,7 +478,7 @@ class LiveProgressDisplay:
 
             # Show diff summary if there are changes
             if s.added_scenario_indices or s.removed_scenario_indices:
-                diff_line = Text("  Changes: ")
+                diff_line = Text("Changes: ")
                 if s.added_scenario_indices:
                     diff_line.append(f"+{len(s.added_scenario_indices)} added", style="bold green")
                 if s.added_scenario_indices and s.removed_scenario_indices:
@@ -485,56 +490,63 @@ class LiveProgressDisplay:
                 content_parts.append(diff_line)
                 content_parts.append(Text(""))
 
-            # Group by type
-            by_type: dict[str, list] = {}
-            for i, scenario in enumerate(page_scenarios, start=start):
+            # Create table with full width
+            table = Table(
+                expand=True,
+                box=box.SIMPLE,
+                show_header=True,
+                header_style="bold cyan",
+                padding=(0, 1),
+            )
+            table.add_column("", width=1)  # Status indicator
+            table.add_column("ID", width=4)
+            table.add_column("Type", width=10)
+            table.add_column("Description", ratio=1, overflow="fold")
+            table.add_column("Rules", width=18)
+
+            type_styles = {
+                "positive": "green",
+                "negative": "red",
+                "edge_case": "yellow",
+                "irrelevant": "dim",
+            }
+
+            for idx, scenario in enumerate(page_scenarios, start=start):
+                is_added = idx in s.added_scenario_indices
+                status = "[green]+[/green]" if is_added else ""
+                id_style = "bold green" if is_added else "cyan"
+                text_style = "green" if is_added else "white"
+
                 stype = (
                     scenario.scenario_type.value
                     if hasattr(scenario.scenario_type, "value")
                     else str(scenario.scenario_type)
                 )
-                by_type.setdefault(stype, []).append((i, scenario))
+                type_style = type_styles.get(stype, "white")
 
-            type_order = ["positive", "negative", "edge_case", "irrelevant"]
-            for stype in type_order:
-                if stype not in by_type:
-                    continue
-                type_style = {
-                    "positive": "green",
-                    "negative": "red",
-                    "edge_case": "yellow",
-                    "irrelevant": "dim",
-                }.get(stype, "white")
-                content_parts.append(Text(f"─── {stype} ───", style=f"bold {type_style}"))
+                # Truncate description for display
+                desc_preview = (
+                    scenario.description[:60] + "..."
+                    if len(scenario.description) > 60
+                    else scenario.description
+                )
 
-                for idx, scenario in by_type[stype]:
-                    # Check if this scenario was added (green highlight)
-                    is_added = idx in s.added_scenario_indices
-                    id_style = "bold green" if is_added else "cyan"
-                    text_style = "green" if is_added else "white"
-                    detail_style = "green dim" if is_added else "dim"
+                # Format rules
+                rules_str = ""
+                if scenario.target_rule_ids:
+                    rules_str = ", ".join(scenario.target_rule_ids[:3])
+                    if len(scenario.target_rule_ids) > 3:
+                        rules_str += f" +{len(scenario.target_rule_ids) - 3}"
 
-                    id_line = Text()
-                    if is_added:
-                        id_line.append("+ ", style="bold green")
-                    else:
-                        id_line.append("  ", style="")
-                    id_line.append(f"S{idx + 1}", style=id_style)
-                    desc_preview = (
-                        scenario.description[:58]
-                        if len(scenario.description) <= 58
-                        else scenario.description[:55] + "..."
-                    )
-                    id_line.append(f"  {desc_preview}", style=text_style)
-                    content_parts.append(id_line)
+                table.add_row(
+                    status,
+                    f"[{id_style}]S{idx + 1}[/{id_style}]",
+                    f"[{type_style}]{stype}[/{type_style}]",
+                    f"[{text_style}]{desc_preview}[/{text_style}]",
+                    f"[dim]{rules_str}[/dim]",
+                )
 
-                    if scenario.target_rule_ids:
-                        rules_str = ", ".join(scenario.target_rule_ids[:5])
-                        if len(scenario.target_rule_ids) > 5:
-                            rules_str += f" (+{len(scenario.target_rule_ids) - 5})"
-                        content_parts.append(Text(f"      Rules: {rules_str}", style=detail_style))
-                content_parts.append(Text(""))
-
+            content_parts.append(table)
             page_info = f"Page {page}/{total_pages} ({len(scenarios)} total)"
 
         title = Text()
@@ -544,9 +556,14 @@ class LiveProgressDisplay:
         if s.removed_scenario_indices:
             title.append(f"  (-{len(s.removed_scenario_indices)})", style="bold red")
 
+        # Arrow key navigation hints
         subtitle = Text()
         subtitle.append(page_info, style="dim")
-        subtitle.append("  │  Enter/q to return  │  'page N' to navigate", style="dim")
+        subtitle.append("  │  ", style="dim")
+        subtitle.append("←/→", style="cyan")
+        subtitle.append(" navigate  │  ", style="dim")
+        subtitle.append("Enter", style="cyan")
+        subtitle.append(" return", style="dim")
 
         return Panel(
             Group(*content_parts),
@@ -618,10 +635,107 @@ class LiveProgressDisplay:
         if s.removed_rule_ids:
             title.append(f"  (-{len(s.removed_rule_ids)})", style="bold red")
 
+        subtitle = Text()
+        subtitle.append("Enter", style="cyan")
+        subtitle.append(" return", style="dim")
+
         return Panel(
             Group(*content_parts),
             title=title,
-            subtitle="[dim]Enter/q to return[/dim]",
+            subtitle=subtitle,
+            border_style="cyan",
+            padding=(0, 1),
+        )
+
+    def _render_coverage_detail(self) -> Panel:
+        """Render coverage breakdown using Rich Table."""
+        from rich import box
+        from rich.table import Table
+
+        s = self._state
+        content_parts: list = []
+        coverage = s.coverage_report
+
+        if not coverage:
+            content_parts.append(Text("No coverage data available", style="dim"))
+        else:
+            # Summary line
+            cov_style = (
+                "green"
+                if coverage.overall_coverage_percent >= 70
+                else "yellow"
+                if coverage.overall_coverage_percent >= 50
+                else "red"
+            )
+            summary = Text()
+            summary.append("Overall: ", style="dim")
+            summary.append(f"{coverage.overall_coverage_percent:.0f}%", style=f"bold {cov_style}")
+            summary.append(
+                f"  ({coverage.covered_count} covered, {coverage.partial_count} partial, "
+                f"{coverage.uncovered_count} uncovered)",
+                style="dim",
+            )
+            content_parts.append(summary)
+            content_parts.append(Text(""))
+
+            # Create table with full width
+            table = Table(
+                expand=True,
+                box=box.SIMPLE,
+                show_header=True,
+                header_style="bold cyan",
+                padding=(0, 1),
+            )
+            table.add_column("Sub-Category", ratio=1)
+            table.add_column("Scenarios", width=10, justify="right")
+            table.add_column("Coverage", width=10, justify="right")
+            table.add_column("Status", width=8, justify="center")
+
+            for cov in coverage.sub_category_coverage:
+                status_display = {
+                    "covered": "[green]✓ covered[/green]",
+                    "partial": "[yellow]~ partial[/yellow]",
+                    "uncovered": "[red]✗ uncovered[/red]",
+                }.get(cov.coverage_status, "?")
+
+                pct_style = (
+                    "green"
+                    if cov.coverage_percent >= 70
+                    else "yellow"
+                    if cov.coverage_percent >= 30
+                    else "red"
+                )
+
+                table.add_row(
+                    cov.sub_category_name,
+                    str(cov.scenario_count),
+                    f"[{pct_style}]{cov.coverage_percent:.0f}%[/{pct_style}]",
+                    status_display,
+                )
+
+            content_parts.append(table)
+
+            # Show gaps if any
+            if coverage.gaps:
+                content_parts.append(Text(""))
+                gaps_header = Text("Gaps: ", style="bold red")
+                gaps_header.append(", ".join(coverage.gaps[:5]), style="red")
+                if len(coverage.gaps) > 5:
+                    gaps_header.append(f" +{len(coverage.gaps) - 5} more", style="dim red")
+                content_parts.append(gaps_header)
+
+        title = Text()
+        title.append("Coverage Detail", style="bold cyan")
+
+        # Arrow key navigation hints (if paginated in future)
+        subtitle = Text()
+        subtitle.append("Enter", style="cyan")
+        subtitle.append(" return", style="dim")
+
+        return Panel(
+            Group(*content_parts),
+            title=title,
+            subtitle=subtitle,
             border_style="cyan",
             padding=(0, 1),
         )
@@ -1142,6 +1256,14 @@ class LiveProgressDisplay:
             self._state.partial_count = coverage.partial_count
             self._state.uncovered_count = coverage.uncovered_count
 
+    def update_coverage(self, coverage: "CoverageReport") -> None:
+        """Update coverage state for live refresh after scenario generation."""
+        self._state.coverage_report = coverage
+        self._state.coverage_percent = coverage.overall_coverage_percent
+        self._state.covered_count = coverage.covered_count
+        self._state.partial_count = coverage.partial_count
+        self._state.uncovered_count = coverage.uncovered_count
+
     def set_hitl_state(
         self,
         logic_map: "LogicMap",
@@ -1387,6 +1509,74 @@ class LiveProgressDisplay:
 
         self.console.print(panel)
 
+    def _get_total_pages(self) -> int:
+        """Get total pages for current detail view."""
+        s = self._state
+        if s.view_mode == "rules_detail" and s.logic_map:
+            return max(
+                1, (len(s.logic_map.rules) + s.detail_items_per_page - 1) // s.detail_items_per_page
+            )
+        elif s.view_mode == "scenarios_detail" and s.scenarios_list:
+            return max(
+                1, (len(s.scenarios_list) + s.detail_items_per_page - 1) // s.detail_items_per_page
+            )
+        return 1
+
+    def _get_key_or_line(self, prompt: str = "") -> tuple[str, str]:
+        """
+        Get user input with arrow key support for pagination.
+
+        Returns:
+            Tuple of (input_type, value) where:
+            - ("arrow", "left"|"right") for arrow keys
+            - ("enter", "") for Enter key alone
+            - ("text", "user input") for text followed by Enter
+        """
+        import sys
+
+        try:
+            import readchar
+        except ImportError:
+            # Fallback: no arrow key support, use standard input
+            self.console.print(f"[cyan]{prompt}[/cyan]", end="")
+            try:
+                return ("text", input().strip())
+            except (KeyboardInterrupt, EOFError):
+                return ("text", "done")
+
+        buffer: list[str] = []
+        self.console.print(f"[cyan]{prompt}[/cyan]", end="", highlight=False)
+        sys.stdout.flush()
+
+        while True:
+            try:
+                key = readchar.readkey()
+            except (KeyboardInterrupt, EOFError):
+                print()
+                return ("text", "done")
+
+            if key == readchar.key.LEFT:
+                return ("arrow", "left")
+            elif key == readchar.key.RIGHT:
+                return ("arrow", "right")
+            elif key in (readchar.key.ENTER, "\r", "\n"):
+                print()  # Newline after input
+                return ("text", "".join(buffer).strip()) if buffer else ("enter", "")
+            elif key == readchar.key.BACKSPACE or key == "\x7f":
+                if buffer:
+                    buffer.pop()
+                    # Visual backspace
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+            elif key == readchar.key.CTRL_C:
+                print()
+                return ("text", "done")
+            elif len(key) == 1 and key.isprintable():
+                buffer.append(key)
+                sys.stdout.write(key)
+                sys.stdout.flush()
+            # Ignore other special keys
+
     def hitl_get_input(
         self,
         logic_map: "LogicMap",
@@ -1401,7 +1591,7 @@ class LiveProgressDisplay:
 
         This is the main entry point for HITL interaction - it combines
         rendering and input into a single clean flow to prevent panel stacking.
-        Handles detail view navigation internally.
+        Handles detail view navigation internally with arrow key support.
         """
         # Set HITL state for unified rendering
         self.set_hitl_state(logic_map, scenarios, coverage, current_turns, complexity_level)
@@ -1412,28 +1602,49 @@ class LiveProgressDisplay:
 
         # Choose prompt based on view mode
         if self._state.view_mode != "main":
-            input_hint = "[dim]Enter/q to return, 'page N' to navigate: [/dim]"
+            input_prompt = ""  # No prompt in detail view - use arrow keys
         else:
-            input_hint = f"[cyan]{prompt}[/cyan]"
+            input_prompt = prompt
 
-        # Get input
-        try:
-            user_input = self.console.input(input_hint)
-        except (KeyboardInterrupt, EOFError):
-            user_input = "done"
-            self.console.print()
+        # Get input with arrow key support
+        input_type, value = self._get_key_or_line(input_prompt)
 
-        user_input = user_input.strip()
+        # Handle arrow keys for pagination in detail views
+        if input_type == "arrow" and self._state.view_mode != "main":
+            total_pages = self._get_total_pages()
+            if value == "left" and self._state.detail_page > 1:
+                self._state.detail_page -= 1
+            elif value == "right" and self._state.detail_page < total_pages:
+                self._state.detail_page += 1
+            # Re-render with new page
+            return self.hitl_get_input(
+                logic_map, scenarios, coverage, current_turns, prompt, complexity_level
+            )
 
-        # Handle detail view navigation
+        # Handle Enter key in detail view: return to main
+        if input_type == "enter" and self._state.view_mode != "main":
+            self.exit_detail_view()
+            return self.hitl_get_input(
+                logic_map, scenarios, coverage, current_turns, prompt, complexity_level
+            )
+
+        # Handle arrow keys in main view: ignore and re-prompt
+        if input_type == "arrow" and self._state.view_mode == "main":
+            return self.hitl_get_input(
+                logic_map, scenarios, coverage, current_turns, prompt, complexity_level
+            )
+
+        user_input = value
+
+        # Handle text input in detail view
         if self._state.view_mode != "main":
-            if user_input.lower() in ("", "q", "quit", "exit", "back"):
+            if user_input.lower() in ("q", "quit", "exit", "back"):
                 self.exit_detail_view()
-                # Re-render main view and get new input
                 return self.hitl_get_input(
                     logic_map, scenarios, coverage, current_turns, prompt, complexity_level
                 )
 
+            # Legacy page command support (still works)
             if user_input.lower().startswith("page "):
                 try:
                     page = int(user_input.split()[1])
@@ -1504,7 +1715,9 @@ class LiveProgressDisplay:
                 return True
 
             elif target == "coverage" and coverage:
-                self._hitl_print_coverage(coverage)
+                # Update state with current data before showing detail view
+                self._update_current_data(logic_map, scenarios, coverage)
+                self.enter_detail_view("coverage_detail")
                 return True
 
             # Single item views - use modal popup (Enter to close)
