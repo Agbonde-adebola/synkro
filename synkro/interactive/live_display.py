@@ -75,6 +75,14 @@ class DisplayState:
     scenarios_list: list = field(default_factory=list)
     coverage_report: "CoverageReport | None" = None
 
+    # Original state for diff tracking (green=added, red=removed)
+    original_rule_ids: set[str] = field(default_factory=set)
+    original_scenario_ids: set[int] = field(default_factory=set)
+    added_rule_ids: set[str] = field(default_factory=set)
+    removed_rule_ids: set[str] = field(default_factory=set)
+    added_scenario_indices: set[int] = field(default_factory=set)
+    removed_scenario_indices: set[int] = field(default_factory=set)
+
 
 class _NoOpContextManager:
     """No-op context manager for HITL spinner."""
@@ -336,9 +344,10 @@ class LiveProgressDisplay:
         return title
 
     def _render_rules_detail(self) -> Panel:
-        """Render full rules list with pagination."""
+        """Render full rules list with pagination and diff highlighting."""
         s = self._state
         content_parts: list = []
+        page_info = ""
 
         if not s.logic_map:
             content_parts.append(Text("No rules available", style="dim"))
@@ -353,6 +362,18 @@ class LiveProgressDisplay:
             end = start + s.detail_items_per_page
             page_rules = rules[start:end]
 
+            # Show diff summary if there are changes
+            if s.added_rule_ids or s.removed_rule_ids:
+                diff_line = Text("  Changes: ")
+                if s.added_rule_ids:
+                    diff_line.append(f"+{len(s.added_rule_ids)} added", style="bold green")
+                if s.added_rule_ids and s.removed_rule_ids:
+                    diff_line.append("  ", style="")
+                if s.removed_rule_ids:
+                    diff_line.append(f"-{len(s.removed_rule_ids)} removed", style="bold red")
+                content_parts.append(diff_line)
+                content_parts.append(Text(""))
+
             # Group by category
             by_cat: dict[str, list] = {}
             for rule in page_rules:
@@ -362,32 +383,46 @@ class LiveProgressDisplay:
             for cat, cat_rules in sorted(by_cat.items()):
                 content_parts.append(Text(f"─── {cat} ───", style="bold white"))
                 for rule in cat_rules:
+                    # Check if this rule was added (green) or is original (white)
+                    is_added = rule.rule_id in s.added_rule_ids
+                    id_style = "bold green" if is_added else "cyan"
+                    text_style = "green" if is_added else "white"
+                    detail_style = "green dim" if is_added else "dim"
+
                     id_line = Text()
-                    id_line.append(f"  {rule.rule_id}", style="cyan")
+                    if is_added:
+                        id_line.append("+ ", style="bold green")
+                    else:
+                        id_line.append("  ", style="")
+                    id_line.append(rule.rule_id, style=id_style)
                     text_preview = (
-                        rule.text[:65] if len(rule.text) <= 65 else rule.text[:62] + "..."
+                        rule.text[:63] if len(rule.text) <= 63 else rule.text[:60] + "..."
                     )
-                    id_line.append(f"  {text_preview}", style="white")
+                    id_line.append(f"  {text_preview}", style=text_style)
                     content_parts.append(id_line)
 
                     if rule.condition:
                         cond_preview = (
-                            rule.condition[:55]
-                            if len(rule.condition) <= 55
-                            else rule.condition[:52] + "..."
+                            rule.condition[:53]
+                            if len(rule.condition) <= 53
+                            else rule.condition[:50] + "..."
                         )
-                        content_parts.append(Text(f"      IF: {cond_preview}", style="dim"))
+                        content_parts.append(Text(f"      IF: {cond_preview}", style=detail_style))
                     if rule.action:
                         act_preview = (
-                            rule.action[:55] if len(rule.action) <= 55 else rule.action[:52] + "..."
+                            rule.action[:53] if len(rule.action) <= 53 else rule.action[:50] + "..."
                         )
-                        content_parts.append(Text(f"      THEN: {act_preview}", style="dim"))
+                        content_parts.append(Text(f"      THEN: {act_preview}", style=detail_style))
                 content_parts.append(Text(""))
 
             page_info = f"Page {page}/{total_pages} ({len(rules)} total)"
 
         title = Text()
         title.append("Rules Detail", style="bold cyan")
+        if s.added_rule_ids:
+            title.append(f"  (+{len(s.added_rule_ids)})", style="bold green")
+        if s.removed_rule_ids:
+            title.append(f"  (-{len(s.removed_rule_ids)})", style="bold red")
 
         subtitle = Text()
         subtitle.append(page_info if s.logic_map else "", style="dim")
@@ -402,14 +437,14 @@ class LiveProgressDisplay:
         )
 
     def _render_scenarios_detail(self) -> Panel:
-        """Render full scenarios list with pagination."""
+        """Render full scenarios list with pagination and diff highlighting."""
         s = self._state
         content_parts: list = []
         scenarios = s.scenarios_list
+        page_info = ""
 
         if not scenarios:
             content_parts.append(Text("No scenarios available", style="dim"))
-            page_info = ""
         else:
             total_pages = max(
                 1, (len(scenarios) + s.detail_items_per_page - 1) // s.detail_items_per_page
@@ -420,9 +455,23 @@ class LiveProgressDisplay:
             end = start + s.detail_items_per_page
             page_scenarios = scenarios[start:end]
 
+            # Show diff summary if there are changes
+            if s.added_scenario_indices or s.removed_scenario_indices:
+                diff_line = Text("  Changes: ")
+                if s.added_scenario_indices:
+                    diff_line.append(f"+{len(s.added_scenario_indices)} added", style="bold green")
+                if s.added_scenario_indices and s.removed_scenario_indices:
+                    diff_line.append("  ", style="")
+                if s.removed_scenario_indices:
+                    diff_line.append(
+                        f"-{len(s.removed_scenario_indices)} removed", style="bold red"
+                    )
+                content_parts.append(diff_line)
+                content_parts.append(Text(""))
+
             # Group by type
             by_type: dict[str, list] = {}
-            for i, scenario in enumerate(page_scenarios, start=start + 1):
+            for i, scenario in enumerate(page_scenarios, start=start):
                 stype = (
                     scenario.scenario_type.value
                     if hasattr(scenario.scenario_type, "value")
@@ -443,27 +492,41 @@ class LiveProgressDisplay:
                 content_parts.append(Text(f"─── {stype} ───", style=f"bold {type_style}"))
 
                 for idx, scenario in by_type[stype]:
+                    # Check if this scenario was added (green highlight)
+                    is_added = idx in s.added_scenario_indices
+                    id_style = "bold green" if is_added else "cyan"
+                    text_style = "green" if is_added else "white"
+                    detail_style = "green dim" if is_added else "dim"
+
                     id_line = Text()
-                    id_line.append(f"  S{idx}", style="cyan")
+                    if is_added:
+                        id_line.append("+ ", style="bold green")
+                    else:
+                        id_line.append("  ", style="")
+                    id_line.append(f"S{idx + 1}", style=id_style)
                     desc_preview = (
-                        scenario.description[:60]
-                        if len(scenario.description) <= 60
-                        else scenario.description[:57] + "..."
+                        scenario.description[:58]
+                        if len(scenario.description) <= 58
+                        else scenario.description[:55] + "..."
                     )
-                    id_line.append(f"  {desc_preview}", style="white")
+                    id_line.append(f"  {desc_preview}", style=text_style)
                     content_parts.append(id_line)
 
                     if scenario.target_rule_ids:
                         rules_str = ", ".join(scenario.target_rule_ids[:5])
                         if len(scenario.target_rule_ids) > 5:
                             rules_str += f" (+{len(scenario.target_rule_ids) - 5})"
-                        content_parts.append(Text(f"      Rules: {rules_str}", style="dim"))
+                        content_parts.append(Text(f"      Rules: {rules_str}", style=detail_style))
                 content_parts.append(Text(""))
 
             page_info = f"Page {page}/{total_pages} ({len(scenarios)} total)"
 
         title = Text()
         title.append("Scenarios Detail", style="bold cyan")
+        if s.added_scenario_indices:
+            title.append(f"  (+{len(s.added_scenario_indices)})", style="bold green")
+        if s.removed_scenario_indices:
+            title.append(f"  (-{len(s.removed_scenario_indices)})", style="bold red")
 
         subtitle = Text()
         subtitle.append(page_info, style="dim")
@@ -478,13 +541,25 @@ class LiveProgressDisplay:
         )
 
     def _render_logic_map_detail(self) -> Panel:
-        """Render logic map as tree structure by category."""
+        """Render logic map as tree structure by category with diff highlighting."""
         s = self._state
         content_parts: list = []
 
         if not s.logic_map:
             content_parts.append(Text("No logic map available", style="dim"))
         else:
+            # Show diff summary if there are changes
+            if s.added_rule_ids or s.removed_rule_ids:
+                diff_line = Text("  Changes: ")
+                if s.added_rule_ids:
+                    diff_line.append(f"+{len(s.added_rule_ids)} added", style="bold green")
+                if s.added_rule_ids and s.removed_rule_ids:
+                    diff_line.append("  ", style="")
+                if s.removed_rule_ids:
+                    diff_line.append(f"-{len(s.removed_rule_ids)} removed", style="bold red")
+                content_parts.append(diff_line)
+                content_parts.append(Text(""))
+
             # Group rules by category
             by_cat: dict[str, list] = {}
             for rule in s.logic_map.rules:
@@ -502,13 +577,19 @@ class LiveProgressDisplay:
                     is_last = i == len(rules) - 1
                     prefix = "└──" if is_last else "├──"
 
+                    # Check if this rule was added
+                    is_added = rule.rule_id in s.added_rule_ids
+                    id_style = "bold green" if is_added else "cyan"
+                    text_style = "green" if is_added else "white"
+                    prefix_style = "green dim" if is_added else "dim"
+
                     rule_line = Text()
-                    rule_line.append(f"│  {prefix} ", style="dim")
-                    rule_line.append(rule.rule_id, style="cyan")
+                    rule_line.append(f"│  {prefix} ", style=prefix_style)
+                    rule_line.append(rule.rule_id, style=id_style)
                     text_preview = (
-                        rule.text[:50] if len(rule.text) <= 50 else rule.text[:47] + "..."
+                        rule.text[:48] if len(rule.text) <= 48 else rule.text[:45] + "..."
                     )
-                    rule_line.append(f"  {text_preview}", style="white")
+                    rule_line.append(f"  {text_preview}", style=text_style)
                     content_parts.append(rule_line)
 
                 content_parts.append(Text(""))
@@ -516,6 +597,10 @@ class LiveProgressDisplay:
         title = Text()
         title.append("Logic Map", style="bold cyan")
         title.append(f"  ({s.rules_count} rules)", style="dim")
+        if s.added_rule_ids:
+            title.append(f"  (+{len(s.added_rule_ids)})", style="bold green")
+        if s.removed_rule_ids:
+            title.append(f"  (-{len(s.removed_rule_ids)})", style="bold red")
 
         return Panel(
             Group(*content_parts),
@@ -945,6 +1030,17 @@ class LiveProgressDisplay:
             self._live.stop()
             self._live = None
         self._hitl_mode = True
+        # Reset diff tracking for new HITL session
+        self._reset_diff_tracking()
+
+    def _reset_diff_tracking(self) -> None:
+        """Reset diff tracking state for a fresh HITL session."""
+        self._state.original_rule_ids = set()
+        self._state.original_scenario_ids = set()
+        self._state.added_rule_ids = set()
+        self._state.removed_rule_ids = set()
+        self._state.added_scenario_indices = set()
+        self._state.removed_scenario_indices = set()
 
     def exit_hitl_mode(self) -> None:
         """Resume live display after HITL."""
@@ -982,13 +1078,26 @@ class LiveProgressDisplay:
         turns: int,
         complexity: str = "medium",
     ) -> None:
-        """Set all HITL-related state for unified rendering."""
+        """Set all HITL-related state for unified rendering with diff tracking."""
         self._state.hitl_active = True
         self._state.logic_map = logic_map
         self._state.rules_count = len(logic_map.rules)
         self._state.rule_ids = [r.rule_id for r in logic_map.rules]
         self._state.hitl_turns = turns
         self._state.hitl_complexity = complexity
+
+        # Track original rules for diff highlighting (only set once per session)
+        current_rule_ids = {r.rule_id for r in logic_map.rules}
+        if not self._state.original_rule_ids:
+            # First time - set original state
+            self._state.original_rule_ids = current_rule_ids.copy()
+            self._state.added_rule_ids = set()
+            self._state.removed_rule_ids = set()
+        else:
+            # Compute diff: added = in current but not in original
+            self._state.added_rule_ids = current_rule_ids - self._state.original_rule_ids
+            # Removed = in original but not in current
+            self._state.removed_rule_ids = self._state.original_rule_ids - current_rule_ids
 
         # Store scenarios list for detail view
         self._state.scenarios_list = scenarios or []
@@ -1006,6 +1115,30 @@ class LiveProgressDisplay:
             self._state.negative_count = dist.get("negative", 0)
             self._state.edge_count = dist.get("edge_case", 0)
             self._state.irrelevant_count = dist.get("irrelevant", 0)
+
+            # Track original scenarios for diff highlighting
+            current_scenario_count = len(scenarios)
+            if not self._state.original_scenario_ids:
+                # First time - set original scenario indices
+                self._state.original_scenario_ids = set(range(current_scenario_count))
+                self._state.added_scenario_indices = set()
+                self._state.removed_scenario_indices = set()
+            else:
+                # For scenarios, track by index - new ones are indices >= original count
+                original_count = len(self._state.original_scenario_ids)
+                if current_scenario_count > original_count:
+                    self._state.added_scenario_indices = set(
+                        range(original_count, current_scenario_count)
+                    )
+                else:
+                    self._state.added_scenario_indices = set()
+                # Removed scenarios: original indices no longer present
+                if current_scenario_count < original_count:
+                    self._state.removed_scenario_indices = set(
+                        range(current_scenario_count, original_count)
+                    )
+                else:
+                    self._state.removed_scenario_indices = set()
         else:
             self._state.scenarios_count = 0
             self._state.positive_count = 0
