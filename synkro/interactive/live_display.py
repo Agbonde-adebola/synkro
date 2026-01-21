@@ -292,6 +292,7 @@ class LiveProgressDisplay:
                 title_align="left",
                 border_style="magenta",
                 padding=(0, 1),
+                expand=True,
             )
 
         categories: dict[str, list[str]] = {}
@@ -314,7 +315,14 @@ class LiveProgressDisplay:
         if show_diff and s.removed_rule_ids:
             title.append(f" -{len(s.removed_rule_ids)}", style="bold red")
 
-        return Panel(table, title=title, title_align="left", border_style="magenta", padding=(0, 1))
+        return Panel(
+            table,
+            title=title,
+            title_align="left",
+            border_style="magenta",
+            padding=(0, 1),
+            expand=True,
+        )
 
     def _build_scenarios_panel(self, show_diff: bool = False) -> Panel:
         """Build scenarios panel with colored bullets."""
@@ -339,7 +347,14 @@ class LiveProgressDisplay:
             title.append(f" -{len(s.removed_scenario_indices)}", style="bold red")
 
         content = Group(*lines) if lines else Text("No scenarios", style="dim")
-        return Panel(content, title=title, title_align="left", border_style="blue", padding=(0, 1))
+        return Panel(
+            content,
+            title=title,
+            title_align="left",
+            border_style="blue",
+            padding=(0, 1),
+            expand=True,
+        )
 
     def _build_coverage_panel(self) -> Panel:
         """Build coverage panel with progress bar and stats."""
@@ -351,6 +366,7 @@ class LiveProgressDisplay:
                 title_align="left",
                 border_style="dim",
                 padding=(0, 1),
+                expand=True,
             )
 
         color = (
@@ -378,6 +394,7 @@ class LiveProgressDisplay:
             title_align="left",
             border_style=color,
             padding=(0, 1),
+            expand=True,
         )
 
     def _build_settings_panel(self) -> Panel:
@@ -395,6 +412,7 @@ class LiveProgressDisplay:
             title_align="left",
             border_style="cyan",
             padding=(0, 1),
+            expand=True,
         )
 
     def _build_events_panel(self) -> Panel:
@@ -409,6 +427,7 @@ class LiveProgressDisplay:
             title_align="left",
             border_style="dim",
             padding=(0, 1),
+            expand=True,
         )
 
     def _render_rules_detail(self) -> Panel:
