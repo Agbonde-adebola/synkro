@@ -647,6 +647,20 @@ class FileLoggingReporter:
         """Return the path to the log file."""
         return self._log_path
 
+    @property
+    def display(self):
+        """Forward display access to delegate if available (needed for HITL)."""
+        if hasattr(self._delegate, "display"):
+            return self._delegate.display
+        return None
+
+    @property
+    def console(self):
+        """Forward console access to delegate if available."""
+        if hasattr(self._delegate, "console"):
+            return self._delegate.console
+        return None
+
     def spinner(self, message: str = "Thinking..."):
         """Forward spinner to delegate."""
         return self._delegate.spinner(message)

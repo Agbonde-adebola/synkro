@@ -917,10 +917,16 @@ class GenerationPipeline:
 
         # Get LiveProgressDisplay from reporter if available (for compact HITL mode)
         live_display = None
-        if hasattr(self.reporter, "display"):
+        if hasattr(self.reporter, "display") and self.reporter.display is not None:
             live_display = self.reporter.display
             # Enter HITL mode (pause live updates)
             live_display.enter_hitl_mode()
+
+        # If no live_display available, create one for HITL
+        if live_display is None:
+            from synkro.interactive.live_display import LiveProgressDisplay
+
+            live_display = LiveProgressDisplay()
 
         display = LogicMapDisplay(live_display=live_display)
         prompt = InteractivePrompt()
