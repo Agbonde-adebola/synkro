@@ -291,16 +291,6 @@ class LiveProgressDisplay:
             "requirement": "cyan",
         }
 
-        if not s.logic_map or s.rules_count == 0:
-            return Panel(
-                Text("No rules", style="dim"),
-                title=Text("Rules", style="bold magenta"),
-                title_align="left",
-                border_style="magenta",
-                padding=(0, 1),
-                expand=True,
-            )
-
         categories: dict[str, list[str]] = {}
         for rule in s.logic_map.rules:
             cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
@@ -352,7 +342,7 @@ class LiveProgressDisplay:
         if show_diff and s.removed_scenario_indices:
             title.append(f" -{len(s.removed_scenario_indices)}", style="bold red")
 
-        content = Group(*lines) if lines else Text("No scenarios", style="dim")
+        content = Group(*lines)
         return Panel(
             content,
             title=title,
@@ -365,16 +355,6 @@ class LiveProgressDisplay:
     def _build_coverage_panel(self) -> Panel:
         """Build coverage panel with progress bar and stats."""
         s = self._state
-        if s.coverage_percent is None:
-            return Panel(
-                Text("No coverage data", style="dim"),
-                title=Text("Coverage", style="dim"),
-                title_align="left",
-                border_style="dim",
-                padding=(0, 1),
-                expand=True,
-            )
-
         color = (
             "green" if s.coverage_percent >= 70 else "yellow" if s.coverage_percent >= 50 else "red"
         )
@@ -846,28 +826,51 @@ class LiveProgressDisplay:
         return content_parts
 
     def _render_content_column(self) -> Group:
-        """Render two-column colorful layout for active view."""
+        """Render two-column colorful layout for active view with progressive display."""
+        s = self._state
         parts: list = []
 
-        # Build panels using helpers
-        rules_panel = self._build_rules_panel(show_diff=False)
-        scenarios_panel = self._build_scenarios_panel(show_diff=False)
-        coverage_panel = self._build_coverage_panel()
-        events_panel = self._build_events_panel()
+        has_rules = s.logic_map and s.rules_count > 0
+        has_scenarios = s.scenarios_count > 0
+        has_coverage = s.coverage_percent is not None
+        has_events = bool(s.events)
 
-        # Row 1: Rules | Scenarios (Table.grid for true equal widths)
-        row1 = Table.grid(expand=True)
-        row1.add_column(ratio=1)
-        row1.add_column(ratio=1)
-        row1.add_row(rules_panel, scenarios_panel)
-        parts.append(row1)
+        # Row 1: Rules | Scenarios (only if either exists)
+        if has_rules or has_scenarios:
+            row1 = Table.grid(expand=True)
+            if has_rules and has_scenarios:
+                row1.add_column(ratio=1)
+                row1.add_column(ratio=1)
+                row1.add_row(
+                    self._build_rules_panel(show_diff=False),
+                    self._build_scenarios_panel(show_diff=False),
+                )
+            elif has_rules:
+                row1.add_column(ratio=1)
+                row1.add_row(self._build_rules_panel(show_diff=False))
+            else:  # has_scenarios only
+                row1.add_column(ratio=1)
+                row1.add_row(self._build_scenarios_panel(show_diff=False))
+            parts.append(row1)
 
-        # Row 2: Coverage | Events
-        row2 = Table.grid(expand=True)
-        row2.add_column(ratio=1)
-        row2.add_column(ratio=1)
-        row2.add_row(coverage_panel, events_panel)
-        parts.append(row2)
+        # Row 2: Coverage | Events (only if either exists)
+        if has_coverage or has_events:
+            row2 = Table.grid(expand=True)
+            if has_coverage and has_events:
+                row2.add_column(ratio=1)
+                row2.add_column(ratio=1)
+                row2.add_row(self._build_coverage_panel(), self._build_events_panel())
+            elif has_coverage:
+                row2.add_column(ratio=1)
+                row2.add_row(self._build_coverage_panel())
+            else:  # has_events only
+                row2.add_column(ratio=1)
+                row2.add_row(self._build_events_panel())
+            parts.append(row2)
+
+        # Fallback if nothing exists yet
+        if not parts:
+            parts.append(Text("Initializing...", style="dim"))
 
         return Group(*parts)
 
