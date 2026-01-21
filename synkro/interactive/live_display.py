@@ -170,14 +170,7 @@ class LiveProgressDisplay:
 
     def _render_active(self) -> Panel:
         """Render the active (non-complete) view as a Panel."""
-        s = self._state
         content_parts: list = []
-
-        # Header: subtitle with model name
-        if s.model:
-            subtitle = Text(f"Creating traces with {s.model}", style="dim")
-            content_parts.append(subtitle)
-            content_parts.append(Text(""))
 
         # Active view - content only (status in title)
         content_parts.extend(self._render_active_view())
@@ -195,14 +188,7 @@ class LiveProgressDisplay:
 
     def _render_complete(self) -> Panel:
         """Render the completion view as a Panel."""
-        s = self._state
         content_parts: list = []
-
-        # Header: subtitle with model name
-        if s.model:
-            subtitle = Text(f"Creating traces with {s.model}", style="dim")
-            content_parts.append(subtitle)
-            content_parts.append(Text(""))
 
         # Completion view - simple summary
         content_parts.extend(self._render_complete_view())
@@ -762,20 +748,6 @@ class LiveProgressDisplay:
             title.append("  │  ", style="dim")
             title.append(f"{s.traces_target} traces", style="green")
 
-        title.append("  │  ", style="dim")
-
-        # Phase with appropriate color
-        phase_style = "bold yellow" if "Awaiting" in s.phase else "bold white"
-        title.append(s.phase, style=phase_style)
-        title.append("  │  ", style="dim")
-
-        # Elapsed time
-        title.append(self._format_time(s.elapsed_seconds), style="white")
-        title.append("  │  ", style="dim")
-
-        # Cost
-        title.append(f"${s.cost:.8f}", style="white")
-
         return title
 
     def _render_active_view(self) -> list:
@@ -879,15 +851,16 @@ class LiveProgressDisplay:
         )
 
     def _render_status_bar(self) -> Text:
-        """Render bottom status bar with spinner."""
+        """Render bottom status bar with spinner, phase, time, and cost."""
         s = self._state
 
         if s.is_complete:
             bar = Text()
             bar.append("✓ ", style="green")
             bar.append("Complete", style="bold green")
-            bar.append(f"  {s.traces_count} traces", style="dim")
-            bar.append(f"  {self._format_time(s.elapsed_seconds)}", style="dim")
+            bar.append(f"  │  {s.traces_count} traces", style="dim")
+            bar.append(f"  │  {self._format_time(s.elapsed_seconds)}", style="dim")
+            bar.append(f"  │  ${s.cost:.8f}", style="dim")
             return bar
 
         spinner = self.SPINNER_FRAMES[self._frame_idx % len(self.SPINNER_FRAMES)]
@@ -895,8 +868,8 @@ class LiveProgressDisplay:
         bar.append(f"{spinner} ", style="cyan")
         bar.append(s.phase, style="bold")
         if s.progress_total > 0:
-            bar.append(f"  {s.progress_current}/{s.progress_total}", style="dim")
-        bar.append(f"  {self._format_time(s.elapsed_seconds)}", style="dim")
+            bar.append(f"  │  {s.progress_current}/{s.progress_total}", style="dim")
+        bar.append(f"  │  {self._format_time(s.elapsed_seconds)}", style="dim")
         return bar
 
     def _render_complete_view(self) -> list:
