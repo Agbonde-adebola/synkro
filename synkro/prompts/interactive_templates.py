@@ -126,6 +126,9 @@ CLASSIFY THE INTENT:
    - "do the suggestions" / "apply suggestions" / "do what you suggested" → coverage_operation="increase" (apply the coverage suggestions shown)
    - "fix the gaps" / "fill the gaps" / "address the gaps" → coverage_operation="increase" (improve coverage for gap areas)
    - "improve coverage" / "increase coverage" / "better coverage" → coverage_operation="increase"
+   - "handle all the uncovered cases" / "cover uncovered rules" → coverage_operation="increase"
+   - "handle uncovered rules" / "generate scenarios for uncovered" → coverage_operation="increase"
+   - "cover the remaining rules" / "add scenarios for missing rules" → coverage_operation="increase"
    → Set intent_type="coverage" and the appropriate coverage_* fields
    → When user says "do suggestions" or "fix gaps", set coverage_operation="increase" without specific target (system picks lowest coverage)
 

@@ -1240,15 +1240,7 @@ class GenerationPipeline:
             elif intent.intent_type == "unclear":
                 display.show_error("Could not understand feedback. Try 'help' for examples.")
 
-        # Final summary
-        display.console.print(
-            f"\n[green]✅ Session complete[/green] - "
-            f"{session.rule_change_count} rule change(s), "
-            f"{session.scenario_change_count} scenario change(s), "
-            f"{current_turns} turns"
-        )
-
-        # Exit HITL mode (resume live display)
+        # Exit HITL mode (resume live display seamlessly)
         if live_display:
             live_display.exit_hitl_mode()
 

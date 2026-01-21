@@ -223,7 +223,7 @@ class LiveProgressDisplay:
 
         # Subtitle with model name
         if s.model:
-            subtitle = Text(f"Interactive editing with {s.model}", style="dim")
+            subtitle = Text(f"Interactive review with {s.model}", style="dim")
             content_parts.append(subtitle)
             content_parts.append(Text(""))
 
@@ -321,6 +321,8 @@ class LiveProgressDisplay:
         cmd_line.append(" │ ", style="dim")
         cmd_line.append("show map", style="cyan")
         cmd_line.append(" │ ", style="dim")
+        cmd_line.append("show coverage", style="cyan")
+        cmd_line.append(" │ ", style="dim")
         cmd_line.append("undo", style="cyan")
         cmd_line.append(" │ ", style="dim")
         cmd_line.append("help", style="cyan")
@@ -342,7 +344,7 @@ class LiveProgressDisplay:
         s = self._state
         title = Text()
         title.append("SYNKRO", style="bold cyan")
-        title.append(" HITL", style="bold yellow")
+        title.append(" Review", style="bold yellow")
 
         if s.model:
             title.append("  │  ", style="dim")
@@ -353,7 +355,7 @@ class LiveProgressDisplay:
         title.append(self._format_time(s.elapsed_seconds), style="white")
 
         title.append("  │  ", style="dim")
-        title.append(f"${s.cost:.4f}", style="white")
+        title.append(f"${s.cost:.8f}", style="white")
 
         return title
 
@@ -658,7 +660,7 @@ class LiveProgressDisplay:
         title.append("  │  ", style="dim")
 
         # Cost
-        title.append(f"${s.cost:.4f}", style="white")
+        title.append(f"${s.cost:.8f}", style="white")
 
         return title
 
@@ -815,7 +817,7 @@ class LiveProgressDisplay:
             rate_line.append(" passed verification", style="dim")
             lines.append(rate_line)
         else:
-            lines.append(Text(f"└─ Cost: ${s.cost:.4f}", style="dim"))
+            lines.append(Text(f"└─ Cost: ${s.cost:.8f}", style="dim"))
 
         if s.output_file:
             lines.append(Text(""))
