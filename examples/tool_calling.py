@@ -163,7 +163,7 @@ pipeline = create_pipeline(
 
 # Generate training traces
 # Each trace will demonstrate correct tool usage patterns
-dataset = pipeline.generate(TOOL_USAGE_GUIDELINES, traces=20)
+dataset = pipeline.generate(TOOL_USAGE_GUIDELINES, traces=5)
 
 # =============================================================================
 # Step 4: Save and inspect
@@ -179,23 +179,3 @@ print("\n" + dataset.summary())
 passed = sum(1 for t in dataset.traces if t.grade and t.grade.passed)
 total = len(dataset.traces)
 print(f"\n📊 Grading: {passed}/{total} traces passed ({passed/total*100:.0f}%)")
-
-# Show a sample trace
-if len(dataset) > 0:
-    print("\n--- Sample Trace ---")
-    trace = dataset[0]
-    for msg in trace.messages:
-        print(f"[{msg.role}]", end=" ")
-        if msg.tool_calls:
-            print(f"<tool_calls: {[tc.function.name for tc in msg.tool_calls]}>")
-        elif msg.tool_call_id:
-            print(f"<tool_response for {msg.tool_call_id}>: {msg.content[:50]}...")
-        else:
-            content = msg.content or ""
-            print(content[:80] + "..." if len(content) > 80 else content)
-
-    # Show grade info if available
-    if trace.grade:
-        print(f"\n📝 Grade: {'✓ PASS' if trace.grade.passed else '✗ FAIL'}")
-        if trace.grade.feedback:
-            print(f"   Feedback: {trace.grade.feedback[:100]}...")
