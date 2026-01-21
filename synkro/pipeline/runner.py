@@ -934,6 +934,7 @@ class GenerationPipeline:
 
         current_turns = initial_turns
         turns_history: list[int] = []  # For undo support
+        complexity_level = plan.complexity_level if plan else "medium"
 
         # Always use live_display for HITL - it has proper screen clearing
         def get_hitl_input() -> str:
@@ -942,6 +943,7 @@ class GenerationPipeline:
                 session.current_scenarios or [],  # Pass empty list if None
                 coverage_report,
                 current_turns,
+                complexity_level=complexity_level,
             )
 
         while True:

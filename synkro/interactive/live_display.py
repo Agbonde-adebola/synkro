@@ -63,6 +63,18 @@ class DisplayState:
     # Event log for activity feed
     events: list[str] = field(default_factory=list)
 
+    # View mode tracking for unified HITL display
+    view_mode: str = "main"  # "main", "rules_detail", "scenarios_detail", "logic_map_detail"
+    hitl_active: bool = False
+    hitl_turns: int = 0
+    hitl_complexity: str = "medium"
+    detail_page: int = 1
+    detail_items_per_page: int = 12
+
+    # Scenarios list for detail views
+    scenarios_list: list = field(default_factory=list)
+    coverage_report: "CoverageReport | None" = None
+
 
 class _NoOpContextManager:
     """No-op context manager for HITL spinner."""
@@ -128,7 +140,27 @@ class LiveProgressDisplay:
             except Exception:
                 pass  # Ignore errors from cost polling
 
-        # Build the full layout
+        # Dispatch based on view mode
+        if s.view_mode == "main":
+            if s.hitl_active:
+                return self._render_hitl_main()
+            elif s.is_complete:
+                return self._render_complete()
+            else:
+                return self._render_active()
+        elif s.view_mode == "rules_detail":
+            return self._render_rules_detail()
+        elif s.view_mode == "scenarios_detail":
+            return self._render_scenarios_detail()
+        elif s.view_mode == "logic_map_detail":
+            return self._render_logic_map_detail()
+
+        # Fallback to active view
+        return self._render_active()
+
+    def _render_active(self) -> Panel:
+        """Render the active (non-complete) view as a Panel."""
+        s = self._state
         content_parts: list = []
 
         # Header: subtitle with model name
@@ -137,12 +169,8 @@ class LiveProgressDisplay:
             content_parts.append(subtitle)
             content_parts.append(Text(""))
 
-        if s.is_complete:
-            # Completion view - simple summary
-            content_parts.extend(self._render_complete_view())
-        else:
-            # Active view - content only (status in title)
-            content_parts.extend(self._render_active_view())
+        # Active view - content only (status in title)
+        content_parts.extend(self._render_active_view())
 
         # Build title with status info: SYNKRO | Phase | Elapsed | Cost
         title = self._render_title_with_status()
@@ -151,7 +179,349 @@ class LiveProgressDisplay:
             Group(*content_parts),
             title=title,
             subtitle=self._render_status_bar(),
-            border_style="green" if s.is_complete else "cyan",
+            border_style="cyan",
+            padding=(0, 1),
+        )
+
+    def _render_complete(self) -> Panel:
+        """Render the completion view as a Panel."""
+        s = self._state
+        content_parts: list = []
+
+        # Header: subtitle with model name
+        if s.model:
+            subtitle = Text(f"Creating traces with {s.model}", style="dim")
+            content_parts.append(subtitle)
+            content_parts.append(Text(""))
+
+        # Completion view - simple summary
+        content_parts.extend(self._render_complete_view())
+
+        # Build title with status info
+        title = self._render_title_with_status()
+
+        return Panel(
+            Group(*content_parts),
+            title=title,
+            subtitle=self._render_status_bar(),
+            border_style="green",
+            padding=(0, 1),
+        )
+
+    def _render_hitl_main(self) -> Panel:
+        """Render HITL main view using the same panel style as active view."""
+        s = self._state
+        content_parts: list = []
+
+        # Subtitle with model name
+        if s.model:
+            subtitle = Text(f"Interactive editing with {s.model}", style="dim")
+            content_parts.append(subtitle)
+            content_parts.append(Text(""))
+
+        # Rules section
+        if s.logic_map and s.rules_count > 0:
+            rules_header = Text(f"─── Rules ({s.rules_count}) ───", style="bold white")
+            content_parts.append(rules_header)
+
+            # Group by category
+            categories: dict[str, list[str]] = {}
+            for rule in s.logic_map.rules:
+                cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
+                categories.setdefault(cat, []).append(rule.rule_id)
+
+            for cat, ids in sorted(categories.items()):
+                line = Text()
+                line.append(f"{cat} ", style="cyan")
+                line.append(f"({len(ids)})", style="dim")
+                content_parts.append(line)
+
+            content_parts.append(Text(""))
+
+        # Scenarios section
+        if s.scenarios_count > 0:
+            scen_header = Text(f"─── Scenarios ({s.scenarios_count}) ───", style="bold white")
+            content_parts.append(scen_header)
+
+            dist_line = Text()
+            if s.positive_count:
+                dist_line.append(f"{s.positive_count} positive  ", style="green")
+            if s.negative_count:
+                dist_line.append(f"{s.negative_count} negative  ", style="red")
+            if s.edge_count:
+                dist_line.append(f"{s.edge_count} edge  ", style="yellow")
+            if s.irrelevant_count:
+                dist_line.append(f"{s.irrelevant_count} irrelevant", style="dim")
+            content_parts.append(dist_line)
+            content_parts.append(Text(""))
+
+        # Coverage section
+        if s.coverage_percent is not None:
+            cov_header = Text("─── Coverage ───", style="bold white")
+            content_parts.append(cov_header)
+
+            cov_style = (
+                "green"
+                if s.coverage_percent >= 70
+                else "yellow"
+                if s.coverage_percent >= 50
+                else "red"
+            )
+            cov_line = Text()
+            cov_line.append(f"{s.coverage_percent:.0f}%", style=f"bold {cov_style}")
+            cov_line.append(
+                f"  ({s.covered_count} covered, {s.partial_count} partial, {s.uncovered_count} uncovered)",
+                style="dim",
+            )
+            content_parts.append(cov_line)
+            content_parts.append(Text(""))
+
+        # Settings section
+        settings_header = Text("─── Settings ───", style="bold white")
+        content_parts.append(settings_header)
+        settings_line = Text()
+        settings_line.append("Turns: ", style="dim")
+        settings_line.append(str(s.hitl_turns), style="cyan")
+        settings_line.append("    Complexity: ", style="dim")
+        settings_line.append(s.hitl_complexity.title(), style="cyan")
+        content_parts.append(settings_line)
+        content_parts.append(Text(""))
+
+        # Commands section
+        cmd_header = Text("─── Commands ───", style="bold white")
+        content_parts.append(cmd_header)
+        cmd_line = Text()
+        cmd_line.append("done", style="cyan")
+        cmd_line.append(" │ ", style="dim")
+        cmd_line.append("show rules", style="cyan")
+        cmd_line.append(" │ ", style="dim")
+        cmd_line.append("show scenarios", style="cyan")
+        cmd_line.append(" │ ", style="dim")
+        cmd_line.append("show map", style="cyan")
+        cmd_line.append(" │ ", style="dim")
+        cmd_line.append("undo", style="cyan")
+        cmd_line.append(" │ ", style="dim")
+        cmd_line.append("help", style="cyan")
+        content_parts.append(cmd_line)
+
+        # Build HITL title
+        title = self._render_hitl_title()
+
+        return Panel(
+            Group(*content_parts),
+            title=title,
+            subtitle="[dim]Enter feedback or command[/dim]",
+            border_style="cyan",
+            padding=(0, 1),
+        )
+
+    def _render_hitl_title(self) -> Text:
+        """Render title for HITL mode."""
+        s = self._state
+        title = Text()
+        title.append("SYNKRO", style="bold cyan")
+        title.append(" HITL", style="bold yellow")
+
+        if s.model:
+            title.append("  │  ", style="dim")
+            model_short = s.model.split("/")[-1]
+            title.append(model_short, style="cyan")
+
+        title.append("  │  ", style="dim")
+        title.append(self._format_time(s.elapsed_seconds), style="white")
+
+        title.append("  │  ", style="dim")
+        title.append(f"${s.cost:.4f}", style="white")
+
+        return title
+
+    def _render_rules_detail(self) -> Panel:
+        """Render full rules list with pagination."""
+        s = self._state
+        content_parts: list = []
+
+        if not s.logic_map:
+            content_parts.append(Text("No rules available", style="dim"))
+        else:
+            rules = s.logic_map.rules
+            total_pages = max(
+                1, (len(rules) + s.detail_items_per_page - 1) // s.detail_items_per_page
+            )
+            page = max(1, min(s.detail_page, total_pages))
+
+            start = (page - 1) * s.detail_items_per_page
+            end = start + s.detail_items_per_page
+            page_rules = rules[start:end]
+
+            # Group by category
+            by_cat: dict[str, list] = {}
+            for rule in page_rules:
+                cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
+                by_cat.setdefault(cat, []).append(rule)
+
+            for cat, cat_rules in sorted(by_cat.items()):
+                content_parts.append(Text(f"─── {cat} ───", style="bold white"))
+                for rule in cat_rules:
+                    id_line = Text()
+                    id_line.append(f"  {rule.rule_id}", style="cyan")
+                    text_preview = (
+                        rule.text[:65] if len(rule.text) <= 65 else rule.text[:62] + "..."
+                    )
+                    id_line.append(f"  {text_preview}", style="white")
+                    content_parts.append(id_line)
+
+                    if rule.condition:
+                        cond_preview = (
+                            rule.condition[:55]
+                            if len(rule.condition) <= 55
+                            else rule.condition[:52] + "..."
+                        )
+                        content_parts.append(Text(f"      IF: {cond_preview}", style="dim"))
+                    if rule.action:
+                        act_preview = (
+                            rule.action[:55] if len(rule.action) <= 55 else rule.action[:52] + "..."
+                        )
+                        content_parts.append(Text(f"      THEN: {act_preview}", style="dim"))
+                content_parts.append(Text(""))
+
+            page_info = f"Page {page}/{total_pages} ({len(rules)} total)"
+
+        title = Text()
+        title.append("Rules Detail", style="bold cyan")
+
+        subtitle = Text()
+        subtitle.append(page_info if s.logic_map else "", style="dim")
+        subtitle.append("  │  Enter/q to return  │  'page N' to navigate", style="dim")
+
+        return Panel(
+            Group(*content_parts),
+            title=title,
+            subtitle=subtitle,
+            border_style="cyan",
+            padding=(0, 1),
+        )
+
+    def _render_scenarios_detail(self) -> Panel:
+        """Render full scenarios list with pagination."""
+        s = self._state
+        content_parts: list = []
+        scenarios = s.scenarios_list
+
+        if not scenarios:
+            content_parts.append(Text("No scenarios available", style="dim"))
+            page_info = ""
+        else:
+            total_pages = max(
+                1, (len(scenarios) + s.detail_items_per_page - 1) // s.detail_items_per_page
+            )
+            page = max(1, min(s.detail_page, total_pages))
+
+            start = (page - 1) * s.detail_items_per_page
+            end = start + s.detail_items_per_page
+            page_scenarios = scenarios[start:end]
+
+            # Group by type
+            by_type: dict[str, list] = {}
+            for i, scenario in enumerate(page_scenarios, start=start + 1):
+                stype = (
+                    scenario.scenario_type.value
+                    if hasattr(scenario.scenario_type, "value")
+                    else str(scenario.scenario_type)
+                )
+                by_type.setdefault(stype, []).append((i, scenario))
+
+            type_order = ["positive", "negative", "edge_case", "irrelevant"]
+            for stype in type_order:
+                if stype not in by_type:
+                    continue
+                type_style = {
+                    "positive": "green",
+                    "negative": "red",
+                    "edge_case": "yellow",
+                    "irrelevant": "dim",
+                }.get(stype, "white")
+                content_parts.append(Text(f"─── {stype} ───", style=f"bold {type_style}"))
+
+                for idx, scenario in by_type[stype]:
+                    id_line = Text()
+                    id_line.append(f"  S{idx}", style="cyan")
+                    desc_preview = (
+                        scenario.description[:60]
+                        if len(scenario.description) <= 60
+                        else scenario.description[:57] + "..."
+                    )
+                    id_line.append(f"  {desc_preview}", style="white")
+                    content_parts.append(id_line)
+
+                    if scenario.target_rule_ids:
+                        rules_str = ", ".join(scenario.target_rule_ids[:5])
+                        if len(scenario.target_rule_ids) > 5:
+                            rules_str += f" (+{len(scenario.target_rule_ids) - 5})"
+                        content_parts.append(Text(f"      Rules: {rules_str}", style="dim"))
+                content_parts.append(Text(""))
+
+            page_info = f"Page {page}/{total_pages} ({len(scenarios)} total)"
+
+        title = Text()
+        title.append("Scenarios Detail", style="bold cyan")
+
+        subtitle = Text()
+        subtitle.append(page_info, style="dim")
+        subtitle.append("  │  Enter/q to return  │  'page N' to navigate", style="dim")
+
+        return Panel(
+            Group(*content_parts),
+            title=title,
+            subtitle=subtitle,
+            border_style="cyan",
+            padding=(0, 1),
+        )
+
+    def _render_logic_map_detail(self) -> Panel:
+        """Render logic map as tree structure by category."""
+        s = self._state
+        content_parts: list = []
+
+        if not s.logic_map:
+            content_parts.append(Text("No logic map available", style="dim"))
+        else:
+            # Group rules by category
+            by_cat: dict[str, list] = {}
+            for rule in s.logic_map.rules:
+                cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
+                by_cat.setdefault(cat, []).append(rule)
+
+            for cat, rules in sorted(by_cat.items()):
+                # Category header with count
+                cat_line = Text()
+                cat_line.append(f"┌─ {cat} ", style="bold cyan")
+                cat_line.append(f"({len(rules)} rules)", style="dim")
+                content_parts.append(cat_line)
+
+                for i, rule in enumerate(rules):
+                    is_last = i == len(rules) - 1
+                    prefix = "└──" if is_last else "├──"
+
+                    rule_line = Text()
+                    rule_line.append(f"│  {prefix} ", style="dim")
+                    rule_line.append(rule.rule_id, style="cyan")
+                    text_preview = (
+                        rule.text[:50] if len(rule.text) <= 50 else rule.text[:47] + "..."
+                    )
+                    rule_line.append(f"  {text_preview}", style="white")
+                    content_parts.append(rule_line)
+
+                content_parts.append(Text(""))
+
+        title = Text()
+        title.append("Logic Map", style="bold cyan")
+        title.append(f"  ({s.rules_count} rules)", style="dim")
+
+        return Panel(
+            Group(*content_parts),
+            title=title,
+            subtitle="[dim]Enter/q to return[/dim]",
+            border_style="cyan",
             padding=(0, 1),
         )
 
@@ -579,6 +949,8 @@ class LiveProgressDisplay:
     def exit_hitl_mode(self) -> None:
         """Resume live display after HITL."""
         self._hitl_mode = False
+        self._state.hitl_active = False
+        self._state.view_mode = "main"
         self._frame_idx = 0
         self._live = Live(
             self,  # Rich calls __rich__() on each refresh for animation
@@ -587,6 +959,69 @@ class LiveProgressDisplay:
             transient=True,
         )
         self._live.start()
+
+    # =========================================================================
+    # View Mode Control Methods
+    # =========================================================================
+
+    def enter_detail_view(self, mode: str, page: int = 1) -> None:
+        """Switch to a detail view mode."""
+        self._state.view_mode = mode
+        self._state.detail_page = page
+
+    def exit_detail_view(self) -> None:
+        """Return to main view."""
+        self._state.view_mode = "main"
+        self._state.detail_page = 1
+
+    def set_hitl_state(
+        self,
+        logic_map: "LogicMap",
+        scenarios: list | None,
+        coverage: "CoverageReport | None",
+        turns: int,
+        complexity: str = "medium",
+    ) -> None:
+        """Set all HITL-related state for unified rendering."""
+        self._state.hitl_active = True
+        self._state.logic_map = logic_map
+        self._state.rules_count = len(logic_map.rules)
+        self._state.rule_ids = [r.rule_id for r in logic_map.rules]
+        self._state.hitl_turns = turns
+        self._state.hitl_complexity = complexity
+
+        # Store scenarios list for detail view
+        self._state.scenarios_list = scenarios or []
+        if scenarios:
+            self._state.scenarios_count = len(scenarios)
+            dist: dict[str, int] = {}
+            for s in scenarios:
+                t = (
+                    s.scenario_type.value
+                    if hasattr(s.scenario_type, "value")
+                    else str(s.scenario_type)
+                )
+                dist[t] = dist.get(t, 0) + 1
+            self._state.positive_count = dist.get("positive", 0)
+            self._state.negative_count = dist.get("negative", 0)
+            self._state.edge_count = dist.get("edge_case", 0)
+            self._state.irrelevant_count = dist.get("irrelevant", 0)
+        else:
+            self._state.scenarios_count = 0
+            self._state.positive_count = 0
+            self._state.negative_count = 0
+            self._state.edge_count = 0
+            self._state.irrelevant_count = 0
+
+        # Store coverage
+        self._state.coverage_report = coverage
+        if coverage:
+            self._state.coverage_percent = coverage.overall_coverage_percent
+            self._state.covered_count = coverage.covered_count
+            self._state.partial_count = coverage.partial_count
+            self._state.uncovered_count = coverage.uncovered_count
+        else:
+            self._state.coverage_percent = None
 
     def hitl_spinner(self, message: str):
         """Show spinner during HITL operations."""
@@ -754,27 +1189,60 @@ class LiveProgressDisplay:
         coverage: "CoverageReport | None",
         current_turns: int,
         prompt: str = "synkro> ",
+        complexity_level: str = "medium",
     ) -> str:
         """
-        Clear screen, render HITL state, and get user input.
+        Clear screen, render HITL state using unified panel, and get user input.
 
         This is the main entry point for HITL interaction - it combines
         rendering and input into a single clean flow to prevent panel stacking.
+        Handles detail view navigation internally.
         """
-        # Clear console to prevent stacking
-        self.console.clear()
+        # Set HITL state for unified rendering
+        self.set_hitl_state(logic_map, scenarios, coverage, current_turns, complexity_level)
 
-        # Render the current state (handle None scenarios)
-        self.render_hitl_state(logic_map, scenarios or [], coverage, current_turns)
+        # Clear console and render using unified _render()
+        self.console.clear()
+        self.console.print(self._render())
+
+        # Choose prompt based on view mode
+        if self._state.view_mode != "main":
+            input_hint = "[dim]Enter/q to return, 'page N' to navigate: [/dim]"
+        else:
+            input_hint = f"[cyan]{prompt}[/cyan]"
 
         # Get input
         try:
-            user_input = self.console.input(f"[cyan]{prompt}[/cyan]")
+            user_input = self.console.input(input_hint)
         except (KeyboardInterrupt, EOFError):
             user_input = "done"
             self.console.print()
 
-        return user_input.strip()
+        user_input = user_input.strip()
+
+        # Handle detail view navigation
+        if self._state.view_mode != "main":
+            if user_input.lower() in ("", "q", "quit", "exit", "back"):
+                self.exit_detail_view()
+                # Re-render main view and get new input
+                return self.hitl_get_input(
+                    logic_map, scenarios, coverage, current_turns, prompt, complexity_level
+                )
+
+            if user_input.lower().startswith("page "):
+                try:
+                    page = int(user_input.split()[1])
+                    self._state.detail_page = page
+                    return self.hitl_get_input(
+                        logic_map, scenarios, coverage, current_turns, prompt, complexity_level
+                    )
+                except (IndexError, ValueError):
+                    pass
+
+            # Any other input in detail view: exit detail view and return as command
+            self.exit_detail_view()
+
+        return user_input
 
     def handle_show_command(
         self,
@@ -785,8 +1253,8 @@ class LiveProgressDisplay:
     ) -> bool:
         """Parse and handle show/find/filter commands. Returns True if handled.
 
-        IMPORTANT: All output goes through _hitl_print which clears screen first
-        to prevent stacking.
+        For list views (rules, scenarios, map), switches to detail view mode.
+        For single items (R001, S3), uses modal popup.
         """
         parts = command.lower().split()
         if not parts:
@@ -798,16 +1266,19 @@ class LiveProgressDisplay:
 
             target = parts[1]
 
+            # Full list views - switch to detail view mode
             if target == "rules":
-                items = [(r.rule_id, r.text) for r in logic_map.rules]
                 page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
-                self._hitl_print_list("Rules", items, page)
+                self.enter_detail_view("rules_detail", page)
                 return True
 
-            elif target == "scenarios" and scenarios:
-                items = [(f"S{i + 1}", s.description) for i, s in enumerate(scenarios)]
+            elif target == "scenarios":
                 page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
-                self._hitl_print_list("Scenarios", items, page)
+                self.enter_detail_view("scenarios_detail", page)
+                return True
+
+            elif target in ("map", "logicmap", "logic_map", "logic-map"):
+                self.enter_detail_view("logic_map_detail")
                 return True
 
             elif target == "gaps" and coverage:
@@ -822,6 +1293,7 @@ class LiveProgressDisplay:
                 self._hitl_print_coverage(coverage)
                 return True
 
+            # Single item views - use modal popup (Enter to close)
             elif target.upper().startswith("R"):
                 self._hitl_print_rule(target.upper(), logic_map)
                 return True
