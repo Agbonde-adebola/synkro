@@ -45,7 +45,7 @@ pipeline = create_pipeline(
     # grading_model=Google.GEMINI_25_PRO, # Quality grading (stronger = better filtering)
     dataset_type=DatasetType.CONVERSATION,  # Chat format for fine-tuning
     # max_iterations=3,                   # Max refinement iterations per trace
-    skip_grading=True,  # Skip grading phase for faster generation
+    # skip_grading=True,  # Skip grading phase for faster generation
     # enable_hitl=False,                  # Disable HITL for non-interactive testing
     reporter=reporter,  # Log to both CLI and file
 )

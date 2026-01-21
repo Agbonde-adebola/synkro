@@ -1178,6 +1178,7 @@ class LiveProgressDisplay:
         self._state.hitl_active = False
         self._state.view_mode = "main"
         self._frame_idx = 0
+        self.console.clear()  # Clear HITL panel before starting Live
         self._live = Live(
             self,  # Rich calls __rich__() on each refresh for animation
             console=self.console,
