@@ -10,7 +10,6 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from rich.columns import Columns
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
@@ -217,9 +216,16 @@ class LiveProgressDisplay:
         coverage_panel = self._build_coverage_panel()
         settings_panel = self._build_settings_panel()
 
-        # Two-column rows
-        row1 = Columns([rules_panel, scenarios_panel], equal=True, expand=True)
-        row2 = Columns([coverage_panel, settings_panel], equal=True, expand=True)
+        # Two-column rows using Table.grid for true equal widths
+        row1 = Table.grid(expand=True)
+        row1.add_column(ratio=1)
+        row1.add_column(ratio=1)
+        row1.add_row(rules_panel, scenarios_panel)
+
+        row2 = Table.grid(expand=True)
+        row2.add_column(ratio=1)
+        row2.add_column(ratio=1)
+        row2.add_row(coverage_panel, settings_panel)
 
         # Subtitle with model name
         subtitle = Text(f"Interactive review with {s.model}", style="dim") if s.model else Text("")
@@ -849,12 +855,18 @@ class LiveProgressDisplay:
         coverage_panel = self._build_coverage_panel()
         events_panel = self._build_events_panel()
 
-        # Row 1: Rules | Scenarios
-        row1 = Columns([rules_panel, scenarios_panel], equal=True, expand=True)
+        # Row 1: Rules | Scenarios (Table.grid for true equal widths)
+        row1 = Table.grid(expand=True)
+        row1.add_column(ratio=1)
+        row1.add_column(ratio=1)
+        row1.add_row(rules_panel, scenarios_panel)
         parts.append(row1)
 
         # Row 2: Coverage | Events
-        row2 = Columns([coverage_panel, events_panel], equal=True, expand=True)
+        row2 = Table.grid(expand=True)
+        row2.add_column(ratio=1)
+        row2.add_column(ratio=1)
+        row2.add_row(coverage_panel, events_panel)
         parts.append(row2)
 
         return Group(*parts)
