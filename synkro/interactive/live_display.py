@@ -229,7 +229,14 @@ class LiveProgressDisplay:
 
         # Rules section
         if s.logic_map and s.rules_count > 0:
-            rules_header = Text(f"─── Rules ({s.rules_count}) ───", style="bold white")
+            # Build header with diff counts
+            rules_header = Text()
+            rules_header.append(f"─── Rules ({s.rules_count})", style="bold white")
+            if s.added_rule_ids:
+                rules_header.append(f" +{len(s.added_rule_ids)}", style="bold green")
+            if s.removed_rule_ids:
+                rules_header.append(f" -{len(s.removed_rule_ids)}", style="bold red")
+            rules_header.append(" ───", style="bold white")
             content_parts.append(rules_header)
 
             # Group by category
@@ -248,7 +255,14 @@ class LiveProgressDisplay:
 
         # Scenarios section
         if s.scenarios_count > 0:
-            scen_header = Text(f"─── Scenarios ({s.scenarios_count}) ───", style="bold white")
+            # Build header with diff counts
+            scen_header = Text()
+            scen_header.append(f"─── Scenarios ({s.scenarios_count})", style="bold white")
+            if s.added_scenario_indices:
+                scen_header.append(f" +{len(s.added_scenario_indices)}", style="bold green")
+            if s.removed_scenario_indices:
+                scen_header.append(f" -{len(s.removed_scenario_indices)}", style="bold red")
+            scen_header.append(" ───", style="bold white")
             content_parts.append(scen_header)
 
             dist_line = Text()
@@ -1070,6 +1084,62 @@ class LiveProgressDisplay:
         self._state.view_mode = "main"
         self._state.detail_page = 1
 
+    def _update_current_data(
+        self,
+        logic_map: "LogicMap",
+        scenarios: list | None,
+        coverage: "CoverageReport | None",
+    ) -> None:
+        """Update current data and recompute diffs. Called before showing detail views."""
+        # Update logic map and rules
+        self._state.logic_map = logic_map
+        self._state.rules_count = len(logic_map.rules)
+        self._state.rule_ids = [r.rule_id for r in logic_map.rules]
+
+        # Recompute rule diffs
+        current_rule_ids = {r.rule_id for r in logic_map.rules}
+        if self._state.original_rule_ids:
+            self._state.added_rule_ids = current_rule_ids - self._state.original_rule_ids
+            self._state.removed_rule_ids = self._state.original_rule_ids - current_rule_ids
+
+        # Update scenarios
+        self._state.scenarios_list = scenarios or []
+        if scenarios:
+            self._state.scenarios_count = len(scenarios)
+            dist: dict[str, int] = {}
+            for s in scenarios:
+                t = (
+                    s.scenario_type.value
+                    if hasattr(s.scenario_type, "value")
+                    else str(s.scenario_type)
+                )
+                dist[t] = dist.get(t, 0) + 1
+            self._state.positive_count = dist.get("positive", 0)
+            self._state.negative_count = dist.get("negative", 0)
+            self._state.edge_count = dist.get("edge_case", 0)
+            self._state.irrelevant_count = dist.get("irrelevant", 0)
+
+            # Recompute scenario diffs
+            current_count = len(scenarios)
+            if self._state.original_scenario_ids:
+                original_count = len(self._state.original_scenario_ids)
+                if current_count > original_count:
+                    self._state.added_scenario_indices = set(range(original_count, current_count))
+                else:
+                    self._state.added_scenario_indices = set()
+                if current_count < original_count:
+                    self._state.removed_scenario_indices = set(range(current_count, original_count))
+                else:
+                    self._state.removed_scenario_indices = set()
+
+        # Update coverage
+        self._state.coverage_report = coverage
+        if coverage:
+            self._state.coverage_percent = coverage.overall_coverage_percent
+            self._state.covered_count = coverage.covered_count
+            self._state.partial_count = coverage.partial_count
+            self._state.uncovered_count = coverage.uncovered_count
+
     def set_hitl_state(
         self,
         logic_map: "LogicMap",
@@ -1388,6 +1458,9 @@ class LiveProgressDisplay:
 
         For list views (rules, scenarios, map), switches to detail view mode.
         For single items (R001, S3), uses modal popup.
+
+        IMPORTANT: Always updates state with passed data first to ensure
+        detail views show the CURRENT state with proper diff highlighting.
         """
         parts = command.lower().split()
         if not parts:
@@ -1399,18 +1472,24 @@ class LiveProgressDisplay:
 
             target = parts[1]
 
-            # Full list views - switch to detail view mode
+            # Full list views - UPDATE STATE FIRST, then switch to detail view mode
             if target == "rules":
+                # Update state with current data before showing detail view
+                self._update_current_data(logic_map, scenarios, coverage)
                 page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
                 self.enter_detail_view("rules_detail", page)
                 return True
 
             elif target == "scenarios":
+                # Update state with current data before showing detail view
+                self._update_current_data(logic_map, scenarios, coverage)
                 page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
                 self.enter_detail_view("scenarios_detail", page)
                 return True
 
             elif target in ("map", "logicmap", "logic_map", "logic-map"):
+                # Update state with current data before showing detail view
+                self._update_current_data(logic_map, scenarios, coverage)
                 self.enter_detail_view("logic_map_detail")
                 return True
 
