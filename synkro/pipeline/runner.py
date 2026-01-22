@@ -1143,6 +1143,8 @@ class GenerationPipeline:
 
                         # Start live display for streaming updates
                         if live_display:
+                            # Snapshot current coverage for diff display
+                            live_display.snapshot_coverage()
                             live_display.update_phase("Improving Coverage")
                             live_display.resume_live()
 

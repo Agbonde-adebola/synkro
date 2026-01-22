@@ -85,6 +85,14 @@ class DisplayState:
     added_scenario_indices: set[int] = field(default_factory=set)
     removed_scenario_indices: set[int] = field(default_factory=set)
 
+    # Previous coverage for diff display (before improvement)
+    previous_coverage_percent: float | None = None
+    previous_covered_count: int = 0
+    previous_partial_count: int = 0
+    previous_uncovered_count: int = 0
+    # Maps sub-category ID -> (previous_percent, previous_scenario_count)
+    previous_sub_category_coverage: dict[str, tuple[float, int]] = field(default_factory=dict)
+
 
 class _NoOpContextManager:
     """No-op context manager for HITL spinner."""
@@ -407,9 +415,43 @@ class LiveProgressDisplay:
         )
 
         lines: list = [bar, Text("")]
-        lines.append(Text.assemble(("covered ", "dim"), (str(s.covered_count), "green")))
-        lines.append(Text.assemble(("partial ", "dim"), (str(s.partial_count), "yellow")))
-        lines.append(Text.assemble(("uncovered ", "dim"), (str(s.uncovered_count), "red")))
+
+        # Helper to format count with diff
+        def fmt_count_diff(label: str, current: int, previous: int | None, style: str) -> Text:
+            text = Text()
+            text.append(f"{label} ", style="dim")
+            text.append(str(current), style=style)
+            if previous is not None and current != previous:
+                diff = current - previous
+                diff_style = "bold green" if diff > 0 else "bold red"
+                diff_str = f"+{diff}" if diff > 0 else str(diff)
+                text.append(f" ({diff_str})", style=diff_style)
+            return text
+
+        lines.append(
+            fmt_count_diff(
+                "covered",
+                s.covered_count,
+                s.previous_covered_count if s.previous_coverage_percent is not None else None,
+                "green",
+            )
+        )
+        lines.append(
+            fmt_count_diff(
+                "partial",
+                s.partial_count,
+                s.previous_partial_count if s.previous_coverage_percent is not None else None,
+                "yellow",
+            )
+        )
+        lines.append(
+            fmt_count_diff(
+                "uncovered",
+                s.uncovered_count,
+                s.previous_uncovered_count if s.previous_coverage_percent is not None else None,
+                "red",
+            )
+        )
 
         return lines
 
@@ -421,6 +463,15 @@ class LiveProgressDisplay:
         )
         title = Text()
         title.append(f"{s.coverage_percent:.0f}%", style=f"bold {color}")
+
+        # Show diff if we have previous coverage
+        if s.previous_coverage_percent is not None:
+            diff = s.coverage_percent - s.previous_coverage_percent
+            if diff != 0:
+                diff_style = "bold green" if diff > 0 else "bold red"
+                diff_str = f"+{diff:.0f}%" if diff > 0 else f"{diff:.0f}%"
+                title.append(f" ({diff_str})", style=diff_style)
+
         title.append(" Coverage", style=f"bold {color}")
         return title, color
 
@@ -806,7 +857,7 @@ class LiveProgressDisplay:
         )
 
     def _render_coverage_detail(self) -> Panel:
-        """Render coverage breakdown using Rich Table."""
+        """Render coverage breakdown using Rich Table with diff tracking."""
         from rich import box
 
         s = self._state
@@ -816,7 +867,7 @@ class LiveProgressDisplay:
         if not coverage:
             content_parts.append(Text("No coverage data available", style="dim"))
         else:
-            # Summary line
+            # Summary line with diff
             cov_style = (
                 "green"
                 if coverage.overall_coverage_percent >= 70
@@ -827,6 +878,15 @@ class LiveProgressDisplay:
             summary = Text()
             summary.append("Overall: ", style="dim")
             summary.append(f"{coverage.overall_coverage_percent:.0f}%", style=f"bold {cov_style}")
+
+            # Show overall diff if available
+            if s.previous_coverage_percent is not None:
+                diff = coverage.overall_coverage_percent - s.previous_coverage_percent
+                if diff != 0:
+                    diff_style = "bold green" if diff > 0 else "bold red"
+                    diff_str = f"+{diff:.0f}%" if diff > 0 else f"{diff:.0f}%"
+                    summary.append(f" ({diff_str})", style=diff_style)
+
             summary.append(
                 f"  ({coverage.covered_count} covered, {coverage.partial_count} partial, "
                 f"{coverage.uncovered_count} uncovered)",
@@ -844,8 +904,8 @@ class LiveProgressDisplay:
                 padding=(0, 1),
             )
             table.add_column("Sub-Category", ratio=1)
-            table.add_column("Scenarios", width=10, justify="right")
-            table.add_column("Coverage", width=10, justify="right")
+            table.add_column("Scenarios", width=12, justify="right")
+            table.add_column("Coverage", width=14, justify="right")
             table.add_column("Status", width=8, justify="center")
 
             for cov in coverage.sub_category_coverage:
@@ -863,10 +923,33 @@ class LiveProgressDisplay:
                     else "red"
                 )
 
+                # Build scenarios cell with diff
+                prev_data = s.previous_sub_category_coverage.get(cov.sub_category_id)
+                scenarios_text = Text()
+                scenarios_text.append(str(cov.scenario_count))
+                if prev_data is not None:
+                    _, prev_count = prev_data
+                    count_diff = cov.scenario_count - prev_count
+                    if count_diff > 0:
+                        scenarios_text.append(f" (+{count_diff})", style="bold green")
+                    elif count_diff < 0:
+                        scenarios_text.append(f" ({count_diff})", style="bold red")
+
+                # Build coverage cell with diff
+                coverage_text = Text()
+                coverage_text.append(f"{cov.coverage_percent:.0f}%", style=pct_style)
+                if prev_data is not None:
+                    prev_pct, _ = prev_data
+                    pct_diff = cov.coverage_percent - prev_pct
+                    if pct_diff > 0:
+                        coverage_text.append(f" (+{pct_diff:.0f}%)", style="bold green")
+                    elif pct_diff < 0:
+                        coverage_text.append(f" ({pct_diff:.0f}%)", style="bold red")
+
                 table.add_row(
                     cov.sub_category_name,
-                    str(cov.scenario_count),
-                    f"[{pct_style}]{cov.coverage_percent:.0f}%[/{pct_style}]",
+                    scenarios_text,
+                    coverage_text,
                     status_display,
                 )
 
@@ -1373,6 +1456,24 @@ class LiveProgressDisplay:
             self._state.covered_count = coverage.covered_count
             self._state.partial_count = coverage.partial_count
             self._state.uncovered_count = coverage.uncovered_count
+
+    def snapshot_coverage(self) -> None:
+        """Snapshot current coverage as previous for diff display.
+
+        Call this BEFORE starting coverage improvement to track changes.
+        """
+        s = self._state
+        s.previous_coverage_percent = s.coverage_percent
+        s.previous_covered_count = s.covered_count
+        s.previous_partial_count = s.partial_count
+        s.previous_uncovered_count = s.uncovered_count
+
+        # Snapshot per-sub-category coverage
+        if s.coverage_report:
+            s.previous_sub_category_coverage = {
+                cov.sub_category_id: (cov.coverage_percent, cov.scenario_count)
+                for cov in s.coverage_report.sub_category_coverage
+            }
 
     def update_coverage(self, coverage: "CoverageReport") -> None:
         """Update coverage state for live refresh after scenario generation."""
