@@ -440,6 +440,9 @@ class GoldenScenarioOutput(BaseModel):
     )
     target_rule_ids: list[str] = Field(description="Rule IDs this scenario tests")
     expected_outcome: str = Field(description="Expected behavior based on rules")
+    sub_category_ids: list[str] = Field(
+        default_factory=list, description="Sub-category IDs this scenario covers"
+    )
 
 
 class GoldenScenariosArray(BaseModel):
@@ -550,3 +553,49 @@ class CoverageSuggestionsOutput(BaseModel):
 
     suggestions: list[str] = Field(description="Actionable suggestions to improve coverage")
     reasoning: str = Field(description="Explanation of how suggestions were prioritized")
+
+
+# =============================================================================
+# COVERAGE IMPROVEMENT WORKFLOW SCHEMAS (3-call pipeline)
+# =============================================================================
+
+
+class CoveragePlanItem(BaseModel):
+    """A single item in the coverage improvement plan."""
+
+    sub_category_id: str = Field(description="Sub-category ID to target (e.g., 'SC001')")
+    sub_category_name: str = Field(description="Name of the sub-category")
+    scenario_count: int = Field(ge=1, le=10, description="Number of scenarios to generate")
+    scenario_types: list[Literal["positive", "negative", "edge_case"]] = Field(
+        description="Types of scenarios to generate"
+    )
+    focus_areas: list[str] = Field(
+        description="Specific aspects or rules to focus on within this sub-category"
+    )
+    reasoning: str = Field(description="Why this sub-category needs improvement")
+
+
+class CoveragePlan(BaseModel):
+    """Output schema for coverage planning (Call 1)."""
+
+    plan_items: list[CoveragePlanItem] = Field(
+        description="Ordered list of sub-categories to improve with generation targets"
+    )
+    total_scenarios: int = Field(description="Total number of scenarios to generate")
+    strategy_summary: str = Field(
+        description="Brief explanation of the overall strategy to reach target coverage"
+    )
+
+
+class DeduplicatedScenarios(BaseModel):
+    """Output schema for scenario deduplication (Call 3)."""
+
+    kept_indices: list[int] = Field(
+        description="Indices (0-based) of generated scenarios to KEEP (not duplicates)"
+    )
+    removed_indices: list[int] = Field(
+        description="Indices (0-based) of generated scenarios to REMOVE (duplicates/too similar)"
+    )
+    removal_reasons: list[str] = Field(
+        description="For each removed index, explanation of why it was removed"
+    )

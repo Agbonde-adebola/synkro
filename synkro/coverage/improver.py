@@ -10,10 +10,17 @@ from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
 from synkro.prompts.coverage_templates import (
     COVERAGE_COMMAND_PROMPT,
-    COVERAGE_TARGET_GENERATION_PROMPT,
+    COVERAGE_EXECUTION_PROMPT,
+    COVERAGE_PLANNING_PROMPT,
+    SCENARIO_DEDUPLICATION_PROMPT,
     TARGETED_SCENARIO_GENERATION_PROMPT,
 )
-from synkro.schemas import GoldenScenariosArray, HITLIntent
+from synkro.schemas import (
+    CoveragePlan,
+    DeduplicatedScenarios,
+    GoldenScenariosArray,
+    HITLIntent,
+)
 from synkro.types.coverage import (
     CoverageIntent,
     CoverageReport,
@@ -311,11 +318,11 @@ class CoverageImprover:
         on_scenario_generated: Callable[[GoldenScenario], None] | None = None,
     ) -> list[GoldenScenario]:
         """
-        Let LLM generate scenarios to reach a target coverage percentage.
+        Generate scenarios to reach target coverage using 3-call workflow.
 
-        Instead of calculating how many scenarios to generate, this method
-        gives the LLM full context about coverage gaps and lets it decide
-        what scenarios are needed.
+        Call 1: Planning - Analyze gaps and create generation plan
+        Call 2: Generation - Generate scenarios according to plan
+        Call 3: Deduplication - Remove duplicates/near-duplicates
 
         Args:
             target_percent: Target overall coverage percentage
@@ -328,57 +335,93 @@ class CoverageImprover:
             on_scenario_generated: Callback for live updates
 
         Returns:
-            New scenarios to improve coverage
+            New scenarios to improve coverage (deduplicated)
         """
-        # Build comprehensive context for the LLM
+        # Build coverage context
         context = self._build_coverage_context(coverage_report, taxonomy, existing_scenarios)
 
-        # Determine current coverage and focus based on whether specific sub-category is targeted
+        # Determine current coverage based on target
         current_coverage = coverage_report.overall_coverage_percent
         focus_instruction = ""
 
         if target_sub_category:
             target_sc = self._find_sub_category(target_sub_category, taxonomy)
             if target_sc:
-                # Use the specific sub-category's coverage, not overall
                 sc_coverage = coverage_report.get_coverage_for(target_sc.id)
-                if sc_coverage:
-                    current_coverage = sc_coverage.coverage_percent
-                else:
-                    current_coverage = 0.0
+                current_coverage = sc_coverage.coverage_percent if sc_coverage else 0.0
                 focus_instruction = (
-                    f"\n\nUSER FOCUS: The user specifically asked to improve '{target_sc.name}' "
-                    f"(currently at {current_coverage:.0f}%) to {target_percent}%. "
-                    f"Generate scenarios ONLY for this sub-category."
-                )
-            else:
-                focus_instruction = (
-                    f"\n\nUSER FOCUS: The user mentioned '{target_sub_category}'. "
-                    f"Focus on sub-categories related to this topic."
+                    f"\n\nUSER FOCUS: Improve ONLY '{target_sc.name}' "
+                    f"(currently {current_coverage:.0f}%) to {target_percent}%."
                 )
 
         gap = target_percent - current_coverage
 
-        prompt = (
-            COVERAGE_TARGET_GENERATION_PROMPT.format(
+        # =====================================================================
+        # CALL 1: Planning - Analyze gaps and create plan
+        # =====================================================================
+        planning_prompt = (
+            COVERAGE_PLANNING_PROMPT.format(
                 current_overall=current_coverage,
                 target_percent=target_percent,
                 gap=gap,
                 sub_category_coverage_table=context["coverage_table"],
-                existing_scenarios_summary=context["scenarios_summary"],
-                logic_map=self._format_logic_map(logic_map),
-                policy_text=policy_text[:4000] + "..." if len(policy_text) > 4000 else policy_text,
+                existing_count=len(existing_scenarios),
             )
             + focus_instruction
         )
 
-        # Get scenarios from LLM
-        result = await self.llm.generate_structured(prompt, GoldenScenariosArray)
+        plan = await self.llm.generate_structured(planning_prompt, CoveragePlan)
 
-        # Convert to domain models and stream updates
+        # If no plan items, nothing to generate
+        if not plan.plan_items:
+            return []
+
+        # =====================================================================
+        # CALL 2: Generation - Generate scenarios based on plan
+        # =====================================================================
+        # Format plan for generation prompt
+        plan_summary = plan.strategy_summary
+        plan_details = self._format_plan_for_generation(plan)
+
+        generation_prompt = COVERAGE_EXECUTION_PROMPT.format(
+            plan_summary=plan_summary,
+            plan_details=plan_details,
+            policy_text=policy_text[:4000] + "..." if len(policy_text) > 4000 else policy_text,
+            logic_map=self._format_logic_map(logic_map),
+        )
+
+        generation_result = await self.llm.generate_structured(
+            generation_prompt, GoldenScenariosArray
+        )
+
+        # If no scenarios generated, return empty
+        if not generation_result.scenarios:
+            return []
+
+        # =====================================================================
+        # CALL 3: Deduplication - Remove duplicates
+        # =====================================================================
+        # Format existing scenarios for dedup prompt
+        existing_formatted = self._format_scenarios_for_dedup(existing_scenarios)
+        generated_formatted = self._format_generated_for_dedup(generation_result.scenarios)
+
+        dedup_prompt = SCENARIO_DEDUPLICATION_PROMPT.format(
+            existing_scenarios=existing_formatted,
+            generated_scenarios=generated_formatted,
+        )
+
+        dedup_result = await self.llm.generate_structured(dedup_prompt, DeduplicatedScenarios)
+
+        # Filter to only kept scenarios
+        kept_indices = set(dedup_result.kept_indices)
+
+        # Convert to domain models and stream updates (only kept ones)
         scenarios: list[GoldenScenario] = []
-        for s_out in result.scenarios:
-            # Determine category from sub_category_ids if available
+        for i, s_out in enumerate(generation_result.scenarios):
+            if i not in kept_indices:
+                continue  # Skip removed duplicates
+
+            # Determine category from sub_category_ids
             category = "General"
             if s_out.sub_category_ids:
                 sc = taxonomy.get_by_id(s_out.sub_category_ids[0])
@@ -401,6 +444,46 @@ class CoverageImprover:
                 on_scenario_generated(scenario)
 
         return scenarios
+
+    def _format_plan_for_generation(self, plan: CoveragePlan) -> str:
+        """Format the coverage plan for the generation prompt."""
+        lines = []
+        for item in plan.plan_items:
+            types_str = ", ".join(item.scenario_types)
+            focus_str = "; ".join(item.focus_areas) if item.focus_areas else "general coverage"
+            lines.append(
+                f"- {item.sub_category_name} ({item.sub_category_id}): "
+                f"Generate {item.scenario_count} scenarios ({types_str}). "
+                f"Focus: {focus_str}"
+            )
+        return "\n".join(lines)
+
+    def _format_scenarios_for_dedup(self, scenarios: list[GoldenScenario]) -> str:
+        """Format existing scenarios for deduplication prompt."""
+        if not scenarios:
+            return "None"
+        lines = []
+        for i, s in enumerate(scenarios[:20]):  # Limit to 20 for context
+            sc_ids = ", ".join(s.sub_category_ids) if s.sub_category_ids else "none"
+            lines.append(
+                f"{i + 1}. [{s.scenario_type.value}] {s.description[:80]}... "
+                f"(covers: {sc_ids}, rules: {', '.join(s.target_rule_ids[:3])})"
+            )
+        if len(scenarios) > 20:
+            lines.append(f"... and {len(scenarios) - 20} more existing scenarios")
+        return "\n".join(lines)
+
+    def _format_generated_for_dedup(self, scenarios: list) -> str:
+        """Format generated scenarios for deduplication prompt."""
+        lines = []
+        for i, s in enumerate(scenarios):
+            sc_ids = ", ".join(s.sub_category_ids) if s.sub_category_ids else "none"
+            rules = ", ".join(s.target_rule_ids[:3]) if s.target_rule_ids else "none"
+            lines.append(
+                f"[{i}] [{s.scenario_type}] {s.description[:100]}... "
+                f"(covers: {sc_ids}, rules: {rules})"
+            )
+        return "\n".join(lines)
 
     def _build_coverage_context(
         self,

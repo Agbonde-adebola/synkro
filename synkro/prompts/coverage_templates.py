@@ -356,3 +356,125 @@ For each scenario, provide:
 - target_rule_ids: Rules this scenario tests (from the Logic Map)
 - expected_outcome: What should happen based on the rules
 - sub_category_ids: Which sub-categories this scenario covers"""
+
+
+# =============================================================================
+# COVERAGE IMPROVEMENT 3-CALL WORKFLOW
+# =============================================================================
+
+COVERAGE_PLANNING_PROMPT = """You are analyzing coverage gaps and creating a plan to improve coverage.
+
+CURRENT COVERAGE STATE:
+- Overall Coverage: {current_overall:.0f}%
+- Target Coverage: {target_percent}%
+- Gap to Close: {gap:.0f} percentage points
+
+PER-SUB-CATEGORY BREAKDOWN:
+{sub_category_coverage_table}
+
+EXISTING SCENARIOS COUNT: {existing_count}
+
+YOUR TASK:
+Analyze the coverage gaps and create a detailed plan for which scenarios to generate.
+
+ANALYSIS STEPS:
+
+1. **Identify Gaps**: Which sub-categories are uncovered (0%) or partial (<80%)?
+
+2. **Prioritize**: Rank sub-categories by:
+   - Priority level (HIGH > MEDIUM > LOW)
+   - Current coverage (lower = more urgent)
+   - Impact on overall coverage
+
+3. **Calculate Needs**: For each gap sub-category:
+   - How many scenarios would bring it to adequate coverage (80%+)?
+   - What types are missing (positive/negative/edge_case)?
+
+4. **Create Plan**: Specify exactly:
+   - Which sub-categories to target
+   - How many scenarios for each
+   - What types to generate
+   - What aspects/rules to focus on
+
+GUIDELINES:
+- Each sub-category typically needs 2-4 scenarios to reach 80% coverage
+- Uncovered sub-categories (0%) need more attention than partial ones
+- HIGH priority sub-categories should get more scenarios
+- Aim for type diversity within each sub-category
+- Total scenarios should be sufficient to close the coverage gap
+
+OUTPUT:
+Provide a structured plan with specific targets for each sub-category."""
+
+
+COVERAGE_EXECUTION_PROMPT = """You are generating scenarios according to a coverage improvement plan.
+
+PLAN TO EXECUTE:
+{plan_summary}
+
+SPECIFIC TARGETS:
+{plan_details}
+
+POLICY DOCUMENT:
+{policy_text}
+
+LOGIC MAP (Rules to test):
+{logic_map}
+
+YOUR TASK:
+Generate scenarios exactly as specified in the plan above.
+
+FOR EACH SCENARIO:
+- Match the target sub-category from the plan
+- Use the specified scenario type (positive/negative/edge_case)
+- Focus on the aspects mentioned in the plan
+- Reference specific rules from the Logic Map
+- Write realistic user descriptions in natural language
+
+QUALITY REQUIREMENTS:
+- Each scenario must be distinct and test different aspects
+- Descriptions should sound like real user queries
+- Expected outcomes must align with the rules
+- Context should provide relevant background
+
+OUTPUT FORMAT:
+For each scenario, provide:
+- description: The user's exact words (realistic query)
+- context: Background information
+- scenario_type: As specified in plan
+- target_rule_ids: Rules this scenario tests
+- expected_outcome: What should happen based on rules
+- sub_category_ids: The target sub-category from plan"""
+
+
+SCENARIO_DEDUPLICATION_PROMPT = """You are reviewing generated scenarios to remove duplicates and near-duplicates.
+
+EXISTING SCENARIOS (already in the dataset):
+{existing_scenarios}
+
+NEWLY GENERATED SCENARIOS (to review):
+{generated_scenarios}
+
+YOUR TASK:
+Identify which newly generated scenarios should be REMOVED because they are:
+1. Exact duplicates of existing scenarios
+2. Near-duplicates (testing the same thing with minor wording changes)
+3. Redundant (covering the exact same rules/edge cases as existing scenarios)
+
+KEEP scenarios that:
+- Test genuinely different aspects or edge cases
+- Approach the same rule from a meaningfully different angle
+- Add value by covering gaps not addressed by existing scenarios
+
+REMOVE scenarios that:
+- Are too similar to existing scenarios in intent and coverage
+- Would not add new testing value to the dataset
+- Duplicate the exact same test case with different wording
+
+Be CONSERVATIVE with removals - only remove if clearly redundant.
+When in doubt, KEEP the scenario.
+
+OUTPUT:
+- kept_indices: List of indices (0-based) of generated scenarios to KEEP
+- removed_indices: List of indices (0-based) of generated scenarios to REMOVE
+- removal_reasons: For each removed scenario, explain why it was removed"""
