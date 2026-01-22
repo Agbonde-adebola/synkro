@@ -140,7 +140,12 @@ class Dataset(BaseModel):
         return Dataset(traces=unique_traces)
 
     def _dedupe_semantic(self, threshold: float, field: str) -> "Dataset":
-        """Remove semantically similar traces using embeddings."""
+        """Remove semantically similar traces using embeddings.
+
+        Uses vectorized numpy operations for O(n²) similarity computation
+        but with fast matrix multiplication instead of nested loops.
+        For very large datasets (>50k), consider using approximate nearest neighbors.
+        """
         try:
             import numpy as np
             from sentence_transformers import SentenceTransformer
@@ -149,6 +154,10 @@ class Dataset(BaseModel):
                 "sentence-transformers is required for semantic deduplication. "
                 "Install with: pip install sentence-transformers"
             )
+
+        n_traces = len(self.traces)
+        if n_traces == 0:
+            return Dataset(traces=[])
 
         # Get texts to embed
         if field == "user":
@@ -166,25 +175,44 @@ class Dataset(BaseModel):
 
         # Normalize for cosine similarity
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        norms = np.where(norms == 0, 1, norms)  # Avoid division by zero
         embeddings = embeddings / norms
 
-        # Find duplicates using cosine similarity
-        unique_indices = []
-        duplicate_of = {}  # Maps duplicate index to original index
+        # For smaller datasets, use vectorized batch processing
+        # For very large datasets (>10k), process in batches to avoid memory issues
+        batch_size = 5000
+        unique_mask = np.ones(n_traces, dtype=bool)
 
-        for i in range(len(embeddings)):
-            is_duplicate = False
-            for j in unique_indices:
-                similarity = np.dot(embeddings[i], embeddings[j])
-                if similarity >= threshold:
-                    is_duplicate = True
-                    duplicate_of[i] = j
-                    break
-            if not is_duplicate:
-                unique_indices.append(i)
+        if n_traces <= batch_size:
+            # Compute full similarity matrix at once (fast for moderate sizes)
+            similarity_matrix = embeddings @ embeddings.T
 
+            # Mark duplicates: for each pair (i, j) where i < j and sim >= threshold,
+            # mark j as duplicate (keep earlier occurrence)
+            for i in range(n_traces):
+                if not unique_mask[i]:
+                    continue
+                # Find all items similar to i that come after i
+                similarities = similarity_matrix[i, i + 1 :]
+                duplicates = np.where(similarities >= threshold)[0] + i + 1
+                unique_mask[duplicates] = False
+        else:
+            # Batch processing for large datasets
+            console.print(f"[dim]Processing {n_traces} traces in batches...[/dim]")
+            for i in range(n_traces):
+                if not unique_mask[i]:
+                    continue
+                # Compare item i against all remaining items in batches
+                for batch_start in range(i + 1, n_traces, batch_size):
+                    batch_end = min(batch_start + batch_size, n_traces)
+                    batch_embeddings = embeddings[batch_start:batch_end]
+                    similarities = embeddings[i] @ batch_embeddings.T
+                    duplicates = np.where(similarities >= threshold)[0] + batch_start
+                    unique_mask[duplicates] = False
+
+        unique_indices = np.where(unique_mask)[0]
         unique_traces = [self.traces[i] for i in unique_indices]
-        removed = len(self.traces) - len(unique_traces)
+        removed = n_traces - len(unique_traces)
 
         if removed > 0:
             console.print(

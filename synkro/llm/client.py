@@ -160,6 +160,7 @@ class LLM:
         prompt: str,
         response_model: Type[T],
         system: str | None = None,
+        temperature: float | None = None,
     ) -> T: ...
 
     @overload
@@ -168,6 +169,7 @@ class LLM:
         prompt: str,
         response_model: Type[list[T]],
         system: str | None = None,
+        temperature: float | None = None,
     ) -> list[T]: ...
 
     async def generate_structured(
@@ -175,6 +177,7 @@ class LLM:
         prompt: str,
         response_model: Type[T] | Type[list[T]],
         system: str | None = None,
+        temperature: float | None = None,
     ) -> T | list[T]:
         """
         Generate a structured response matching a Pydantic model.
@@ -218,7 +221,7 @@ class LLM:
             "model": self.model,
             "messages": messages,
             "response_format": response_model,
-            "temperature": self.temperature,
+            "temperature": temperature if temperature is not None else self.temperature,
             "api_key": self._api_key,
         }
         if self.max_tokens is not None:

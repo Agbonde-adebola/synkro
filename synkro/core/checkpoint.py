@@ -98,12 +98,14 @@ class CheckpointManager:
         return self._data
 
     def _save(self) -> None:
-        """Save checkpoint to disk."""
+        """Save checkpoint to disk efficiently (single serialization pass)."""
         if self._data is None:
             return
 
         with open(self.checkpoint_file, "w") as f:
-            json.dump(self._data.model_dump(), f, indent=2)
+            # Use model_dump_json directly to avoid double serialization
+            # (model_dump() -> dict -> json.dump() would serialize twice)
+            f.write(self._data.model_dump_json(indent=2))
 
     def has_checkpoint(self) -> bool:
         """Check if a checkpoint exists."""

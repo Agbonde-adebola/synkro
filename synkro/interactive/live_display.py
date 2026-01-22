@@ -1584,11 +1584,12 @@ class LiveProgressDisplay:
         self._state.error_message = ""
 
     def add_event(self, event: str) -> None:
-        """Add an event to the scrolling log."""
+        """Add an event to the scrolling log (bounded to prevent memory growth)."""
         self._state.events.append(event)
-        # Keep last 10 events
-        if len(self._state.events) > 10:
-            self._state.events = self._state.events[-10:]
+        # Keep last 1000 events to prevent unbounded growth in long sessions
+        # (UI only shows last 4, but full log useful for debugging)
+        if len(self._state.events) > 1000:
+            self._state.events = self._state.events[-1000:]
         self._refresh()
 
     def _refresh(self) -> None:

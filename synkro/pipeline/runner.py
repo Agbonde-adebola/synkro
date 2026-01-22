@@ -1166,12 +1166,12 @@ class GenerationPipeline:
                             new_dist = session.current_distribution or {}
                             session.apply_scenario_change(feedback, all_scenarios, new_dist)
 
-                            # Recalculate coverage
+                            # Recalculate coverage (skip suggestions LLM call - not needed for live updates)
                             with display.spinner("Recalculating coverage..."):
                                 coverage_report = await coverage_calculator.calculate(
                                     all_scenarios,
                                     taxonomy,
-                                    generate_suggestions=True,
+                                    generate_suggestions=False,
                                 )
 
                             # Update display state with new coverage and scenarios

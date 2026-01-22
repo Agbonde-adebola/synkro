@@ -356,7 +356,7 @@ class RichReporter:
         self._display.add_activity(f"{len(taxonomy.sub_categories)} sub-categories")
         self._update_elapsed()
 
-    def on_coverage_calculated(self, report, show_suggestions: bool = True) -> None:
+    def on_coverage_calculated(self, report) -> None:
         """Store coverage for section rendering - displayed in live panel."""
         # Store coverage data in live display - it will be shown as a section
         self._display.set_coverage(report)

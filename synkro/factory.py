@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from synkro.generation.tool_simulator import ToolSimulator
     from synkro.interactive.logic_map_editor import LogicMapEditor
     from synkro.interactive.scenario_editor import ScenarioEditor
+    from synkro.interactive.taxonomy_editor import TaxonomyEditor
     from synkro.quality.golden_refiner import GoldenRefiner
     from synkro.quality.tool_grader import ToolCallGrader
     from synkro.quality.tool_refiner import ToolCallRefiner
@@ -328,6 +329,17 @@ class ComponentFactory:
         from synkro.interactive.scenario_editor import ScenarioEditor
 
         return ScenarioEditor(llm=self.grading_llm)
+
+    def create_taxonomy_editor(self) -> "TaxonomyEditor":
+        """
+        Create a TaxonomyEditor for Human-in-the-Loop taxonomy editing.
+
+        The editor uses the grading LLM (stronger model) to interpret
+        natural language feedback and refine category/sub-category structure.
+        """
+        from synkro.interactive.taxonomy_editor import TaxonomyEditor
+
+        return TaxonomyEditor(llm=self.grading_llm)
 
     # =========================================================================
     # COVERAGE TRACKING COMPONENTS

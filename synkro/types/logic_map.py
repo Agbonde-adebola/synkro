@@ -95,12 +95,19 @@ class LogicMap(BaseModel):
         default_factory=list, description="Rule IDs with no dependencies (entry points)"
     )
 
+    # Private cache for O(1) rule lookups (built lazily)
+    _rule_index: dict[str, Rule] | None = None
+
+    def _get_rule_index(self) -> dict[str, Rule]:
+        """Get or build the rule index for O(1) lookups."""
+        if self._rule_index is None:
+            # Build index on first access
+            object.__setattr__(self, "_rule_index", {r.rule_id: r for r in self.rules})
+        return self._rule_index  # type: ignore
+
     def get_rule(self, rule_id: str) -> Rule | None:
-        """Get a rule by its ID."""
-        for rule in self.rules:
-            if rule.rule_id == rule_id:
-                return rule
-        return None
+        """Get a rule by its ID. O(1) lookup using cached index."""
+        return self._get_rule_index().get(rule_id)
 
     def get_dependents(self, rule_id: str) -> list[Rule]:
         """Get all rules that depend on the given rule."""
@@ -118,16 +125,17 @@ class LogicMap(BaseModel):
         Get the full dependency chain for a rule (topologically sorted).
 
         Returns all rules that must be evaluated before the given rule,
-        in the order they should be evaluated.
+        in the order they should be evaluated. O(n) using cached index.
         """
-        visited = set()
-        chain = []
+        rule_index = self._get_rule_index()
+        visited: set[str] = set()
+        chain: list[Rule] = []
 
-        def visit(rid: str):
+        def visit(rid: str) -> None:
             if rid in visited:
                 return
             visited.add(rid)
-            rule = self.get_rule(rid)
+            rule = rule_index.get(rid)
             if rule:
                 for dep_id in rule.dependencies:
                     visit(dep_id)
@@ -137,18 +145,22 @@ class LogicMap(BaseModel):
         return chain
 
     def validate_dag(self) -> bool:
-        """Verify the rules form a valid DAG (no cycles)."""
+        """Verify the rules form a valid DAG (no cycles). O(n+e) using DFS."""
+        # Use index for O(1) lookups
+        rule_index = self._get_rule_index()
+
         # Track visit state: 0=unvisited, 1=visiting, 2=visited
-        state = {r.rule_id: 0 for r in self.rules}
+        state: dict[str, int] = {}
 
         def has_cycle(rule_id: str) -> bool:
-            if state.get(rule_id, 0) == 1:  # Currently visiting = cycle
+            s = state.get(rule_id, 0)
+            if s == 1:  # Currently visiting = cycle
                 return True
-            if state.get(rule_id, 0) == 2:  # Already visited = ok
+            if s == 2:  # Already visited = ok
                 return False
 
             state[rule_id] = 1  # Mark as visiting
-            rule = self.get_rule(rule_id)
+            rule = rule_index.get(rule_id)
             if rule:
                 for dep_id in rule.dependencies:
                     if has_cycle(dep_id):

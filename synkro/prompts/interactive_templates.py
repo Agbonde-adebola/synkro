@@ -132,17 +132,28 @@ CLASSIFY THE INTENT:
    → Set intent_type="coverage" and the appropriate coverage_* fields
    → When user says "do suggestions" or "fix gaps", set coverage_operation="increase" without specific target (system picks lowest coverage)
 
-6. "command" - User typed a built-in command (done, undo, reset, help, show Rxxx, show Sxxx)
+6. "taxonomy" - User wants to manage categories or sub-categories
+   Examples:
+   - "add a category for travel expenses" → taxonomy_operation="add_category", taxonomy_target_name="travel expenses"
+   - "add a sub-category for meal receipts under Expenses" → taxonomy_operation="add_subcategory", taxonomy_target_name="meal receipts"
+   - "rename Equipment Tracking to Asset Management" → taxonomy_operation="modify", taxonomy_target_name="Equipment Tracking"
+   - "delete the unused sub-category" → taxonomy_operation="delete"
+   - "show categories" → taxonomy_operation="view"
+   - "reorganize the categories" → taxonomy_operation="modify"
+   → Set intent_type="taxonomy", taxonomy_operation, taxonomy_target_name (if applicable), and taxonomy_feedback (original input)
+
+7. "command" - User typed a built-in command (done, undo, reset, help, show Rxxx, show Sxxx)
    → Set intent_type="command", leave other fields null
    Note: Commands are handled separately, but classify them if they appear
 
-7. "unclear" - Cannot determine intent
+8. "unclear" - Cannot determine intent
    → Set intent_type="unclear"
 
 IMPORTANT:
 - Set confidence based on how clear the intent is (0.0 to 1.0)
 - Use "compound" when the user explicitly wants BOTH rule AND scenario changes in ONE request
 - Use "coverage" for any requests about viewing or improving coverage metrics
+- Use "taxonomy" for requests about categories or sub-categories
 - Default to "rules" if ambiguous between rules and unclear
 - Default to "scenarios" if ambiguous between scenarios and unclear"""
 
@@ -212,8 +223,79 @@ Provide a brief changes_summary explaining what was done.
 Provide reasoning explaining how you interpreted the user's feedback."""
 
 
+TAXONOMY_REFINEMENT_PROMPT = """You are a taxonomy editor for policy coverage tracking. Your task is to modify the category/sub-category structure based on user feedback.
+
+CURRENT TAXONOMY:
+{taxonomy_formatted}
+
+LOGIC MAP (for rule references):
+{logic_map_formatted}
+
+POLICY CONTEXT:
+{policy_text}
+
+USER FEEDBACK: "{feedback}"
+
+STRICT RULES - YOU MUST FOLLOW THESE EXACTLY:
+
+1. **NEVER DELETE** unless the user EXPLICITLY says "delete", "remove", or "get rid of"
+   - If user says "add 2 categories" → add exactly 2, delete NOTHING
+   - If user says "modify X" → modify X only, delete NOTHING
+
+2. **EXACT COUNTS** - If user specifies a number, use EXACTLY that number
+   - "add 2 sub-categories" → add exactly 2, not 1, not 3
+   - "add a category" → add exactly 1
+
+3. **NO CREATIVE INTERPRETATION** - Do exactly what's asked, nothing more
+   - Don't add extra items "for good measure"
+   - Don't reorganize unless asked
+   - Don't rename unless asked
+   - Don't change priorities unless asked
+
+4. **LITERAL INTERPRETATION** - Take user's words literally
+   - "positive categories" likely means categories for POSITIVE test scenarios (happy paths)
+   - "negative categories" likely means categories for NEGATIVE test scenarios (violations)
+   - Don't interpret adjectives as naming themes
+
+SUPPORTED OPERATIONS:
+
+1. **ADD CATEGORY**: Create a new parent category with sub-categories
+   - Create the category with the name/topic the user specified
+   - Add 1-2 relevant sub-categories under it
+   - Link sub-categories to appropriate rules from the Logic Map
+
+2. **ADD SUB-CATEGORY**: Add a sub-category to an existing category
+   - Create sub-category with unique ID (SC###)
+   - Set parent_category to match existing category name
+   - Link to relevant rules
+
+3. **MODIFY**: Rename or update a category or sub-category (ONLY if explicitly asked)
+
+4. **DELETE**: Remove a category or sub-category (ONLY if explicitly asked with words like "delete", "remove")
+
+SUB-CATEGORY STRUCTURE:
+Each sub-category needs:
+- id: Unique identifier (SC001, SC002, etc.) - use next available number
+- name: Short descriptive name (2-5 words) based on what it tests
+- description: What this sub-category covers/tests
+- parent_category: Must match an existing category name exactly
+- related_rule_ids: Rules from Logic Map that this sub-category tests
+- priority: "high" (critical/compliance), "medium" (standard), or "low" (edge cases)
+
+CRITICAL REQUIREMENTS:
+- All sub-category IDs must be unique
+- parent_category must reference a valid category name
+- related_rule_ids should reference valid rules from the Logic Map
+- PRESERVE ALL existing sub-categories unless user explicitly asks to delete them
+
+OUTPUT:
+Return the complete updated taxonomy with ALL sub-categories (both modified and unmodified).
+Provide a brief changes_summary explaining what was done."""
+
+
 __all__ = [
     "LOGIC_MAP_REFINEMENT_PROMPT",
     "HITL_INTENT_CLASSIFIER_PROMPT",
     "SCENARIO_REFINEMENT_PROMPT",
+    "TAXONOMY_REFINEMENT_PROMPT",
 ]

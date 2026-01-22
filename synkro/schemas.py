@@ -379,9 +379,9 @@ class HITLIntent(BaseModel):
     """Classified user intent in unified HITL session."""
 
     intent_type: Literal[
-        "turns", "rules", "scenarios", "compound", "coverage", "command", "unclear"
+        "turns", "rules", "scenarios", "compound", "coverage", "taxonomy", "command", "unclear"
     ] = Field(
-        description="Type of user intent: turns adjustment, rule modification, scenario editing, compound (rules + scenarios together), coverage operations, command, or unclear"
+        description="Type of user intent: turns adjustment, rule modification, scenario editing, compound (rules + scenarios together), coverage operations, taxonomy management, command, or unclear"
     )
     confidence: float = Field(ge=0, le=1, description="Confidence score for the classification")
 
@@ -428,6 +428,39 @@ class HITLIntent(BaseModel):
     coverage_view_mode: Literal["summary", "gaps", "heatmap", "detail"] | None = Field(
         default=None, description="What to display for coverage view commands"
     )
+
+    # For taxonomy operations
+    taxonomy_operation: (
+        Literal["add_category", "add_subcategory", "modify", "delete", "view"] | None
+    ) = Field(default=None, description="Type of taxonomy operation")
+    taxonomy_target_name: str | None = Field(
+        default=None, description="Target category or sub-category name"
+    )
+    taxonomy_feedback: str | None = Field(
+        default=None, description="Full user feedback for LLM-driven taxonomy modification"
+    )
+
+
+class TaxonomySubCategoryOutput(BaseModel):
+    """Output schema for a sub-category in taxonomy refinement."""
+
+    id: str = Field(description="Unique sub-category ID (SC001, SC002, etc.)")
+    name: str = Field(description="Short descriptive name")
+    description: str = Field(description="What this sub-category covers")
+    parent_category: str = Field(description="Name of the parent category")
+    related_rule_ids: list[str] = Field(
+        default_factory=list, description="Rule IDs related to this sub-category"
+    )
+    priority: Literal["high", "medium", "low"] = Field(description="Coverage priority")
+
+
+class TaxonomyRefinementOutput(BaseModel):
+    """Output schema for taxonomy refinement."""
+
+    sub_categories: list[TaxonomySubCategoryOutput] = Field(
+        description="Complete list of sub-categories after refinement"
+    )
+    changes_summary: str = Field(description="Summary of changes made")
 
 
 class GoldenScenarioOutput(BaseModel):

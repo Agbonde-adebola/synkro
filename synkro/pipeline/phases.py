@@ -514,37 +514,44 @@ class VerificationPhase:
 
         results = await asyncio.gather(*verify_tasks)
 
-        # Attach grades and track verifications
+        # Single pass: attach grades, track verifications, and find initial failures
         final_traces = list(traces)
         verifications = []
+        failed_indices = []
         for i, (verification, grade) in enumerate(results):
             final_traces[i].grade = grade
             verifications.append(verification)
+            if not verification.passed:
+                failed_indices.append(i)
+
+        # Helper to get or create scenario for a trace (avoids repeated fallback creation)
+        def get_scenario_for_trace(trace_idx: int) -> "GoldenScenario":
+            trace = final_traces[trace_idx]
+            scenario = scenario_lookup.get(trace.scenario.description)
+            if scenario:
+                return scenario
+            # Create minimal fallback (only if not in lookup)
+            from synkro.types.logic_map import GoldenScenario, ScenarioType
+
+            return GoldenScenario(
+                description=trace.scenario.description,
+                context=trace.scenario.context or "",
+                category=trace.scenario.category or "",
+                scenario_type=ScenarioType.POSITIVE,
+                target_rule_ids=[],
+                expected_outcome="",
+            )
 
         # Refinement loop
         for iteration in range(1, max_iterations):
-            failed_indices = [i for i, v in enumerate(verifications) if not v.passed]
-
             if not failed_indices:
                 break
 
             # Refine failed traces
-            refine_tasks = []
-            for i in failed_indices:
-                scenario = scenario_lookup.get(final_traces[i].scenario.description)
-                if not scenario:
-                    from synkro.types.logic_map import GoldenScenario, ScenarioType
-
-                    scenario = GoldenScenario(
-                        description=final_traces[i].scenario.description,
-                        context=final_traces[i].scenario.context or "",
-                        category=final_traces[i].scenario.category or "",
-                        scenario_type=ScenarioType.POSITIVE,
-                        target_rule_ids=[],
-                        expected_outcome="",
-                    )
-                refine_tasks.append(limited_refine(final_traces[i], scenario, verifications[i]))
-
+            refine_tasks = [
+                limited_refine(final_traces[i], get_scenario_for_trace(i), verifications[i])
+                for i in failed_indices
+            ]
             refined_traces = await asyncio.gather(*refine_tasks)
 
             # Update traces
@@ -553,27 +560,19 @@ class VerificationPhase:
                 final_traces[idx] = refined
 
             # Re-verify
-            reverify_tasks = []
-            for i in failed_indices:
-                scenario = scenario_lookup.get(final_traces[i].scenario.description)
-                if not scenario:
-                    from synkro.types.logic_map import GoldenScenario, ScenarioType
-
-                    scenario = GoldenScenario(
-                        description=final_traces[i].scenario.description,
-                        context=final_traces[i].scenario.context or "",
-                        category=final_traces[i].scenario.category or "",
-                        scenario_type=ScenarioType.POSITIVE,
-                        target_rule_ids=[],
-                        expected_outcome="",
-                    )
-                reverify_tasks.append(limited_verify(final_traces[i], scenario))
-
+            reverify_tasks = [
+                limited_verify(final_traces[i], get_scenario_for_trace(i)) for i in failed_indices
+            ]
             new_results = await asyncio.gather(*reverify_tasks)
 
-            for idx, (verification, grade) in zip(failed_indices, new_results):
+            # Update results and find new failures for next iteration
+            prev_failed = failed_indices
+            failed_indices = []
+            for idx, (verification, grade) in zip(prev_failed, new_results):
                 final_traces[idx].grade = grade
                 verifications[idx] = verification
+                if not verification.passed:
+                    failed_indices.append(idx)
 
         # Calculate pass rate
         passed_count = sum(1 for v in verifications if v.passed)
