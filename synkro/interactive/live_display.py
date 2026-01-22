@@ -294,10 +294,12 @@ class LiveProgressDisplay:
 
     def _match_content_heights(self, left: list, right: list) -> tuple[list, list]:
         """Pad shorter content list to match the taller one."""
+        # Use a zero-width space + regular space to ensure Rich renders it as a line
+        Text("\u200b ", style="dim")  # Zero-width space + space
         while len(left) < len(right):
-            left.append(Text(" "))  # Non-empty to ensure it renders as a line
+            left.append(Text("\u200b ", style="dim"))
         while len(right) < len(left):
-            right.append(Text(" "))
+            right.append(Text("\u200b ", style="dim"))
         return left, right
 
     def _get_rules_content(self, show_diff: bool = False) -> list:
