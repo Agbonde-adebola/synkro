@@ -93,6 +93,9 @@ class DisplayState:
     # Maps sub-category ID -> (previous_percent, previous_scenario_count)
     previous_sub_category_coverage: dict[str, tuple[float, int]] = field(default_factory=dict)
 
+    # Error message to display/prefill in input (cleared after use)
+    error_message: str = ""
+
 
 class _NoOpContextManager:
     """No-op context manager for HITL spinner."""
@@ -1386,6 +1389,14 @@ class LiveProgressDisplay:
         self._state.uncovered_count = report.uncovered_count
         self._refresh()
 
+    def set_error(self, message: str) -> None:
+        """Set an error message to display/prefill in the input field."""
+        self._state.error_message = message
+
+    def clear_error(self) -> None:
+        """Clear any pending error message."""
+        self._state.error_message = ""
+
     def add_event(self, event: str) -> None:
         """Add an event to the scrolling log."""
         self._state.events.append(event)
@@ -1791,9 +1802,13 @@ class LiveProgressDisplay:
             )
         return 1
 
-    def _get_key_or_line(self, prompt: str = "") -> tuple[str, str]:
+    def _get_key_or_line(self, prompt: str = "", prefill: str = "") -> tuple[str, str]:
         """
         Get user input with arrow key support for pagination.
+
+        Args:
+            prompt: The prompt to display before input
+            prefill: Optional text to pre-populate in the input (e.g., error message)
 
         Returns:
             Tuple of (input_type, value) where:
@@ -1813,8 +1828,14 @@ class LiveProgressDisplay:
             except (KeyboardInterrupt, EOFError):
                 return ("text", "done")
 
-        buffer: list[str] = []
+        # Initialize buffer with prefill if provided
+        buffer: list[str] = list(prefill) if prefill else []
         self.console.print(f"[cyan]{prompt}[/cyan]", end="", highlight=False)
+
+        # Display prefill text in red (error) so user can see and delete it
+        if prefill:
+            sys.stdout.write(f"\033[91m{prefill}\033[0m")  # Red text
+
         sys.stdout.flush()
 
         while True:
@@ -1875,8 +1896,14 @@ class LiveProgressDisplay:
         else:
             input_prompt = prompt
 
-        # Get input with arrow key support
-        input_type, value = self._get_key_or_line(input_prompt)
+        # Get error message to prefill (only in main view) and clear it
+        prefill = ""
+        if self._state.view_mode == "main" and self._state.error_message:
+            prefill = self._state.error_message
+            self._state.error_message = ""  # Clear after use
+
+        # Get input with arrow key support (and error prefill)
+        input_type, value = self._get_key_or_line(input_prompt, prefill=prefill)
 
         # Handle arrow keys for pagination in detail views
         if input_type == "arrow" and self._state.view_mode != "main":

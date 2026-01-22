@@ -1191,12 +1191,16 @@ class GenerationPipeline:
                                 feedback, "coverage", f"Added {len(new_scenarios)} scenarios"
                             )
                         else:
-                            display.show_error(
-                                "Could not generate scenarios for coverage improvement"
-                            )
+                            # Set error to prefill in input field (user can delete)
+                            if live_display:
+                                live_display.set_error(
+                                    "Error: No scenarios generated for coverage improvement"
+                                )
 
                     except Exception as e:
-                        display.show_error(f"Failed to improve coverage: {e}")
+                        # Set error to prefill in input field (user can delete)
+                        if live_display:
+                            live_display.set_error(f"Error: {e}")
 
             elif (
                 intent.intent_type == "compound"
