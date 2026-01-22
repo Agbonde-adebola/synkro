@@ -230,18 +230,12 @@ class LiveProgressDisplay:
             rules_content, scenarios_content
         )
 
-        # Get content and match heights for Row 2: Coverage | Categories
-        coverage_content = self._get_coverage_content()
-        categories_content = self._get_categories_compact_content()
-        coverage_content, categories_content = self._match_content_heights(
-            coverage_content, categories_content
-        )
-
         # Build panels with height-matched content
         rules_panel = self._build_rules_panel(show_diff=True, content=rules_content)
         scenarios_panel = self._build_scenarios_panel(show_diff=True, content=scenarios_content)
-        coverage_panel = self._build_coverage_panel(content=coverage_content)
-        categories_panel = self._build_categories_compact_panel(content=categories_content)
+        # Row 2 panels don't need height matching - categories uses a Table
+        coverage_panel = self._build_coverage_panel()
+        categories_panel = self._build_categories_compact_panel()
 
         # Two-column rows using Table.grid for true equal widths
         row1 = Table.grid(expand=True)
