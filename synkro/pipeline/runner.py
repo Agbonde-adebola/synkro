@@ -1147,6 +1147,11 @@ class GenerationPipeline:
                             live_display.update_phase("Improving Coverage")
                             live_display.resume_live()
 
+                        # Step change callback for progress updates
+                        def on_step_change(step: str) -> None:
+                            if live_display:
+                                live_display.update_phase(step)
+
                         try:
                             # Generate scenarios with streaming callback
                             new_scenarios = await coverage_improver.improve_from_command(
@@ -1157,6 +1162,7 @@ class GenerationPipeline:
                                 policy.text,
                                 session.current_scenarios,
                                 on_scenario_generated=on_scenario_generated,
+                                on_step_change=on_step_change,
                             )
                         finally:
                             # Stop live display

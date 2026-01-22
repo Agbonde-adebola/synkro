@@ -4,6 +4,8 @@ Generates targeted scenarios to improve coverage for specific
 sub-categories based on natural language commands.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
 
 from synkro.llm.client import LLM
@@ -111,6 +113,7 @@ class CoverageImprover:
         policy_text: str,
         existing_scenarios: list[GoldenScenario] | None = None,
         on_scenario_generated: Callable[[GoldenScenario], None] | None = None,
+        on_step_change: Callable[[str], None] | None = None,
     ) -> list[GoldenScenario]:
         """
         Improve coverage based on natural language command.
@@ -123,6 +126,7 @@ class CoverageImprover:
             policy_text: Policy text for context
             existing_scenarios: Existing scenarios to avoid duplicating
             on_scenario_generated: Callback called after each scenario is generated (for live updates)
+            on_step_change: Callback for step progress updates
 
         Returns:
             New scenarios to add
@@ -145,6 +149,7 @@ class CoverageImprover:
                 policy_text=policy_text,
                 existing_scenarios=existing_scenarios or [],
                 on_scenario_generated=on_scenario_generated,
+                on_step_change=on_step_change,
             )
 
         # For "increase" operation, target a specific sub-category
@@ -316,6 +321,7 @@ class CoverageImprover:
         policy_text: str,
         existing_scenarios: list[GoldenScenario],
         on_scenario_generated: Callable[[GoldenScenario], None] | None = None,
+        on_step_change: Callable[[str], None] | None = None,
     ) -> list[GoldenScenario]:
         """
         Generate scenarios to reach target coverage using 3-call workflow.
@@ -333,6 +339,7 @@ class CoverageImprover:
             policy_text: Policy text for context
             existing_scenarios: Existing scenarios to avoid duplicating
             on_scenario_generated: Callback for live updates
+            on_step_change: Callback for step progress updates (e.g., "Planning", "Generating")
 
         Returns:
             New scenarios to improve coverage (deduplicated)
@@ -359,6 +366,9 @@ class CoverageImprover:
         # =====================================================================
         # CALL 1: Planning - Analyze gaps and create plan
         # =====================================================================
+        if on_step_change:
+            on_step_change("Planning coverage improvement...")
+
         planning_prompt = (
             COVERAGE_PLANNING_PROMPT.format(
                 current_overall=current_coverage,
@@ -379,6 +389,9 @@ class CoverageImprover:
         # =====================================================================
         # CALL 2: Generation - Generate scenarios based on plan
         # =====================================================================
+        if on_step_change:
+            on_step_change(f"Generating {plan.total_scenarios} scenarios...")
+
         # Format plan for generation prompt
         plan_summary = plan.strategy_summary
         plan_details = self._format_plan_for_generation(plan)
@@ -401,6 +414,9 @@ class CoverageImprover:
         # =====================================================================
         # CALL 3: Deduplication - Remove duplicates
         # =====================================================================
+        if on_step_change:
+            on_step_change(f"Deduplicating {len(generation_result.scenarios)} scenarios...")
+
         # Format existing scenarios for dedup prompt
         existing_formatted = self._format_scenarios_for_dedup(existing_scenarios)
         generated_formatted = self._format_generated_for_dedup(generation_result.scenarios)
