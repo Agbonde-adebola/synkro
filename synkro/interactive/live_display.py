@@ -463,11 +463,47 @@ class LiveProgressDisplay:
             expand=True,
         )
 
+    def _colorize_event(self, event: str) -> Text:
+        """Colorize an event string based on its content."""
+        text = Text()
+        event_lower = event.lower()
+
+        # Determine icon and color based on event type
+        if "error" in event_lower or "failed" in event_lower:
+            text.append("✗ ", style="bold red")
+            text.append(event, style="red")
+        elif "success" in event_lower or "complete" in event_lower or "done" in event_lower:
+            text.append("✓ ", style="bold green")
+            text.append(event, style="green")
+        elif event_lower.startswith("generated"):
+            text.append("+ ", style="bold cyan")
+            text.append(event, style="cyan")
+        elif "rules" in event_lower or event_lower.startswith("rule"):
+            text.append("◆ ", style="bold magenta")
+            text.append(event, style="magenta")
+        elif "scenario" in event_lower:
+            text.append("● ", style="bold blue")
+            text.append(event, style="blue")
+        elif "coverage" in event_lower:
+            text.append("▸ ", style="bold yellow")
+            text.append(event, style="yellow")
+        elif "extract" in event_lower or "parsing" in event_lower:
+            text.append("◇ ", style="bold white")
+            text.append(event, style="white")
+        else:
+            text.append("• ", style="dim")
+            text.append(event, style="dim white")
+
+        return text
+
     def _get_events_content(self) -> list:
         """Get events content as list of renderables (without Panel wrapper)."""
         s = self._state
         recent = s.events[-4:] if s.events else []
-        lines = [Text(e, style="dim") for e in recent] or [Text("No events yet...", style="dim")]
+        if recent:
+            lines = [self._colorize_event(e) for e in recent]
+        else:
+            lines = [Text("• No events yet...", style="dim")]
         return lines
 
     def _build_events_panel(self, content: list | None = None) -> Panel:
@@ -477,9 +513,9 @@ class LiveProgressDisplay:
 
         return Panel(
             Group(*content),
-            title="[dim]Events[/]",
+            title=Text.assemble(("Events", "bold white")),
             title_align="left",
-            border_style="dim",
+            border_style="bright_black",
             padding=(0, 1),
             expand=True,
         )
