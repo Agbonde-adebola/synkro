@@ -72,9 +72,7 @@ class TaxonomyEditor:
         )
 
         # Generate structured output with temperature=0 for strict instruction following
-        result = await self.llm.generate_structured(
-            prompt, TaxonomyRefinementOutput, temperature=0
-        )
+        result = await self.llm.generate_structured(prompt, TaxonomyRefinementOutput, temperature=0)
 
         # Convert to domain model
         refined_taxonomy = self._convert_to_taxonomy(result, taxonomy)
