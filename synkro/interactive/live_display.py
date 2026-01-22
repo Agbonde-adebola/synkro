@@ -177,6 +177,8 @@ class LiveProgressDisplay:
             return self._render_logic_map_detail()
         elif s.view_mode == "coverage_detail":
             return self._render_coverage_detail()
+        elif s.view_mode == "categories_detail":
+            return self._render_categories_detail()
 
         # Fallback to active view
         return self._render_active()
@@ -228,18 +230,18 @@ class LiveProgressDisplay:
             rules_content, scenarios_content
         )
 
-        # Get content and match heights for Row 2: Coverage | Logic Map
+        # Get content and match heights for Row 2: Coverage | Categories
         coverage_content = self._get_coverage_content()
-        logic_map_content = self._get_logic_map_compact_content()
-        coverage_content, logic_map_content = self._match_content_heights(
-            coverage_content, logic_map_content
+        categories_content = self._get_categories_compact_content()
+        coverage_content, categories_content = self._match_content_heights(
+            coverage_content, categories_content
         )
 
         # Build panels with height-matched content
         rules_panel = self._build_rules_panel(show_diff=True, content=rules_content)
         scenarios_panel = self._build_scenarios_panel(show_diff=True, content=scenarios_content)
         coverage_panel = self._build_coverage_panel(content=coverage_content)
-        logic_map_panel = self._build_logic_map_compact_panel(content=logic_map_content)
+        categories_panel = self._build_categories_compact_panel(content=categories_content)
 
         # Two-column rows using Table.grid for true equal widths
         row1 = Table.grid(expand=True)
@@ -250,7 +252,7 @@ class LiveProgressDisplay:
         row2 = Table.grid(expand=True)
         row2.add_column(ratio=1)
         row2.add_column(ratio=1)
-        row2.add_row(coverage_panel, logic_map_panel)
+        row2.add_row(coverage_panel, categories_panel)
 
         # Subtitle with model name
         subtitle = Text(f"Interactive review with {s.model}", style="dim") if s.model else Text("")
@@ -564,6 +566,71 @@ class LiveProgressDisplay:
             title=title,
             title_align="left",
             border_style="cyan",
+            padding=(0, 1),
+            expand=True,
+        )
+
+    def _get_categories_compact_content(self) -> Table:
+        """Get compact categories content as 2-column table."""
+        s = self._state
+
+        # Create 2-column table without headers
+        table = Table(show_header=False, box=None, padding=(0, 1), expand=True)
+        table.add_column(ratio=1)
+        table.add_column(ratio=1)
+
+        if not s.coverage_report or not s.coverage_report.sub_category_coverage:
+            table.add_row(Text("No categories", style="dim"), Text(""))
+            return table
+
+        # Build list of all items (status icon + name)
+        items: list[Text] = []
+        for sc in s.coverage_report.sub_category_coverage:
+            line = Text()
+            # Status icon
+            if sc.coverage_status == "covered":
+                line.append("✓ ", style="green")
+            elif sc.coverage_status == "partial":
+                line.append("~ ", style="yellow")
+            else:
+                line.append("✗ ", style="red")
+            # Sub-category name (truncated to fit column)
+            name = (
+                sc.sub_category_name[:20]
+                if len(sc.sub_category_name) > 20
+                else sc.sub_category_name
+            )
+            line.append(name, style="dim")
+            items.append(line)
+
+        # Split into 2 columns - fill left column first, then right
+        mid = (len(items) + 1) // 2
+        left_items = items[:mid]
+        right_items = items[mid:]
+
+        # Add rows
+        for i in range(max(len(left_items), len(right_items))):
+            left = left_items[i] if i < len(left_items) else Text("")
+            right = right_items[i] if i < len(right_items) else Text("")
+            table.add_row(left, right)
+
+        return table
+
+    def _build_categories_compact_panel(self, content: Table | None = None) -> Panel:
+        """Build compact categories panel for HITL mode (4th section)."""
+        s = self._state
+        if content is None:
+            content = self._get_categories_compact_content()
+
+        total = len(s.coverage_report.sub_category_coverage) if s.coverage_report else 0
+        title = Text("Categories", style="bold magenta")
+        title.append(f" ({total})", style="magenta")
+
+        return Panel(
+            content,
+            title=title,
+            title_align="left",
+            border_style="magenta",
             padding=(0, 1),
             expand=True,
         )
@@ -1030,6 +1097,93 @@ class LiveProgressDisplay:
             title=title,
             subtitle=subtitle,
             border_style="cyan",
+            padding=(0, 1),
+        )
+
+    def _render_categories_detail(self) -> Panel:
+        """Render categories/sub-categories with pagination using Rich Table."""
+        from rich import box
+
+        s = self._state
+        content_parts: list = []
+        coverage = s.coverage_report
+
+        if not coverage or not coverage.sub_category_coverage:
+            content_parts.append(Text("No categories available", style="dim"))
+        else:
+            sub_cats = coverage.sub_category_coverage
+
+            # Calculate pagination
+            total_pages = max(
+                1, (len(sub_cats) + s.detail_items_per_page - 1) // s.detail_items_per_page
+            )
+            page = max(1, min(s.detail_page, total_pages))
+            start = (page - 1) * s.detail_items_per_page
+            end = start + s.detail_items_per_page
+            page_items = sub_cats[start:end]
+
+            # Create table
+            table = Table(
+                expand=True,
+                box=box.SIMPLE,
+                show_header=True,
+                header_style="bold magenta",
+                padding=(0, 1),
+            )
+            table.add_column("Category", ratio=1)
+            table.add_column("Sub-Category", ratio=2)
+            table.add_column("Scenarios", width=10, justify="right")
+            table.add_column("Coverage", width=10, justify="right")
+            table.add_column("Status", width=8, justify="center")
+
+            for sc in page_items:
+                status_display = {
+                    "covered": "[green]✓[/green]",
+                    "partial": "[yellow]~[/yellow]",
+                    "uncovered": "[red]✗[/red]",
+                }.get(sc.coverage_status, "?")
+
+                pct_style = (
+                    "green"
+                    if sc.coverage_percent >= 70
+                    else "yellow"
+                    if sc.coverage_percent >= 30
+                    else "red"
+                )
+
+                table.add_row(
+                    sc.parent_category or "General",
+                    sc.sub_category_name,
+                    str(sc.scenario_count),
+                    Text(f"{sc.coverage_percent:.0f}%", style=pct_style),
+                    status_display,
+                )
+
+            content_parts.append(table)
+
+            # Pagination info
+            content_parts.append(Text(""))
+            page_info = Text()
+            page_info.append(
+                f"Page {page}/{total_pages} ({len(sub_cats)} sub-categories)", style="dim"
+            )
+            content_parts.append(page_info)
+
+        title = Text()
+        title.append("Categories Detail", style="bold magenta")
+
+        # Navigation hints
+        subtitle = Text()
+        subtitle.append("←/→", style="magenta")
+        subtitle.append(" navigate  ", style="dim")
+        subtitle.append("Enter", style="magenta")
+        subtitle.append(" return", style="dim")
+
+        return Panel(
+            Group(*content_parts),
+            title=title,
+            subtitle=subtitle,
+            border_style="magenta",
             padding=(0, 1),
         )
 
@@ -1804,6 +1958,9 @@ class LiveProgressDisplay:
             return max(
                 1, (len(s.scenarios_list) + s.detail_items_per_page - 1) // s.detail_items_per_page
             )
+        elif s.view_mode == "categories_detail" and s.coverage_report:
+            sub_cats = s.coverage_report.sub_category_coverage or []
+            return max(1, (len(sub_cats) + s.detail_items_per_page - 1) // s.detail_items_per_page)
         return 1
 
     def _get_key_or_line(self, prompt: str = "", prefill: str = "") -> tuple[str, str]:
@@ -1890,8 +2047,9 @@ class LiveProgressDisplay:
         # Set HITL state for unified rendering
         self.set_hitl_state(logic_map, scenarios, coverage, current_turns, complexity_level)
 
-        # Clear console and render using unified _render()
-        self.console.clear()
+        # Clear console thoroughly - use ANSI escape codes for reliable clearing
+        # \033[2J clears entire screen, \033[H moves cursor to home position
+        print("\033[2J\033[H", end="", flush=True)
         self.console.print(self._render())
 
         # Choose prompt based on view mode
@@ -2020,6 +2178,13 @@ class LiveProgressDisplay:
                 self.enter_detail_view("coverage_detail")
                 return True
 
+            elif target in ("categories", "cats", "taxonomy"):
+                # Update state with current data before showing detail view
+                self._update_current_data(logic_map, scenarios, coverage)
+                page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
+                self.enter_detail_view("categories_detail", page)
+                return True
+
             # Single item views - use modal popup (Enter to close)
             elif target.upper().startswith("R"):
                 self._hitl_print_rule(target.upper(), logic_map)
@@ -2069,7 +2234,8 @@ class LiveProgressDisplay:
 
     def _hitl_print(self, content) -> None:
         """Print content in HITL mode - clears screen first to prevent stacking."""
-        self.console.clear()
+        # Use ANSI escape codes for reliable clearing across terminals
+        print("\033[2J\033[H", end="", flush=True)
         self.console.print(content)
         self.console.print("\n[dim]Press Enter to continue...[/dim]")
         try:
