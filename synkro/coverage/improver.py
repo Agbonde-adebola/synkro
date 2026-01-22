@@ -10,6 +10,7 @@ from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
 from synkro.prompts.coverage_templates import (
     COVERAGE_COMMAND_PROMPT,
+    COVERAGE_TARGET_GENERATION_PROMPT,
     TARGETED_SCENARIO_GENERATION_PROMPT,
 )
 from synkro.schemas import GoldenScenariosArray, HITLIntent
@@ -126,7 +127,19 @@ class CoverageImprover:
             # View commands don't generate scenarios
             return []
 
-        # Find the target sub-category
+        # For "target" operation, use LLM-driven approach
+        if intent.operation == "target":
+            return await self.improve_to_target(
+                target_percent=intent.target_percent or 80,
+                coverage_report=coverage_report,
+                taxonomy=taxonomy,
+                logic_map=logic_map,
+                policy_text=policy_text,
+                existing_scenarios=existing_scenarios or [],
+                on_scenario_generated=on_scenario_generated,
+            )
+
+        # For "increase" operation, target a specific sub-category
         target_sc = self._find_sub_category(
             intent.target_sub_category or "",
             taxonomy,
@@ -144,17 +157,10 @@ class CoverageImprover:
         if not target_sc:
             return []
 
-        # Determine how many scenarios to generate
-        if intent.operation == "target":
-            # Target a specific percentage
-            current_cov = coverage_report.get_coverage_for(target_sc.id)
-            current_percent = current_cov.coverage_percent if current_cov else 0
-            target_percent = intent.target_percent or 80
-            # Estimate scenarios needed (rough calculation)
-            count = max(1, int((target_percent - current_percent) / 20))
-        elif intent.increase_amount:
-            # Increase by percentage points
-            count = max(1, int(intent.increase_amount / 20))
+        # Determine how many scenarios to generate for "increase"
+        if intent.increase_amount:
+            # Increase by percentage points - rough estimate
+            count = max(1, int(intent.increase_amount / 15))
         else:
             # Default: add 3 scenarios
             count = 3
@@ -291,6 +297,122 @@ class CoverageImprover:
                     on_scenario_generated(scenario)
 
         return scenarios
+
+    async def improve_to_target(
+        self,
+        target_percent: float,
+        coverage_report: CoverageReport,
+        taxonomy: SubCategoryTaxonomy,
+        logic_map: LogicMap,
+        policy_text: str,
+        existing_scenarios: list[GoldenScenario],
+        on_scenario_generated: Callable[[GoldenScenario], None] | None = None,
+    ) -> list[GoldenScenario]:
+        """
+        Let LLM generate scenarios to reach a target coverage percentage.
+
+        Instead of calculating how many scenarios to generate, this method
+        gives the LLM full context about coverage gaps and lets it decide
+        what scenarios are needed.
+
+        Args:
+            target_percent: Target overall coverage percentage
+            coverage_report: Current coverage report
+            taxonomy: Sub-category taxonomy
+            logic_map: Logic Map for rule context
+            policy_text: Policy text for context
+            existing_scenarios: Existing scenarios to avoid duplicating
+            on_scenario_generated: Callback for live updates
+
+        Returns:
+            New scenarios to improve coverage
+        """
+        # Build comprehensive context for the LLM
+        context = self._build_coverage_context(coverage_report, taxonomy, existing_scenarios)
+
+        prompt = COVERAGE_TARGET_GENERATION_PROMPT.format(
+            current_overall=coverage_report.overall_coverage_percent,
+            target_percent=target_percent,
+            gap=target_percent - coverage_report.overall_coverage_percent,
+            sub_category_coverage_table=context["coverage_table"],
+            existing_scenarios_summary=context["scenarios_summary"],
+            logic_map=self._format_logic_map(logic_map),
+            policy_text=policy_text[:4000] + "..." if len(policy_text) > 4000 else policy_text,
+        )
+
+        # Get scenarios from LLM
+        result = await self.llm.generate_structured(prompt, GoldenScenariosArray)
+
+        # Convert to domain models and stream updates
+        scenarios: list[GoldenScenario] = []
+        for s_out in result.scenarios:
+            # Determine category from sub_category_ids if available
+            category = "General"
+            if s_out.sub_category_ids:
+                sc = taxonomy.get_by_id(s_out.sub_category_ids[0])
+                if sc:
+                    category = sc.parent_category
+
+            scenario = GoldenScenario(
+                description=s_out.description,
+                context=s_out.context,
+                category=category,
+                scenario_type=ScenarioType(s_out.scenario_type),
+                target_rule_ids=s_out.target_rule_ids,
+                expected_outcome=s_out.expected_outcome,
+                sub_category_ids=s_out.sub_category_ids or [],
+            )
+            scenarios.append(scenario)
+
+            # Call callback for live updates
+            if on_scenario_generated:
+                on_scenario_generated(scenario)
+
+        return scenarios
+
+    def _build_coverage_context(
+        self,
+        coverage_report: CoverageReport,
+        taxonomy: SubCategoryTaxonomy,
+        existing_scenarios: list[GoldenScenario],
+    ) -> dict:
+        """
+        Build comprehensive coverage context for LLM prompts.
+
+        Returns:
+            Dict with "coverage_table" and "scenarios_summary" strings
+        """
+        # Build coverage table
+        table_lines = []
+        for cov in coverage_report.sub_category_coverage:
+            sc = taxonomy.get_by_id(cov.sub_category_id)
+            priority = sc.priority if sc else "medium"
+            table_lines.append(
+                f"- {cov.sub_category_name}: {cov.coverage_percent:.0f}% "
+                f"({cov.scenario_count} scenarios) [{cov.coverage_status}] "
+                f"[{priority.upper()} priority]"
+            )
+        coverage_table = "\n".join(table_lines) or "No sub-categories defined"
+
+        # Build existing scenarios summary (avoid duplicates)
+        if existing_scenarios:
+            scenario_lines = []
+            for i, s in enumerate(existing_scenarios[:15]):  # Limit to 15
+                sc_ids = ", ".join(s.sub_category_ids) if s.sub_category_ids else "none"
+                scenario_lines.append(
+                    f"{i + 1}. [{s.scenario_type.value}] {s.description[:60]}... "
+                    f"(covers: {sc_ids})"
+                )
+            if len(existing_scenarios) > 15:
+                scenario_lines.append(f"... and {len(existing_scenarios) - 15} more")
+            scenarios_summary = "\n".join(scenario_lines)
+        else:
+            scenarios_summary = "None"
+
+        return {
+            "coverage_table": coverage_table,
+            "scenarios_summary": scenarios_summary,
+        }
 
     def _find_sub_category(
         self,

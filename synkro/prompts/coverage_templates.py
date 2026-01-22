@@ -292,3 +292,53 @@ For each scenario, provide:
 - target_rule_ids: Rules this scenario tests
 - expected_outcome: What should happen based on rules
 - sub_category_ids: Should include {sub_category_id}"""
+
+
+# =============================================================================
+# COVERAGE TARGET GENERATION (LLM-driven)
+# =============================================================================
+
+COVERAGE_TARGET_GENERATION_PROMPT = """You are generating scenarios to reach a target coverage percentage.
+
+CURRENT COVERAGE STATE:
+- Overall Coverage: {current_overall:.0f}%
+- Target Coverage: {target_percent}%
+- Gap to Close: {gap:.0f} percentage points
+
+PER-SUB-CATEGORY BREAKDOWN:
+{sub_category_coverage_table}
+
+EXISTING SCENARIOS (to avoid duplicating):
+{existing_scenarios_summary}
+
+LOGIC MAP (Rules to test):
+{logic_map}
+
+POLICY DOCUMENT:
+{policy_text}
+
+YOUR TASK:
+Generate scenarios to improve overall coverage toward {target_percent}%.
+
+STRATEGY:
+1. **Identify Gaps**: Focus on sub-categories that are "uncovered" or "partial"
+2. **Prioritize HIGH Priority**: Generate scenarios for HIGH priority sub-categories first
+3. **Type Diversity**: If a sub-category only has positive scenarios, add negative/edge_case
+4. **Avoid Duplicates**: Don't create scenarios too similar to existing ones
+5. **Efficient Coverage**: Each scenario should meaningfully improve coverage
+
+GUIDELINES:
+- Generate 3-8 scenarios depending on how much coverage needs to improve
+- Spread scenarios across multiple sub-categories (don't target just one)
+- Each scenario should specify which sub_category_ids it covers
+- Reference specific rules from the Logic Map
+- Write realistic user descriptions in natural language
+
+OUTPUT FORMAT:
+For each scenario, provide:
+- description: The user's exact words (realistic customer/user query)
+- context: Background information about the situation
+- scenario_type: positive/negative/edge_case
+- target_rule_ids: Rules this scenario tests (from the Logic Map)
+- expected_outcome: What should happen based on the rules
+- sub_category_ids: Which sub-categories this scenario covers"""
