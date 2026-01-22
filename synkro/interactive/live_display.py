@@ -210,11 +210,25 @@ class LiveProgressDisplay:
         """Render HITL main view with two-column colorful layout."""
         s = self._state
 
-        # Build panels using helpers
-        rules_panel = self._build_rules_panel(show_diff=True)
-        scenarios_panel = self._build_scenarios_panel(show_diff=True)
-        coverage_panel = self._build_coverage_panel()
-        settings_panel = self._build_settings_panel()
+        # Get content and match heights for Row 1: Rules | Scenarios
+        rules_content = self._get_rules_content(show_diff=True)
+        scenarios_content = self._get_scenarios_content(show_diff=True)
+        rules_content, scenarios_content = self._match_content_heights(
+            rules_content, scenarios_content
+        )
+
+        # Get content and match heights for Row 2: Coverage | Settings
+        coverage_content = self._get_coverage_content()
+        settings_content = self._get_settings_content()
+        coverage_content, settings_content = self._match_content_heights(
+            coverage_content, settings_content
+        )
+
+        # Build panels with height-matched content
+        rules_panel = self._build_rules_panel(show_diff=True, content=rules_content)
+        scenarios_panel = self._build_scenarios_panel(show_diff=True, content=scenarios_content)
+        coverage_panel = self._build_coverage_panel(content=coverage_content)
+        settings_panel = self._build_settings_panel(content=settings_content)
 
         # Two-column rows using Table.grid for true equal widths
         row1 = Table.grid(expand=True)
@@ -278,8 +292,16 @@ class LiveProgressDisplay:
 
     # ─── Panel Builder Helpers (two-column layout) ───────────────────────────
 
-    def _build_rules_panel(self, show_diff: bool = False) -> Panel:
-        """Build rules panel with category table."""
+    def _match_content_heights(self, left: list, right: list) -> tuple[list, list]:
+        """Pad shorter content list to match the taller one."""
+        while len(left) < len(right):
+            left.append(Text(""))
+        while len(right) < len(left):
+            right.append(Text(""))
+        return left, right
+
+    def _get_rules_content(self, show_diff: bool = False) -> list:
+        """Get rules content as list of renderables (without Panel wrapper)."""
         s = self._state
 
         CATEGORY_COLORS = {
@@ -296,34 +318,45 @@ class LiveProgressDisplay:
             cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
             categories.setdefault(cat, []).append(rule.rule_id)
 
-        table = Table(box=None, show_header=False, expand=True, padding=(0, 1))
-        table.add_column("Category", no_wrap=True)
-        table.add_column("Count", justify="right", style="bold white")
-
+        lines: list = []
         for cat, ids in sorted(categories.items()):
             color = CATEGORY_COLORS.get(cat, "white")
-            table.add_row(f"[{color}]{cat}[/]", str(len(ids)))
+            line = Text()
+            line.append(f"{cat}", style=color)
+            line.append(f"  {len(ids)}", style="bold white")
+            lines.append(line)
 
+        return lines
+
+    def _get_rules_title(self, show_diff: bool = False) -> Text:
+        """Get rules panel title."""
+        s = self._state
         title = Text("Rules", style="bold magenta")
         title.append(f" ({s.rules_count})", style="magenta")
         if show_diff and s.added_rule_ids:
             title.append(f" +{len(s.added_rule_ids)}", style="bold green")
         if show_diff and s.removed_rule_ids:
             title.append(f" -{len(s.removed_rule_ids)}", style="bold red")
+        return title
+
+    def _build_rules_panel(self, show_diff: bool = False, content: list | None = None) -> Panel:
+        """Build rules panel with category table."""
+        if content is None:
+            content = self._get_rules_content(show_diff)
 
         return Panel(
-            table,
-            title=title,
+            Group(*content),
+            title=self._get_rules_title(show_diff),
             title_align="left",
             border_style="magenta",
             padding=(0, 1),
             expand=True,
         )
 
-    def _build_scenarios_panel(self, show_diff: bool = False) -> Panel:
-        """Build scenarios panel with colored bullets."""
+    def _get_scenarios_content(self, show_diff: bool = False) -> list:
+        """Get scenarios content as list of renderables (without Panel wrapper)."""
         s = self._state
-        lines = []
+        lines: list = []
         if s.positive_count:
             lines.append(
                 Text.assemble(("● ", "bold green"), (f"{s.positive_count} positive", "green"))
@@ -334,26 +367,35 @@ class LiveProgressDisplay:
             lines.append(Text.assemble(("● ", "bold yellow"), (f"{s.edge_count} edge", "yellow")))
         if s.irrelevant_count:
             lines.append(Text.assemble(("● ", "dim"), (f"{s.irrelevant_count} irrelevant", "dim")))
+        return lines
 
+    def _get_scenarios_title(self, show_diff: bool = False) -> Text:
+        """Get scenarios panel title."""
+        s = self._state
         title = Text("Scenarios", style="bold blue")
         title.append(f" ({s.scenarios_count})", style="blue")
         if show_diff and s.added_scenario_indices:
             title.append(f" +{len(s.added_scenario_indices)}", style="bold green")
         if show_diff and s.removed_scenario_indices:
             title.append(f" -{len(s.removed_scenario_indices)}", style="bold red")
+        return title
 
-        content = Group(*lines)
+    def _build_scenarios_panel(self, show_diff: bool = False, content: list | None = None) -> Panel:
+        """Build scenarios panel with colored bullets."""
+        if content is None:
+            content = self._get_scenarios_content(show_diff)
+
         return Panel(
-            content,
-            title=title,
+            Group(*content),
+            title=self._get_scenarios_title(show_diff),
             title_align="left",
             border_style="blue",
             padding=(0, 1),
             expand=True,
         )
 
-    def _build_coverage_panel(self) -> Panel:
-        """Build coverage panel with progress bar and stats."""
+    def _get_coverage_content(self) -> list:
+        """Get coverage content as list of renderables (without Panel wrapper)."""
         s = self._state
         color = (
             "green" if s.coverage_percent >= 70 else "yellow" if s.coverage_percent >= 50 else "red"
@@ -363,19 +405,33 @@ class LiveProgressDisplay:
             total=100, completed=int(s.coverage_percent), width=None, complete_style=color
         )
 
-        stats = Table(box=None, show_header=False, padding=(0, 0))
-        stats.add_column("Label", style="dim")
-        stats.add_column("Value", justify="right")
-        stats.add_row("covered", f"[green]{s.covered_count}[/]")
-        stats.add_row("partial", f"[yellow]{s.partial_count}[/]")
-        stats.add_row("uncovered", f"[red]{s.uncovered_count}[/]")
+        lines: list = [bar, Text("")]
+        lines.append(Text.assemble(("covered ", "dim"), (str(s.covered_count), "green")))
+        lines.append(Text.assemble(("partial ", "dim"), (str(s.partial_count), "yellow")))
+        lines.append(Text.assemble(("uncovered ", "dim"), (str(s.uncovered_count), "red")))
 
+        return lines
+
+    def _get_coverage_title(self) -> tuple[Text, str]:
+        """Get coverage panel title and border color."""
+        s = self._state
+        color = (
+            "green" if s.coverage_percent >= 70 else "yellow" if s.coverage_percent >= 50 else "red"
+        )
         title = Text()
         title.append(f"{s.coverage_percent:.0f}%", style=f"bold {color}")
         title.append(" Coverage", style=f"bold {color}")
+        return title, color
+
+    def _build_coverage_panel(self, content: list | None = None) -> Panel:
+        """Build coverage panel with progress bar and stats."""
+        if content is None:
+            content = self._get_coverage_content()
+
+        title, color = self._get_coverage_title()
 
         return Panel(
-            Group(bar, Text(""), stats),
+            Group(*content),
             title=title,
             title_align="left",
             border_style=color,
@@ -383,17 +439,23 @@ class LiveProgressDisplay:
             expand=True,
         )
 
-    def _build_settings_panel(self) -> Panel:
-        """Build settings panel for HITL mode."""
+    def _get_settings_content(self) -> list:
+        """Get settings content as list of renderables (without Panel wrapper)."""
         s = self._state
-        table = Table(box=None, show_header=False, expand=True, padding=(0, 1))
-        table.add_column("Key", style="dim")
-        table.add_column("Value", style="bold cyan")
-        table.add_row("Turns", str(s.hitl_turns))
-        table.add_row("Complexity", s.hitl_complexity.title())
+        lines: list = []
+        lines.append(Text.assemble(("Turns ", "dim"), (str(s.hitl_turns), "bold cyan")))
+        lines.append(
+            Text.assemble(("Complexity ", "dim"), (s.hitl_complexity.title(), "bold cyan"))
+        )
+        return lines
+
+    def _build_settings_panel(self, content: list | None = None) -> Panel:
+        """Build settings panel for HITL mode."""
+        if content is None:
+            content = self._get_settings_content()
 
         return Panel(
-            table,
+            Group(*content),
             title=Text("Settings", style="bold cyan"),
             title_align="left",
             border_style="cyan",
@@ -401,14 +463,20 @@ class LiveProgressDisplay:
             expand=True,
         )
 
-    def _build_events_panel(self) -> Panel:
-        """Build events panel for active view."""
+    def _get_events_content(self) -> list:
+        """Get events content as list of renderables (without Panel wrapper)."""
         s = self._state
         recent = s.events[-4:] if s.events else []
         lines = [Text(e, style="dim") for e in recent] or [Text("No events yet...", style="dim")]
+        return lines
+
+    def _build_events_panel(self, content: list | None = None) -> Panel:
+        """Build events panel for active view."""
+        if content is None:
+            content = self._get_events_content()
 
         return Panel(
-            Group(*lines),
+            Group(*content),
             title="[dim]Events[/]",
             title_align="left",
             border_style="dim",
@@ -839,11 +907,17 @@ class LiveProgressDisplay:
         if has_rules or has_scenarios:
             row1 = Table.grid(expand=True)
             if has_rules and has_scenarios:
+                # Both exist - match heights
+                rules_content = self._get_rules_content(show_diff=False)
+                scenarios_content = self._get_scenarios_content(show_diff=False)
+                rules_content, scenarios_content = self._match_content_heights(
+                    rules_content, scenarios_content
+                )
                 row1.add_column(ratio=1)
                 row1.add_column(ratio=1)
                 row1.add_row(
-                    self._build_rules_panel(show_diff=False),
-                    self._build_scenarios_panel(show_diff=False),
+                    self._build_rules_panel(show_diff=False, content=rules_content),
+                    self._build_scenarios_panel(show_diff=False, content=scenarios_content),
                 )
             elif has_rules:
                 row1.add_column(ratio=1)
@@ -857,9 +931,18 @@ class LiveProgressDisplay:
         if has_coverage or has_events:
             row2 = Table.grid(expand=True)
             if has_coverage and has_events:
+                # Both exist - match heights
+                coverage_content = self._get_coverage_content()
+                events_content = self._get_events_content()
+                coverage_content, events_content = self._match_content_heights(
+                    coverage_content, events_content
+                )
                 row2.add_column(ratio=1)
                 row2.add_column(ratio=1)
-                row2.add_row(self._build_coverage_panel(), self._build_events_panel())
+                row2.add_row(
+                    self._build_coverage_panel(content=coverage_content),
+                    self._build_events_panel(content=events_content),
+                )
             elif has_coverage:
                 row2.add_column(ratio=1)
                 row2.add_row(self._build_coverage_panel())
