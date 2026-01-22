@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from synkro.llm.client import LLM
-from synkro.models import Model, OpenAI
 from synkro.prompts.interactive_templates import LOGIC_MAP_REFINEMENT_PROMPT
 from synkro.schemas import RefinedLogicMapOutput
 from synkro.types.logic_map import LogicMap, Rule, RuleCategory
@@ -23,7 +22,7 @@ class LogicMapEditor:
     the changes to the Logic Map.
 
     Examples:
-        >>> editor = LogicMapEditor(llm=LLM(model=OpenAI.GPT_4O))
+        >>> editor = LogicMapEditor(llm=grading_llm)
         >>> new_logic_map = await editor.refine(
         ...     logic_map=current_map,
         ...     user_feedback="Add a rule for overtime approval",
@@ -31,19 +30,14 @@ class LogicMapEditor:
         ... )
     """
 
-    def __init__(
-        self,
-        llm: LLM | None = None,
-        model: Model = OpenAI.GPT_4O,
-    ):
+    def __init__(self, llm: LLM):
         """
         Initialize the Logic Map Editor.
 
         Args:
-            llm: LLM client to use (creates one if not provided)
-            model: Model to use if creating LLM (default: GPT-4O for accuracy)
+            llm: LLM client to use for editing (typically the grading model)
         """
-        self.llm = llm or LLM(model=model, temperature=0.3)
+        self.llm = llm
 
     async def refine(
         self,

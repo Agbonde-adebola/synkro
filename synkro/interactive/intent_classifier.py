@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from synkro.llm.client import LLM
-from synkro.models import Model, OpenAI
 from synkro.prompts.interactive_templates import HITL_INTENT_CLASSIFIER_PROMPT
 from synkro.schemas import HITLIntent
 
@@ -20,7 +19,7 @@ class HITLIntentClassifier:
     - "unclear": Cannot determine intent
 
     Examples:
-        >>> classifier = HITLIntentClassifier(llm=LLM(model=OpenAI.GPT_4O))
+        >>> classifier = HITLIntentClassifier(llm=grading_llm)
         >>> intent = await classifier.classify(
         ...     user_input="I want shorter conversations",
         ...     current_turns=3,
@@ -34,19 +33,14 @@ class HITLIntentClassifier:
         2
     """
 
-    def __init__(
-        self,
-        llm: LLM | None = None,
-        model: Model = OpenAI.GPT_4O,
-    ):
+    def __init__(self, llm: LLM):
         """
         Initialize the HITL Intent Classifier.
 
         Args:
-            llm: LLM client to use (creates one if not provided)
-            model: Model to use if creating LLM (default: GPT-4O for accuracy)
+            llm: LLM client to use for classification (typically the grading model)
         """
-        self.llm = llm or LLM(model=model, temperature=0.2)
+        self.llm = llm
 
     async def classify(
         self,

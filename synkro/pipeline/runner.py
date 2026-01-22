@@ -566,8 +566,7 @@ class GenerationPipeline:
         # =====================================================================
         # HUMAN-IN-THE-LOOP: Unified Session (Turns + Rules + Scenarios)
         # =====================================================================
-        # Track HITL calls separately (HITLIntentClassifier uses generation_llm,
-        # LogicMapEditor and ScenarioEditor use grading_llm)
+        # Track HITL calls separately (all HITL components use grading_llm)
         hitl_calls = 0
         if self.enable_hitl and self.hitl_editor:
             # Update phase to show we're ready for user input
@@ -930,7 +929,7 @@ class GenerationPipeline:
 
         display = LogicMapDisplay(live_display=live_display)
         prompt = InteractivePrompt()
-        classifier = HITLIntentClassifier(llm=self.factory.generation_llm)
+        classifier = HITLIntentClassifier(llm=self.factory.grading_llm)
 
         current_turns = initial_turns
         turns_history: list[int] = []  # For undo support

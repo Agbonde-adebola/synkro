@@ -27,7 +27,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from synkro.llm.client import LLM
-from synkro.models import OpenAI
+from synkro.models import Model
 
 if TYPE_CHECKING:
     from synkro.types.logic_map import GoldenScenario, LogicMap
@@ -37,7 +37,7 @@ async def edit_rules_async(
     logic_map: "LogicMap",
     instruction: str,
     policy_text: str,
-    model: str = OpenAI.GPT_4O,
+    model: Model,
     base_url: str | None = None,
     conversation_history: str = "No previous feedback in this session.",
 ) -> tuple["LogicMap", str]:
@@ -56,7 +56,7 @@ async def edit_rules_async(
         logic_map: Current Logic Map to edit
         instruction: Natural language instruction (e.g., "add rule: overtime needs approval")
         policy_text: Original policy text for context
-        model: Model to use for editing (default: gpt-4o)
+        model: Model to use for editing (e.g., Google.GEMINI_2_5_PRO)
         base_url: Optional API base URL for local providers
         conversation_history: Previous feedback for multi-turn context
 
@@ -68,7 +68,8 @@ async def edit_rules_async(
         >>> new_map, summary = await edit_rules(
         ...     logic_map,
         ...     "add rule: expenses over $100 need VP approval",
-        ...     policy_text
+        ...     policy_text,
+        ...     model=Google.GEMINI_2_5_PRO
         ... )
         >>> print(summary)  # "Added R006: Expenses over $100 need VP approval"
 
@@ -76,14 +77,16 @@ async def edit_rules_async(
         >>> new_map, summary = await edit_rules(
         ...     logic_map,
         ...     "merge R002 and R003 since they cover the same condition",
-        ...     policy_text
+        ...     policy_text,
+        ...     model=Google.GEMINI_2_5_PRO
         ... )
 
         >>> # Remove a rule
         >>> new_map, summary = await edit_rules(
         ...     logic_map,
         ...     "remove R004 - it's redundant",
-        ...     policy_text
+        ...     policy_text,
+        ...     model=Google.GEMINI_2_5_PRO
         ... )
     """
     from synkro.interactive.logic_map_editor import LogicMapEditor
@@ -107,7 +110,7 @@ def edit_rules(
     logic_map: "LogicMap",
     instruction: str,
     policy_text: str,
-    model: str = OpenAI.GPT_4O,
+    model: Model,
     base_url: str | None = None,
     conversation_history: str = "No previous feedback in this session.",
 ) -> tuple["LogicMap", str]:
@@ -126,8 +129,8 @@ async def edit_scenarios_async(
     instruction: str,
     policy_text: str,
     logic_map: "LogicMap",
+    model: Model,
     distribution: dict[str, int] | None = None,
-    model: str = OpenAI.GPT_4O,
     base_url: str | None = None,
     conversation_history: str = "No previous feedback in this session.",
 ) -> tuple[list["GoldenScenario"], dict[str, int], str]:
@@ -147,8 +150,8 @@ async def edit_scenarios_async(
         instruction: Natural language instruction
         policy_text: Original policy text for context
         logic_map: Logic Map for rule references
+        model: Model to use for editing (e.g., Google.GEMINI_2_5_PRO)
         distribution: Current type distribution (calculated if not provided)
-        model: Model to use for editing (default: gpt-4o)
         base_url: Optional API base URL for local providers
         conversation_history: Previous feedback for multi-turn context
 
@@ -161,7 +164,8 @@ async def edit_scenarios_async(
         ...     scenarios,
         ...     "add 5 edge cases for boundary conditions",
         ...     policy_text,
-        ...     logic_map
+        ...     logic_map,
+        ...     model=Google.GEMINI_2_5_PRO
         ... )
         >>> print(f"Now have {dist['edge_case']} edge cases")
 
@@ -170,7 +174,8 @@ async def edit_scenarios_async(
         ...     scenarios,
         ...     "delete S3 - it's too similar to S1",
         ...     policy_text,
-        ...     logic_map
+        ...     logic_map,
+        ...     model=Google.GEMINI_2_5_PRO
         ... )
 
         >>> # Add scenarios targeting a specific rule
@@ -178,7 +183,8 @@ async def edit_scenarios_async(
         ...     scenarios,
         ...     "add 3 negative cases that violate R004",
         ...     policy_text,
-        ...     logic_map
+        ...     logic_map,
+        ...     model=Google.GEMINI_2_5_PRO
         ... )
     """
     from synkro.interactive.scenario_editor import ScenarioEditor
@@ -214,8 +220,8 @@ def edit_scenarios(
     instruction: str,
     policy_text: str,
     logic_map: "LogicMap",
+    model: Model,
     distribution: dict[str, int] | None = None,
-    model: str = OpenAI.GPT_4O,
     base_url: str | None = None,
     conversation_history: str = "No previous feedback in this session.",
 ) -> tuple[list["GoldenScenario"], dict[str, int], str]:
@@ -230,8 +236,8 @@ def edit_scenarios(
             instruction,
             policy_text,
             logic_map,
-            distribution,
             model,
+            distribution,
             base_url,
             conversation_history,
         )
