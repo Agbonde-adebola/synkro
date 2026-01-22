@@ -1264,9 +1264,13 @@ class LiveProgressDisplay:
 
         return user_input.strip()
 
-    def resume_live(self) -> None:
-        """Resume the live display after input."""
-        if not self._live and not self._hitl_mode:
+    def resume_live(self, force: bool = False) -> None:
+        """Resume the live display after input.
+
+        Args:
+            force: If True, resume even during HITL mode (for coverage improvement)
+        """
+        if not self._live and (not self._hitl_mode or force):
             self._live = Live(
                 self,  # Pass self - Rich calls __rich__() on each refresh
                 console=self.console,

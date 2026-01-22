@@ -362,7 +362,7 @@ For each scenario, provide:
 # COVERAGE IMPROVEMENT 3-CALL WORKFLOW
 # =============================================================================
 
-COVERAGE_PLANNING_PROMPT = """You are analyzing coverage gaps and creating a plan to improve coverage.
+COVERAGE_PLANNING_PROMPT = """You are analyzing coverage gaps and creating a MINIMAL plan to reach a specific target.
 
 CURRENT COVERAGE STATE:
 - Overall Coverage: {current_overall:.0f}%
@@ -375,36 +375,39 @@ PER-SUB-CATEGORY BREAKDOWN:
 EXISTING SCENARIOS COUNT: {existing_count}
 
 YOUR TASK:
-Analyze the coverage gaps and create a detailed plan for which scenarios to generate.
+Create a plan to generate the MINIMUM scenarios needed to reach EXACTLY {target_percent}% coverage.
 
-ANALYSIS STEPS:
+CRITICAL CONSTRAINTS:
+1. DO NOT exceed the target - if target is 30%, stop at ~30%
+2. DO NOT try to cover all gaps - only enough to reach the target
+3. Generate the MINIMUM scenarios needed, not the maximum
 
-1. **Identify Gaps**: Which sub-categories are uncovered (0%) or partial (<80%)?
+COVERAGE MATH:
+- Overall coverage = average of all sub-category coverages
+- With N sub-categories, improving 1 sub-category from 0% to 100% adds ~(100/N)% to overall
+- Example: 5 sub-categories at 0%, target 20% → only need to cover 1 sub-category (1/5 = 20%)
+- Example: 5 sub-categories at 0%, target 40% → only need to cover 2 sub-categories (2/5 = 40%)
 
-2. **Prioritize**: Rank sub-categories by:
-   - Priority level (HIGH > MEDIUM > LOW)
-   - Current coverage (lower = more urgent)
-   - Impact on overall coverage
+PLANNING STEPS:
 
-3. **Calculate Needs**: For each gap sub-category:
-   - How many scenarios would bring it to adequate coverage (80%+)?
-   - What types are missing (positive/negative/edge_case)?
+1. **Calculate**: How many sub-categories need improvement to reach {target_percent}%?
+   - Current overall: {current_overall:.0f}%
+   - Need to gain: {gap:.0f} percentage points
+   - Each sub-category at 100% contributes equally to the average
 
-4. **Create Plan**: Specify exactly:
-   - Which sub-categories to target
-   - How many scenarios for each
-   - What types to generate
-   - What aspects/rules to focus on
+2. **Select Targets**: Pick the MINIMUM sub-categories to improve:
+   - Prioritize HIGH priority over MEDIUM over LOW
+   - Prefer uncovered (0%) sub-categories - more impact per scenario
 
-GUIDELINES:
-- Each sub-category typically needs 2-4 scenarios to reach 80% coverage
-- Uncovered sub-categories (0%) need more attention than partial ones
-- HIGH priority sub-categories should get more scenarios
-- Aim for type diversity within each sub-category
-- Total scenarios should be sufficient to close the coverage gap
+3. **Plan Scenarios**: For ONLY the selected sub-categories:
+   - 2-3 scenarios typically brings a sub-category to 80%+
+   - Include type diversity (positive/negative/edge_case)
+
+IMPORTANT: Your total_scenarios in the plan should be the minimum needed.
+If target is low (e.g., 20-30%), you may only need 2-4 scenarios total.
 
 OUTPUT:
-Provide a structured plan with specific targets for each sub-category."""
+Provide a structured plan targeting ONLY the sub-categories needed to reach {target_percent}%."""
 
 
 COVERAGE_EXECUTION_PROMPT = """You are generating scenarios according to a coverage improvement plan.

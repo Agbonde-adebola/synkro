@@ -1147,7 +1147,7 @@ class GenerationPipeline:
                             # Snapshot current coverage for diff display
                             live_display.snapshot_coverage()
                             live_display.update_phase("Improving Coverage")
-                            live_display.resume_live()
+                            live_display.resume_live(force=True)
 
                         # Step change callback for progress updates
                         def on_step_change(step: str) -> None:
