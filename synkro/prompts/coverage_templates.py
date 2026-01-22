@@ -318,21 +318,35 @@ POLICY DOCUMENT:
 {policy_text}
 
 YOUR TASK:
-Generate scenarios to improve overall coverage toward {target_percent}%.
+Generate scenarios to improve overall coverage from {current_overall:.0f}% to {target_percent}%.
 
-STRATEGY:
-1. **Identify Gaps**: Focus on sub-categories that are "uncovered" or "partial"
-2. **Prioritize HIGH Priority**: Generate scenarios for HIGH priority sub-categories first
-3. **Type Diversity**: If a sub-category only has positive scenarios, add negative/edge_case
-4. **Avoid Duplicates**: Don't create scenarios too similar to existing ones
-5. **Efficient Coverage**: Each scenario should meaningfully improve coverage
+STEP 1 - CALCULATE SCENARIOS NEEDED:
+Before generating any scenarios, analyze the coverage breakdown and determine:
+- How many sub-categories are uncovered (0%) or partial (<80%)?
+- For each gap sub-category, how many scenarios would bring it to adequate coverage?
+- What is the TOTAL number of scenarios needed to reach {target_percent}% overall?
+
+Consider:
+- Each sub-category typically needs 2-4 scenarios to be "covered" (80%+)
+- Uncovered sub-categories (0%) need more scenarios than partial ones
+- HIGH priority sub-categories should get more scenarios
+- Overall coverage = average of sub-category coverages
+
+STEP 2 - PLAN THE DISTRIBUTION:
+Based on your calculation, decide:
+- Which sub-categories to target (prioritize uncovered, then partial, then HIGH priority)
+- How many scenarios for each sub-category
+- What types to generate (positive/negative/edge_case) based on what's missing
+
+STEP 3 - GENERATE SCENARIOS:
+Now generate EXACTLY the number of scenarios you calculated in Step 1.
 
 GUIDELINES:
-- Generate 3-8 scenarios depending on how much coverage needs to improve
 - Spread scenarios across multiple sub-categories (don't target just one)
 - Each scenario should specify which sub_category_ids it covers
 - Reference specific rules from the Logic Map
 - Write realistic user descriptions in natural language
+- Ensure type diversity (don't generate all positive or all negative)
 
 OUTPUT FORMAT:
 For each scenario, provide:
