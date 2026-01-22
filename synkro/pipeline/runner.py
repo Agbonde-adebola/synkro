@@ -954,6 +954,13 @@ class GenerationPipeline:
             if feedback.lower() == "done":
                 break
 
+            if feedback.lower() in ("exit", "quit"):
+                import sys
+
+                live_display.stop()
+                self.console.print("[dim]Exiting...[/dim]")
+                sys.exit(0)
+
             if feedback.lower() == "undo":
                 # Undo turns, rules, or scenarios
                 if session.can_undo or turns_history:
@@ -1193,6 +1200,72 @@ class GenerationPipeline:
 
                     except Exception as e:
                         # Set error to prefill in input field (user can delete)
+                        if live_display:
+                            live_display.set_error(f"Error: {e}")
+
+            elif intent.intent_type == "taxonomy":
+                # Handle taxonomy (category/sub-category) management
+                if not taxonomy:
+                    display.show_error("Taxonomy data not available")
+                    continue
+
+                if intent.taxonomy_operation == "view":
+                    # Show categories detail view
+                    if live_display:
+                        live_display.enter_detail_view("categories_detail")
+                    continue
+
+                # For add/modify/delete operations, use TaxonomyEditor
+                if intent.taxonomy_operation in (
+                    "add_category",
+                    "add_subcategory",
+                    "modify",
+                    "delete",
+                ):
+                    try:
+                        taxonomy_editor = self.factory.create_taxonomy_editor()
+                        taxonomy_feedback = intent.taxonomy_feedback or feedback
+
+                        # Snapshot for diff display
+                        if live_display:
+                            live_display.snapshot_coverage()
+
+                        with display.spinner("Updating taxonomy..."):
+                            new_taxonomy, changes_summary = await taxonomy_editor.refine(
+                                taxonomy,
+                                taxonomy_feedback,
+                                policy.text,
+                                session.current_logic_map,
+                            )
+
+                            # Validate the refinement
+                            is_valid, issues = taxonomy_editor.validate_refinement(
+                                taxonomy, new_taxonomy
+                            )
+
+                        if is_valid:
+                            # Update taxonomy
+                            taxonomy = new_taxonomy
+
+                            # Recalculate coverage with new taxonomy
+                            coverage_calculator = self.factory.create_coverage_calculator()
+                            with display.spinner("Recalculating coverage..."):
+                                coverage_report = await coverage_calculator.calculate(
+                                    session.current_scenarios or [],
+                                    taxonomy,
+                                    generate_suggestions=True,
+                                )
+
+                            # Update display
+                            if live_display:
+                                live_display.update_coverage(coverage_report)
+
+                            display.show_success(changes_summary)
+                            session.record_feedback(feedback, "taxonomy", changes_summary)
+                        else:
+                            display.show_error(f"Invalid taxonomy change: {', '.join(issues)}")
+
+                    except Exception as e:
                         if live_display:
                             live_display.set_error(f"Error: {e}")
 

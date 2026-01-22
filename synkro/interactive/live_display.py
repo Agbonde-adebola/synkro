@@ -272,6 +272,8 @@ class LiveProgressDisplay:
         cmd_line.append("undo", style="cyan")
         cmd_line.append(" │ ", style="dim")
         cmd_line.append("help", style="cyan")
+        cmd_line.append(" │ ", style="dim")
+        cmd_line.append("exit", style="red")
 
         content = [subtitle, Text(""), row1, row2, Text(""), cmd_line]
 
