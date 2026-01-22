@@ -80,10 +80,13 @@ class DisplayState:
     # Original state for diff tracking (green=added, red=removed)
     original_rule_ids: set[str] = field(default_factory=set)
     original_scenario_ids: set[int] = field(default_factory=set)
+    original_category_names: set[str] = field(default_factory=set)
     added_rule_ids: set[str] = field(default_factory=set)
     removed_rule_ids: set[str] = field(default_factory=set)
     added_scenario_indices: set[int] = field(default_factory=set)
     removed_scenario_indices: set[int] = field(default_factory=set)
+    added_category_names: set[str] = field(default_factory=set)
+    removed_category_names: set[str] = field(default_factory=set)
 
     # Previous coverage for diff display (before improvement)
     previous_coverage_percent: float | None = None
@@ -583,6 +586,8 @@ class LiveProgressDisplay:
         items: list[Text] = []
         for sc in s.coverage_report.sub_category_coverage:
             line = Text()
+            # Check if this category was added
+            is_added = sc.sub_category_name in s.added_category_names
             # Status icon
             if sc.coverage_status == "covered":
                 line.append("✓ ", style="green")
@@ -596,7 +601,9 @@ class LiveProgressDisplay:
                 if len(sc.sub_category_name) > 20
                 else sc.sub_category_name
             )
-            line.append(name, style="dim")
+            # Highlight added categories in green
+            name_style = "bold green" if is_added else "dim"
+            line.append(name, style=name_style)
             items.append(line)
 
         # Split into 2 columns - fill left column first, then right
@@ -621,6 +628,10 @@ class LiveProgressDisplay:
         total = len(s.coverage_report.sub_category_coverage) if s.coverage_report else 0
         title = Text("Categories", style="bold magenta")
         title.append(f" ({total})", style="magenta")
+        if s.added_category_names:
+            title.append(f" +{len(s.added_category_names)}", style="bold green")
+        if s.removed_category_names:
+            title.append(f" -{len(s.removed_category_names)}", style="bold red")
 
         return Panel(
             content,
@@ -1107,6 +1118,18 @@ class LiveProgressDisplay:
         if not coverage or not coverage.sub_category_coverage:
             content_parts.append(Text("No categories available", style="dim"))
         else:
+            # Show diff summary if there are changes
+            if s.added_category_names or s.removed_category_names:
+                diff_line = Text("  Changes: ")
+                if s.added_category_names:
+                    diff_line.append(f"+{len(s.added_category_names)} added", style="bold green")
+                if s.added_category_names and s.removed_category_names:
+                    diff_line.append("  ", style="")
+                if s.removed_category_names:
+                    diff_line.append(f"-{len(s.removed_category_names)} removed", style="bold red")
+                content_parts.append(diff_line)
+                content_parts.append(Text(""))
+
             sub_cats = coverage.sub_category_coverage
 
             # Calculate pagination
@@ -1147,9 +1170,14 @@ class LiveProgressDisplay:
                     else "red"
                 )
 
+                # Check if this category was added
+                is_added = sc.sub_category_name in s.added_category_names
+                cat_style = "bold green" if is_added else ""
+                subcat_style = "bold green" if is_added else ""
+
                 table.add_row(
-                    sc.parent_category or "General",
-                    sc.sub_category_name,
+                    Text(sc.parent_category or "General", style=cat_style),
+                    Text(sc.sub_category_name, style=subcat_style),
                     str(sc.scenario_count),
                     Text(f"{sc.coverage_percent:.0f}%", style=pct_style),
                     status_display,
@@ -1167,6 +1195,10 @@ class LiveProgressDisplay:
 
         title = Text()
         title.append("Categories Detail", style="bold magenta")
+        if s.added_category_names:
+            title.append(f"  (+{len(s.added_category_names)})", style="bold green")
+        if s.removed_category_names:
+            title.append(f"  (-{len(s.removed_category_names)})", style="bold red")
 
         # Navigation hints
         subtitle = Text()
@@ -1672,6 +1704,16 @@ class LiveProgressDisplay:
             self._state.partial_count = coverage.partial_count
             self._state.uncovered_count = coverage.uncovered_count
 
+            # Recompute category diffs
+            current_category_names = {sc.sub_category_name for sc in coverage.sub_category_coverage}
+            if self._state.original_category_names:
+                self._state.added_category_names = (
+                    current_category_names - self._state.original_category_names
+                )
+                self._state.removed_category_names = (
+                    self._state.original_category_names - current_category_names
+                )
+
     def snapshot_coverage(self) -> None:
         """Snapshot current coverage as previous for diff display.
 
@@ -1781,6 +1823,22 @@ class LiveProgressDisplay:
             self._state.covered_count = coverage.covered_count
             self._state.partial_count = coverage.partial_count
             self._state.uncovered_count = coverage.uncovered_count
+
+            # Track original categories for diff highlighting
+            current_category_names = {sc.sub_category_name for sc in coverage.sub_category_coverage}
+            if not self._state.original_category_names:
+                # First time - set original state
+                self._state.original_category_names = current_category_names.copy()
+                self._state.added_category_names = set()
+                self._state.removed_category_names = set()
+            else:
+                # Compute diff
+                self._state.added_category_names = (
+                    current_category_names - self._state.original_category_names
+                )
+                self._state.removed_category_names = (
+                    self._state.original_category_names - current_category_names
+                )
         else:
             self._state.coverage_percent = None
 
