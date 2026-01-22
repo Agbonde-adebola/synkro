@@ -1036,7 +1036,7 @@ class GenerationPipeline:
                 reasoning = intent.turns_reasoning or "User preference"
                 summary = f"Set to {current_turns} turns ({reasoning})"
                 session.record_feedback(feedback, "turns", summary)
-                # State will be re-rendered on next loop iteration
+                display.show_success(summary)
 
             elif intent.intent_type == "rules" and intent.rule_feedback:
                 # Handle rule change
