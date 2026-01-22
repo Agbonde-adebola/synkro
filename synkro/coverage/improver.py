@@ -131,6 +131,7 @@ class CoverageImprover:
         if intent.operation == "target":
             return await self.improve_to_target(
                 target_percent=intent.target_percent or 80,
+                target_sub_category=intent.target_sub_category,
                 coverage_report=coverage_report,
                 taxonomy=taxonomy,
                 logic_map=logic_map,
@@ -301,6 +302,7 @@ class CoverageImprover:
     async def improve_to_target(
         self,
         target_percent: float,
+        target_sub_category: str | None,
         coverage_report: CoverageReport,
         taxonomy: SubCategoryTaxonomy,
         logic_map: LogicMap,
@@ -317,6 +319,7 @@ class CoverageImprover:
 
         Args:
             target_percent: Target overall coverage percentage
+            target_sub_category: Specific sub-category to focus on (or None for overall)
             coverage_report: Current coverage report
             taxonomy: Sub-category taxonomy
             logic_map: Logic Map for rule context
@@ -330,14 +333,33 @@ class CoverageImprover:
         # Build comprehensive context for the LLM
         context = self._build_coverage_context(coverage_report, taxonomy, existing_scenarios)
 
-        prompt = COVERAGE_TARGET_GENERATION_PROMPT.format(
-            current_overall=coverage_report.overall_coverage_percent,
-            target_percent=target_percent,
-            gap=target_percent - coverage_report.overall_coverage_percent,
-            sub_category_coverage_table=context["coverage_table"],
-            existing_scenarios_summary=context["scenarios_summary"],
-            logic_map=self._format_logic_map(logic_map),
-            policy_text=policy_text[:4000] + "..." if len(policy_text) > 4000 else policy_text,
+        # Build focus instruction if specific sub-category requested
+        if target_sub_category:
+            target_sc = self._find_sub_category(target_sub_category, taxonomy)
+            if target_sc:
+                focus_instruction = (
+                    f"\n\nUSER FOCUS: The user specifically asked to improve '{target_sc.name}'. "
+                    f"Prioritize this sub-category while still considering others if needed to reach the target."
+                )
+            else:
+                focus_instruction = (
+                    f"\n\nUSER FOCUS: The user mentioned '{target_sub_category}'. "
+                    f"Focus on sub-categories related to this topic."
+                )
+        else:
+            focus_instruction = ""
+
+        prompt = (
+            COVERAGE_TARGET_GENERATION_PROMPT.format(
+                current_overall=coverage_report.overall_coverage_percent,
+                target_percent=target_percent,
+                gap=target_percent - coverage_report.overall_coverage_percent,
+                sub_category_coverage_table=context["coverage_table"],
+                existing_scenarios_summary=context["scenarios_summary"],
+                logic_map=self._format_logic_map(logic_map),
+                policy_text=policy_text[:4000] + "..." if len(policy_text) > 4000 else policy_text,
+            )
+            + focus_instruction
         )
 
         # Get scenarios from LLM
