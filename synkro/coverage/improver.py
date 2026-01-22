@@ -104,6 +104,62 @@ class CoverageImprover:
         result = await self.llm.generate_structured(prompt, CoverageIntent)
         return result
 
+    async def improve_from_intent(
+        self,
+        operation: str,
+        target_percent: int | None,
+        target_sub_category: str | None,
+        coverage_report: CoverageReport,
+        taxonomy: SubCategoryTaxonomy,
+        logic_map: LogicMap,
+        policy_text: str,
+        existing_scenarios: list[GoldenScenario] | None = None,
+        on_scenario_generated: Callable[[GoldenScenario], None] | None = None,
+    ) -> list[GoldenScenario]:
+        """
+        Improve coverage using pre-parsed intent (skips redundant LLM call).
+
+        Use this when intent was already classified by HITLIntentClassifier.
+        """
+        if operation == "target":
+            return await self.improve_to_target(
+                target_percent=target_percent or 80,
+                target_sub_category=target_sub_category,
+                coverage_report=coverage_report,
+                taxonomy=taxonomy,
+                logic_map=logic_map,
+                policy_text=policy_text,
+                existing_scenarios=existing_scenarios or [],
+                on_scenario_generated=on_scenario_generated,
+            )
+
+        # For "increase" operation, target a specific sub-category
+        target_sc = self._find_sub_category(
+            target_sub_category or "",
+            taxonomy,
+        )
+
+        if not target_sc:
+            sorted_coverage = sorted(
+                coverage_report.sub_category_coverage,
+                key=lambda c: c.coverage_percent,
+            )
+            if sorted_coverage:
+                target_sc = taxonomy.get_by_id(sorted_coverage[0].sub_category_id)
+
+        if not target_sc:
+            return []
+
+        return await self.improve_coverage(
+            target_sub_category_id=target_sc.id,
+            taxonomy=taxonomy,
+            logic_map=logic_map,
+            policy_text=policy_text,
+            count=3,
+            existing_scenarios=existing_scenarios,
+            on_scenario_generated=on_scenario_generated,
+        )
+
     async def improve_from_command(
         self,
         command: str,
@@ -118,76 +174,23 @@ class CoverageImprover:
         """
         Improve coverage based on natural language command.
 
-        Args:
-            command: User's natural language command (e.g., "increase coverage for refunds by 20%")
-            coverage_report: Current coverage report
-            taxonomy: Sub-category taxonomy
-            logic_map: Logic Map for rule context
-            policy_text: Policy text for context
-            existing_scenarios: Existing scenarios to avoid duplicating
-            on_scenario_generated: Callback called after each scenario is generated (for live updates)
-            on_step_change: Callback for step progress updates
-
-        Returns:
-            New scenarios to add
+        Note: If intent was already classified, use improve_from_intent() instead
+        to skip the redundant parse_command() LLM call.
         """
-        # Parse the command
+        # Parse the command (LLM call - skip this if intent already classified)
         intent = await self.parse_command(command, coverage_report, taxonomy)
 
         if intent.operation == "view":
-            # View commands don't generate scenarios
             return []
 
-        # For "target" operation, use LLM-driven approach
-        if intent.operation == "target":
-            return await self.improve_to_target(
-                target_percent=intent.target_percent or 80,
-                target_sub_category=intent.target_sub_category,
-                coverage_report=coverage_report,
-                taxonomy=taxonomy,
-                logic_map=logic_map,
-                policy_text=policy_text,
-                existing_scenarios=existing_scenarios or [],
-                on_scenario_generated=on_scenario_generated,
-                on_step_change=on_step_change,
-            )
-
-        # For "increase" operation, target a specific sub-category
-        target_sc = self._find_sub_category(
-            intent.target_sub_category or "",
-            taxonomy,
-        )
-
-        if not target_sc:
-            # If no specific target, pick the lowest coverage sub-category
-            sorted_coverage = sorted(
-                coverage_report.sub_category_coverage,
-                key=lambda c: c.coverage_percent,
-            )
-            if sorted_coverage:
-                target_sc = taxonomy.get_by_id(sorted_coverage[0].sub_category_id)
-
-        if not target_sc:
-            return []
-
-        # Determine how many scenarios to generate for "increase"
-        if intent.increase_amount:
-            # Increase by percentage points - rough estimate
-            count = max(1, int(intent.increase_amount / 15))
-        else:
-            # Default: add 3 scenarios
-            count = 3
-
-        # Determine preferred scenario types
-        preferred_types = [intent.scenario_type] if intent.scenario_type else None
-
-        return await self.improve_coverage(
-            target_sub_category_id=target_sc.id,
+        return await self.improve_from_intent(
+            operation=intent.operation,
+            target_percent=intent.target_percent,
+            target_sub_category=intent.target_sub_category,
+            coverage_report=coverage_report,
             taxonomy=taxonomy,
             logic_map=logic_map,
             policy_text=policy_text,
-            count=count,
-            preferred_types=preferred_types,
             existing_scenarios=existing_scenarios,
             on_scenario_generated=on_scenario_generated,
         )
@@ -412,24 +415,25 @@ class CoverageImprover:
             return []
 
         # =====================================================================
-        # CALL 3: Deduplication - Remove duplicates
+        # CALL 3: Deduplication - Skip if few existing scenarios (saves LLM call)
         # =====================================================================
-        if on_step_change:
-            on_step_change(f"Deduplicating {len(generation_result.scenarios)} scenarios...")
+        kept_indices: set[int] = set(range(len(generation_result.scenarios)))  # Keep all by default
 
-        # Format existing scenarios for dedup prompt
-        existing_formatted = self._format_scenarios_for_dedup(existing_scenarios)
-        generated_formatted = self._format_generated_for_dedup(generation_result.scenarios)
+        # Only run dedup if there are enough existing scenarios to warrant it
+        if len(existing_scenarios) >= 5:
+            if on_step_change:
+                on_step_change(f"Deduplicating {len(generation_result.scenarios)} scenarios...")
 
-        dedup_prompt = SCENARIO_DEDUPLICATION_PROMPT.format(
-            existing_scenarios=existing_formatted,
-            generated_scenarios=generated_formatted,
-        )
+            existing_formatted = self._format_scenarios_for_dedup(existing_scenarios)
+            generated_formatted = self._format_generated_for_dedup(generation_result.scenarios)
 
-        dedup_result = await self.llm.generate_structured(dedup_prompt, DeduplicatedScenarios)
+            dedup_prompt = SCENARIO_DEDUPLICATION_PROMPT.format(
+                existing_scenarios=existing_formatted,
+                generated_scenarios=generated_formatted,
+            )
 
-        # Filter to only kept scenarios
-        kept_indices = set(dedup_result.kept_indices)
+            dedup_result = await self.llm.generate_structured(dedup_prompt, DeduplicatedScenarios)
+            kept_indices = set(dedup_result.kept_indices)
 
         # Convert to domain models and stream updates (only kept ones)
         scenarios: list[GoldenScenario] = []

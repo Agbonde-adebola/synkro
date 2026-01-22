@@ -1139,14 +1139,17 @@ class GenerationPipeline:
                             live_display.snapshot_coverage()
 
                         # Use spinner for progress - stays on same panel
+                        # Use improve_from_intent() to skip redundant command parsing LLM call
                         with display.spinner("Improving coverage..."):
-                            new_scenarios = await coverage_improver.improve_from_command(
-                                feedback,
-                                coverage_report,
-                                taxonomy,
-                                session.current_logic_map,
-                                policy.text,
-                                session.current_scenarios,
+                            new_scenarios = await coverage_improver.improve_from_intent(
+                                operation=intent.coverage_operation,
+                                target_percent=intent.coverage_target_percent,
+                                target_sub_category=intent.coverage_target_sub_category,
+                                coverage_report=coverage_report,
+                                taxonomy=taxonomy,
+                                logic_map=session.current_logic_map,
+                                policy_text=policy.text,
+                                existing_scenarios=session.current_scenarios,
                                 on_scenario_generated=on_scenario_generated,
                             )
 
