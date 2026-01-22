@@ -106,7 +106,7 @@ class CoverageImprover:
 
     async def improve_from_intent(
         self,
-        operation: str,
+        operation: str | None,
         target_percent: int | None,
         target_sub_category: str | None,
         coverage_report: CoverageReport,
@@ -121,6 +121,9 @@ class CoverageImprover:
 
         Use this when intent was already classified by HITLIntentClassifier.
         """
+        # Default to "target" operation if not specified
+        operation = operation or "target"
+
         if operation == "target":
             return await self.improve_to_target(
                 target_percent=target_percent or 80,
@@ -140,12 +143,18 @@ class CoverageImprover:
         )
 
         if not target_sc:
+            # Fallback to lowest coverage sub-category
             sorted_coverage = sorted(
                 coverage_report.sub_category_coverage,
                 key=lambda c: c.coverage_percent,
             )
             if sorted_coverage:
                 target_sc = taxonomy.get_by_id(sorted_coverage[0].sub_category_id)
+
+        if not target_sc:
+            # Last resort: pick first sub-category
+            if taxonomy.sub_categories:
+                target_sc = taxonomy.sub_categories[0]
 
         if not target_sc:
             return []
@@ -366,6 +375,10 @@ class CoverageImprover:
 
         gap = target_percent - current_coverage
 
+        # If target is already met, nothing to do
+        if gap <= 0:
+            return []
+
         # =====================================================================
         # CALL 1: Planning - Analyze gaps and create plan
         # =====================================================================
@@ -385,8 +398,21 @@ class CoverageImprover:
 
         plan = await self.llm.generate_structured(planning_prompt, CoveragePlan)
 
-        # If no plan items, nothing to generate
+        # If no plan items, generate at least 2 scenarios for the target sub-category
         if not plan.plan_items:
+            # Fallback: generate 2 scenarios if we have a specific target
+            if target_sub_category:
+                target_sc = self._find_sub_category(target_sub_category, taxonomy)
+                if target_sc:
+                    return await self.improve_coverage(
+                        target_sub_category_id=target_sc.id,
+                        taxonomy=taxonomy,
+                        logic_map=logic_map,
+                        policy_text=policy_text,
+                        count=2,
+                        existing_scenarios=existing_scenarios,
+                        on_scenario_generated=on_scenario_generated,
+                    )
             return []
 
         # =====================================================================
