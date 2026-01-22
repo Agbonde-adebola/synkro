@@ -4,6 +4,8 @@ Generates targeted scenarios to improve coverage for specific
 sub-categories based on natural language commands.
 """
 
+from collections.abc import Callable
+
 from synkro.llm.client import LLM
 from synkro.models import Model, OpenAI
 from synkro.prompts.coverage_templates import (
@@ -100,6 +102,7 @@ class CoverageImprover:
         logic_map: LogicMap,
         policy_text: str,
         existing_scenarios: list[GoldenScenario] | None = None,
+        on_scenario_generated: Callable[[GoldenScenario], None] | None = None,
     ) -> list[GoldenScenario]:
         """
         Improve coverage based on natural language command.
@@ -111,6 +114,7 @@ class CoverageImprover:
             logic_map: Logic Map for rule context
             policy_text: Policy text for context
             existing_scenarios: Existing scenarios to avoid duplicating
+            on_scenario_generated: Callback called after each scenario is generated (for live updates)
 
         Returns:
             New scenarios to add
@@ -166,6 +170,7 @@ class CoverageImprover:
             count=count,
             preferred_types=preferred_types,
             existing_scenarios=existing_scenarios,
+            on_scenario_generated=on_scenario_generated,
         )
 
     async def improve_coverage(
@@ -177,6 +182,7 @@ class CoverageImprover:
         count: int = 3,
         preferred_types: list[str] | None = None,
         existing_scenarios: list[GoldenScenario] | None = None,
+        on_scenario_generated: Callable[[GoldenScenario], None] | None = None,
     ) -> list[GoldenScenario]:
         """
         Generate scenarios to improve coverage for a specific sub-category.
@@ -189,6 +195,7 @@ class CoverageImprover:
             count: Number of scenarios to generate
             preferred_types: Preferred scenario types (e.g., ["negative", "edge_case"])
             existing_scenarios: Existing scenarios to avoid duplicating
+            on_scenario_generated: Callback called after each scenario is generated (for live updates)
 
         Returns:
             New scenarios for the target sub-category
@@ -227,37 +234,61 @@ class CoverageImprover:
         # Format logic map
         logic_map_str = self._format_logic_map(logic_map)
 
-        prompt = TARGETED_SCENARIO_GENERATION_PROMPT.format(
-            policy_text=policy_text[:3000] + "..." if len(policy_text) > 3000 else policy_text,
-            logic_map=logic_map_str,
-            sub_category_id=target_sc.id,
-            sub_category_name=target_sc.name,
-            sub_category_description=target_sc.description,
-            related_rule_ids=", ".join(target_sc.related_rule_ids) or "none",
-            priority=target_sc.priority,
-            current_count=len(existing_for_sc),
-            current_percent=len(existing_for_sc) * 20,  # Rough estimate
-            existing_types=", ".join(f"{t}:{c}" for t, c in existing_types.items()) or "none",
-            count=count,
-            preferred_types=types_str,
-            existing_descriptions=existing_descriptions,
-        )
+        # Generate scenarios one at a time for streaming updates
+        scenarios: list[GoldenScenario] = []
+        generated_descriptions: list[str] = []
 
-        result = await self.llm.generate_structured(prompt, GoldenScenariosArray)
+        for i in range(count):
+            # Update existing descriptions to avoid duplicates
+            all_existing = existing_descriptions
+            if generated_descriptions:
+                all_existing = (
+                    existing_descriptions
+                    + "\n"
+                    + "\n".join(f"- {d[:80]}..." for d in generated_descriptions)
+                )
 
-        # Convert to domain models
-        scenarios = []
-        for s_out in result.scenarios:
-            scenario = GoldenScenario(
-                description=s_out.description,
-                context=s_out.context,
-                category=target_sc.parent_category,
-                scenario_type=ScenarioType(s_out.scenario_type),
-                target_rule_ids=s_out.target_rule_ids,
-                expected_outcome=s_out.expected_outcome,
-                sub_category_ids=[target_sub_category_id],
+            prompt = TARGETED_SCENARIO_GENERATION_PROMPT.format(
+                policy_text=(
+                    policy_text[:3000] + "..." if len(policy_text) > 3000 else policy_text
+                ),
+                logic_map=logic_map_str,
+                sub_category_id=target_sc.id,
+                sub_category_name=target_sc.name,
+                sub_category_description=target_sc.description,
+                related_rule_ids=", ".join(target_sc.related_rule_ids) or "none",
+                priority=target_sc.priority,
+                current_count=len(existing_for_sc) + len(scenarios),
+                current_percent=(len(existing_for_sc) + len(scenarios)) * 20,
+                existing_types=", ".join(f"{t}:{c}" for t, c in existing_types.items()) or "none",
+                count=1,  # Generate one at a time
+                preferred_types=types_str,
+                existing_descriptions=all_existing,
             )
-            scenarios.append(scenario)
+
+            result = await self.llm.generate_structured(prompt, GoldenScenariosArray)
+
+            # Convert to domain model and add
+            for s_out in result.scenarios[:1]:  # Take only the first one
+                scenario = GoldenScenario(
+                    description=s_out.description,
+                    context=s_out.context,
+                    category=target_sc.parent_category,
+                    scenario_type=ScenarioType(s_out.scenario_type),
+                    target_rule_ids=s_out.target_rule_ids,
+                    expected_outcome=s_out.expected_outcome,
+                    sub_category_ids=[target_sub_category_id],
+                )
+                scenarios.append(scenario)
+                generated_descriptions.append(s_out.description)
+
+                # Update existing types count for next iteration
+                t = scenario.scenario_type.value
+                existing_types[t] = existing_types.get(t, 0) + 1
+
+                # Call the callback for live updates
+                if on_scenario_generated:
+                    on_scenario_generated(scenario)
 
         return scenarios
 

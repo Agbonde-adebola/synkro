@@ -1116,8 +1116,38 @@ class GenerationPipeline:
                         coverage_improver = self.factory.create_coverage_improver()
                         coverage_calculator = self.factory.create_coverage_calculator()
 
-                        # Generate new scenarios to improve coverage
-                        with display.spinner("Generating coverage scenarios..."):
+                        # Track scenarios generated for live updates
+                        generated_scenarios: list = []
+                        old_coverage = coverage_report
+
+                        def on_scenario_generated(scenario: GoldenScenario) -> None:
+                            """Callback for live updates during scenario generation."""
+                            generated_scenarios.append(scenario)
+
+                            # Update session state incrementally
+                            current = session.current_scenarios or []
+                            session.current_scenarios = current + [scenario]
+
+                            t = scenario.scenario_type.value
+                            dist = session.current_distribution or {}
+                            dist[t] = dist.get(t, 0) + 1
+                            session.current_distribution = dist
+
+                            # Update live display state
+                            if live_display:
+                                live_display._state.scenarios_count += 1
+                                live_display._state.positive_count = dist.get("positive", 0)
+                                live_display._state.negative_count = dist.get("negative", 0)
+                                live_display._state.edge_count = dist.get("edge_case", 0)
+                                live_display.add_event(f"Generated: {scenario.description[:50]}...")
+
+                        # Start live display for streaming updates
+                        if live_display:
+                            live_display.update_phase("Improving Coverage")
+                            live_display.start()
+
+                        try:
+                            # Generate scenarios with streaming callback
                             new_scenarios = await coverage_improver.improve_from_command(
                                 feedback,
                                 coverage_report,
@@ -1125,30 +1155,28 @@ class GenerationPipeline:
                                 session.current_logic_map,
                                 policy.text,
                                 session.current_scenarios,
+                                on_scenario_generated=on_scenario_generated,
                             )
+                        finally:
+                            # Stop live display
+                            if live_display:
+                                live_display.stop()
 
                         if new_scenarios:
-                            # Add new scenarios to existing
-                            old_scenarios = session.current_scenarios or []
-                            all_scenarios = old_scenarios + new_scenarios
+                            # Session already updated incrementally, just record history
+                            all_scenarios = session.current_scenarios or []
                             new_dist = session.current_distribution or {}
-                            for s in new_scenarios:
-                                t = s.scenario_type.value
-                                new_dist[t] = new_dist.get(t, 0) + 1
-
-                            # Update session
                             session.apply_scenario_change(feedback, all_scenarios, new_dist)
 
                             # Recalculate coverage
                             with display.spinner("Recalculating coverage..."):
-                                old_coverage = coverage_report
                                 coverage_report = await coverage_calculator.calculate(
                                     all_scenarios,
                                     taxonomy,
                                     generate_suggestions=True,
                                 )
 
-                            # Update display state with new coverage for live refresh
+                            # Update display state with new coverage
                             if live_display:
                                 live_display.update_coverage(coverage_report)
 
