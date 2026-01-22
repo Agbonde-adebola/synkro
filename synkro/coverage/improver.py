@@ -333,27 +333,37 @@ class CoverageImprover:
         # Build comprehensive context for the LLM
         context = self._build_coverage_context(coverage_report, taxonomy, existing_scenarios)
 
-        # Build focus instruction if specific sub-category requested
+        # Determine current coverage and focus based on whether specific sub-category is targeted
+        current_coverage = coverage_report.overall_coverage_percent
+        focus_instruction = ""
+
         if target_sub_category:
             target_sc = self._find_sub_category(target_sub_category, taxonomy)
             if target_sc:
+                # Use the specific sub-category's coverage, not overall
+                sc_coverage = coverage_report.get_coverage_for(target_sc.id)
+                if sc_coverage:
+                    current_coverage = sc_coverage.coverage_percent
+                else:
+                    current_coverage = 0.0
                 focus_instruction = (
-                    f"\n\nUSER FOCUS: The user specifically asked to improve '{target_sc.name}'. "
-                    f"Prioritize this sub-category while still considering others if needed to reach the target."
+                    f"\n\nUSER FOCUS: The user specifically asked to improve '{target_sc.name}' "
+                    f"(currently at {current_coverage:.0f}%) to {target_percent}%. "
+                    f"Generate scenarios ONLY for this sub-category."
                 )
             else:
                 focus_instruction = (
                     f"\n\nUSER FOCUS: The user mentioned '{target_sub_category}'. "
                     f"Focus on sub-categories related to this topic."
                 )
-        else:
-            focus_instruction = ""
+
+        gap = target_percent - current_coverage
 
         prompt = (
             COVERAGE_TARGET_GENERATION_PROMPT.format(
-                current_overall=coverage_report.overall_coverage_percent,
+                current_overall=current_coverage,
                 target_percent=target_percent,
-                gap=target_percent - coverage_report.overall_coverage_percent,
+                gap=gap,
                 sub_category_coverage_table=context["coverage_table"],
                 existing_scenarios_summary=context["scenarios_summary"],
                 logic_map=self._format_logic_map(logic_map),
