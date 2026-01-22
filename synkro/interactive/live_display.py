@@ -225,18 +225,18 @@ class LiveProgressDisplay:
             rules_content, scenarios_content
         )
 
-        # Get content and match heights for Row 2: Coverage | Settings
+        # Get content and match heights for Row 2: Coverage | Logic Map
         coverage_content = self._get_coverage_content()
-        settings_content = self._get_settings_content()
-        coverage_content, settings_content = self._match_content_heights(
-            coverage_content, settings_content
+        logic_map_content = self._get_logic_map_compact_content()
+        coverage_content, logic_map_content = self._match_content_heights(
+            coverage_content, logic_map_content
         )
 
         # Build panels with height-matched content
         rules_panel = self._build_rules_panel(show_diff=True, content=rules_content)
         scenarios_panel = self._build_scenarios_panel(show_diff=True, content=scenarios_content)
         coverage_panel = self._build_coverage_panel(content=coverage_content)
-        settings_panel = self._build_settings_panel(content=settings_content)
+        logic_map_panel = self._build_logic_map_compact_panel(content=logic_map_content)
 
         # Two-column rows using Table.grid for true equal widths
         row1 = Table.grid(expand=True)
@@ -247,7 +247,7 @@ class LiveProgressDisplay:
         row2 = Table.grid(expand=True)
         row2.add_column(ratio=1)
         row2.add_column(ratio=1)
-        row2.add_row(coverage_panel, settings_panel)
+        row2.add_row(coverage_panel, logic_map_panel)
 
         # Subtitle with model name
         subtitle = Text(f"Interactive review with {s.model}", style="dim") if s.model else Text("")
@@ -295,6 +295,9 @@ class LiveProgressDisplay:
 
         title.append("  │  ", style="dim")
         title.append(f"${s.cost:.8f}", style="white")
+
+        title.append("  │  ", style="dim")
+        title.append(f"{s.hitl_turns} turns", style="cyan")
 
         return title
 
@@ -491,24 +494,71 @@ class LiveProgressDisplay:
             expand=True,
         )
 
-    def _get_settings_content(self) -> list:
-        """Get settings content as list of renderables (without Panel wrapper)."""
+    def _get_logic_map_compact_content(self) -> list:
+        """Get compact logic map content showing rules grouped by category."""
         s = self._state
         lines: list = []
-        lines.append(Text.assemble(("Turns ", "dim"), (str(s.hitl_turns), "bold cyan")))
-        lines.append(
-            Text.assemble(("Complexity ", "dim"), (s.hitl_complexity.title(), "bold cyan"))
-        )
+
+        if not s.logic_map:
+            lines.append(Text("No rules available", style="dim"))
+            return lines
+
+        CATEGORY_COLORS = {
+            "constraint": "red",
+            "exception": "yellow",
+            "permission": "green",
+            "procedure": "blue",
+            "eligibility": "magenta",
+            "requirement": "cyan",
+        }
+
+        # Group rules by category
+        by_cat: dict[str, list] = {}
+        for rule in s.logic_map.rules:
+            cat = rule.category.value if hasattr(rule.category, "value") else str(rule.category)
+            by_cat.setdefault(cat, []).append(rule)
+
+        # Show up to 6 rules total, distributed across categories
+        shown = 0
+        max_rules = 6
+        for cat, rules in sorted(by_cat.items()):
+            if shown >= max_rules:
+                break
+            color = CATEGORY_COLORS.get(cat, "white")
+            for rule in rules[:2]:  # Max 2 per category
+                if shown >= max_rules:
+                    break
+                line = Text()
+                line.append(f"{rule.rule_id}", style=f"bold {color}")
+                # Truncate rule text to fit
+                text_preview = rule.text[:40] if len(rule.text) <= 40 else rule.text[:37] + "..."
+                line.append(f" {text_preview}", style="dim")
+                lines.append(line)
+                shown += 1
+
+        # Show remaining count if any
+        remaining = len(s.logic_map.rules) - shown
+        if remaining > 0:
+            lines.append(Text(f"... +{remaining} more rules", style="dim"))
+
         return lines
 
-    def _build_settings_panel(self, content: list | None = None) -> Panel:
-        """Build settings panel for HITL mode."""
+    def _build_logic_map_compact_panel(self, content: list | None = None) -> Panel:
+        """Build compact logic map panel for HITL mode."""
+        s = self._state
         if content is None:
-            content = self._get_settings_content()
+            content = self._get_logic_map_compact_content()
+
+        title = Text("Logic Map", style="bold cyan")
+        title.append(f" ({s.rules_count})", style="cyan")
+        if s.added_rule_ids:
+            title.append(f" +{len(s.added_rule_ids)}", style="bold green")
+        if s.removed_rule_ids:
+            title.append(f" -{len(s.removed_rule_ids)}", style="bold red")
 
         return Panel(
             Group(*content),
-            title=Text("Settings", style="bold cyan"),
+            title=title,
             title_align="left",
             border_style="cyan",
             padding=(0, 1),
