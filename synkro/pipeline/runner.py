@@ -1144,7 +1144,7 @@ class GenerationPipeline:
                         # Start live display for streaming updates
                         if live_display:
                             live_display.update_phase("Improving Coverage")
-                            live_display.start()
+                            live_display.resume_live()
 
                         try:
                             # Generate scenarios with streaming callback
