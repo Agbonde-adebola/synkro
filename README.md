@@ -1,5 +1,6 @@
 # Synkro
 
+![](https://static.scarf.sh/a.png?x-pxid=f08f2a53-e0cf-4291-83f4-b518f620bf69)
 [![PyPI version](https://img.shields.io/pypi/v/synkro.svg?cacheSeconds=3600)](https://pypi.org/project/synkro/)
 [![Downloads](https://static.pepy.tech/badge/synkro)](https://pepy.tech/project/synkro)
 [![Downloads/Week](https://static.pepy.tech/badge/synkro/week)](https://pepy.tech/project/synkro)
