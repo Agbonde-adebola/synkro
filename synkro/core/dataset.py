@@ -235,8 +235,55 @@ class Dataset(BaseModel):
         """Get unique categories in the dataset."""
         return list(set(t.scenario.category for t in self.traces if t.scenario.category))
 
+    def display(self) -> "Dataset":
+        """
+        Display all traces in a readable format.
+
+        Returns:
+            Self for method chaining
+
+        Example:
+            >>> dataset.display()
+            >>> dataset.filter(passed=True).display().save("output.jsonl")
+        """
+        from rich.panel import Panel
+
+        for idx, trace in enumerate(self.traces, 1):
+            # Build trace display
+            status = (
+                "[green]PASS[/green]" if trace.grade and trace.grade.passed else "[red]FAIL[/red]"
+            )
+            category = trace.scenario.category or "uncategorized"
+            scenario_type = trace.scenario.scenario_type or "unknown"
+
+            # Header
+            console.print(
+                f"\n[bold cyan]━━━ Trace {idx}/{len(self.traces)} ━━━[/bold cyan] {status} | {category} | {scenario_type}"
+            )
+
+            # User message
+            console.print("[bold yellow]User:[/bold yellow]")
+            console.print(Panel(trace.user_message, border_style="yellow", padding=(0, 1)))
+
+            # Assistant response
+            console.print("[bold green]Assistant:[/bold green]")
+            console.print(Panel(trace.assistant_message, border_style="green", padding=(0, 1)))
+
+            # Grade feedback if failed
+            if trace.grade and not trace.grade.passed and trace.grade.issues:
+                console.print("[bold red]Issues:[/bold red]")
+                for issue in trace.grade.issues:
+                    console.print(f"  [red]•[/red] {issue}")
+
+        console.print(f"\n[dim]Total: {len(self.traces)} traces[/dim]")
+        return self
+
     def save(
-        self, path: str | Path | None = None, format: str = "messages", pretty_print: bool = False
+        self,
+        path: str | Path | None = None,
+        format: str = "messages",
+        pretty_print: bool = False,
+        display: bool = False,
     ) -> "Dataset":
         """
         Save dataset to a JSONL file.
@@ -246,6 +293,7 @@ class Dataset(BaseModel):
             format: Output format - "messages", "qa", "langsmith", "langfuse", "tool_call", "chatml",
                     or "bert" / "bert:<task>" for BERT models
             pretty_print: If True, format JSON with indentation (multi-line)
+            display: If True, display all traces before saving
 
         Returns:
             Self for method chaining
@@ -253,6 +301,7 @@ class Dataset(BaseModel):
         Example:
             >>> dataset.save()  # Auto-names: synkro_messages_2024-01-15.jsonl
             >>> dataset.save("training.jsonl")
+            >>> dataset.save("training.jsonl", display=True)  # Display traces while saving
             >>> dataset.save("eval.jsonl", format="qa")  # Q&A with ground truth
             >>> dataset.save("eval.jsonl", format="langsmith")  # LangSmith format
             >>> dataset.save("eval.jsonl", format="langfuse")  # Langfuse format
@@ -262,6 +311,10 @@ class Dataset(BaseModel):
             >>> dataset.save("bert_qa.jsonl", format="bert:qa")  # BERT extractive QA
             >>> dataset.save("readable.jsonl", pretty_print=True)  # Human-readable
         """
+        # Display traces if requested
+        if display:
+            self.display()
+
         from synkro.formatters import (
             BERTFormatter,
             ChatMLFormatter,
@@ -382,7 +435,7 @@ class Dataset(BaseModel):
             from datasets import Dataset as HFDataset
         except ImportError:
             raise ImportError(
-                "datasets is required for HuggingFace export. " "Install with: pip install datasets"
+                "datasets is required for HuggingFace export. Install with: pip install datasets"
             )
 
         from synkro.formatters import (

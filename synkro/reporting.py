@@ -219,6 +219,8 @@ class RichReporter:
         self._model: str = ""
         self._traces_target: int = 0
         self._cost_source: "Callable[[], float] | None" = None
+        self._final_traces: list[Trace] | None = None
+        self._show_traces: bool = True  # Display traces after generation
 
     def set_cost_source(self, cost_fn: "Callable[[], float]") -> None:
         """Set a function that returns the current total cost.
@@ -296,6 +298,8 @@ class RichReporter:
         self._display.add_activity(f"{passed}/{len(traces)} passed ({pass_rate:.0f}%)")
         self._display.add_event(f"VERIFY: {passed}/{len(traces)} passed ({pass_rate:.0f}%)")
         self._update_elapsed()
+        # Store traces for display after completion
+        self._final_traces = traces
 
     def on_refinement_start(self, iteration: int, failed_count: int) -> None:
         self._display.update_phase("Refining")
@@ -326,6 +330,10 @@ class RichReporter:
             pass_rate=pass_rate,
         )
         self._display.stop()
+
+        # Display traces after completion
+        if self._show_traces and self._final_traces:
+            self._display_traces(self._final_traces)
 
     def on_logic_map_complete(self, logic_map) -> None:
         """Store full logic map for section rendering."""
@@ -384,6 +392,49 @@ class RichReporter:
         # Update cost from source if available
         if self._cost_source:
             self._display._state.cost = self._cost_source()
+
+    def _display_traces(self, traces: list[Trace], max_display: int = 5) -> None:
+        """Display traces in a readable format (up to max_display)."""
+        from rich.panel import Panel
+
+        self.console.print()  # Add spacing after summary
+
+        display_traces = traces[:max_display]
+        total = len(traces)
+
+        for idx, trace in enumerate(display_traces, 1):
+            # Build trace header
+            status = (
+                "[green]PASS[/green]" if trace.grade and trace.grade.passed else "[red]FAIL[/red]"
+            )
+            category = trace.scenario.category or "uncategorized"
+            scenario_type = trace.scenario.scenario_type or "unknown"
+
+            self.console.print(
+                f"[bold cyan]━━━ Trace {idx}/{total} ━━━[/bold cyan] {status} | {category} | {scenario_type}"
+            )
+
+            # User message
+            self.console.print("[bold yellow]User:[/bold yellow]")
+            self.console.print(Panel(trace.user_message, border_style="yellow", padding=(0, 1)))
+
+            # Assistant response
+            self.console.print("[bold green]Assistant:[/bold green]")
+            self.console.print(Panel(trace.assistant_message, border_style="green", padding=(0, 1)))
+
+            # Grade feedback if failed
+            if trace.grade and not trace.grade.passed and trace.grade.issues:
+                self.console.print("[bold red]Issues:[/bold red]")
+                for issue in trace.grade.issues:
+                    self.console.print(f"  [red]•[/red] {issue}")
+
+            self.console.print()  # Spacing between traces
+
+        # Show message if there are more traces
+        if total > max_display:
+            self.console.print(
+                f"[dim]... and {total - max_display} more traces (use dataset.display() to see all)[/dim]\n"
+            )
 
 
 class CallbackReporter:
