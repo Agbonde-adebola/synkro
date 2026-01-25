@@ -142,9 +142,27 @@ print(session.show_failed())
 # Show individual trace
 print(session.show_trace(0))
 
-# One-liner status summary
+# One-liner status summary (includes cost)
 print(session.status())
-# Output: Rules: ✓ (18) | Taxonomy: ✓ (12) | Scenarios: ✓ (30) | Traces: ✓ (30) | Verified: ✓ (28/30)
+# Output: Rules: ✓ (18) | Taxonomy: ✓ (12) | Scenarios: ✓ (30) | Traces: ✓ (30) | Verified: ✓ (28/30) | Cost: $0.42
+
+# Cost summary
+print(session.show_cost_summary())
+# Output: Cost: $0.4265 | Calls: 75 | Time: 1m 34s
+
+# Detailed cost breakdown by phase
+print(session.show_cost())
+# Output:
+# Phase Breakdown:
+# --------------------------------------------------
+# Phase             Cost      Calls       Time
+# --------------------------------------------------
+# extraction       $0.0012        3       2.1s
+# scenarios        $0.0089       12       8.4s
+# traces           $0.2341       30      45.2s
+# verification     $0.1823       30      38.1s
+# --------------------------------------------------
+# Total            $0.4265       75
 ```
 
 ## done()
@@ -192,6 +210,36 @@ print(result)  # "Restored: Before edit: add rule..."
 print(session.status())
 # Rules: ✓ (18) | Taxonomy: ✓ (12) | Scenarios: ✓ (30) | Traces: ✓ (30) | Verified: ✓ (28/30)
 ```
+
+## Cost Tracking
+
+Every session tracks LLM calls, costs, and timing per pipeline phase:
+
+```python
+# Quick summary
+print(session.show_cost_summary())
+# Cost: $0.4265 | Calls: 75 | Time: 1m 34s
+
+# Detailed breakdown
+print(session.show_cost())
+# Phase Breakdown:
+# --------------------------------------------------
+# Phase             Cost      Calls       Time
+# --------------------------------------------------
+# extraction       $0.0120        1      18.7s
+# scenarios        $0.0082        3       6.1s
+# traces           $0.2341       30      45.2s
+# verification     $0.1823       30      38.1s
+# --------------------------------------------------
+# Total            $0.4265       75
+
+# Programmatic access
+print(session.metrics.total_cost)      # 0.4265
+print(session.metrics.total_calls)     # 75
+print(session.metrics.breakdown)       # {'extraction': 0.012, 'scenarios': 0.008, ...}
+```
+
+Cost data persists with the session and is restored on reload.
 
 ## Remote Database (Postgres)
 

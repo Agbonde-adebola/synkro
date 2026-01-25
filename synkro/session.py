@@ -1298,7 +1298,50 @@ class Session:
         else:
             parts.append("Verified: ✗")
 
+        # Cost (if any)
+        if self.metrics.total_cost > 0:
+            parts.append(f"Cost: ${self.metrics.total_cost:.4f}")
+
         return " | ".join(parts)
+
+    def show_cost(self) -> str:
+        """Show cost breakdown by pipeline phase.
+
+        Returns:
+            Formatted cost table with per-phase breakdown
+
+        Examples:
+            >>> print(session.show_cost())
+            Cost Breakdown:
+            --------------------------------------------------
+            Phase             Cost      Calls       Time
+            --------------------------------------------------
+            extraction       $0.0012        3       2.1s
+            scenarios        $0.0089       12       8.4s
+            traces           $0.2341       30      45.2s
+            verification     $0.1823       30      38.1s
+            --------------------------------------------------
+            Total            $0.4265       75
+        """
+        if not self.metrics.phases:
+            return "No cost data yet. Run pipeline steps first."
+
+        return self.metrics.format_table()
+
+    def show_cost_summary(self) -> str:
+        """Show one-line cost summary.
+
+        Returns:
+            Summary like "Cost: $0.42 | Calls: 91 | Time: 2m 34s"
+
+        Examples:
+            >>> print(session.show_cost_summary())
+            Cost: $0.4265 | Calls: 75 | Time: 1m 34s
+        """
+        if not self.metrics.phases:
+            return "No cost data yet."
+
+        return self.metrics.format_summary()
 
     def show_trace(self, index: int) -> str:
         """Show a specific trace in detail.

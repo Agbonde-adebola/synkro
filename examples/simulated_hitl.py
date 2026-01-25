@@ -147,9 +147,18 @@ async def main():
         print(f"    - {s['session_id']} (updated: {s['updated_at'][:10]})")
     print()
 
-    # Session status
+    # Session status (now includes cost)
     print("Session status...")
     print(session.status())
+    print()
+
+    # Cost tracking
+    print("Cost summary...")
+    print(session.show_cost_summary())
+    print()
+
+    print("Cost breakdown...")
+    print(session.show_cost())
     print()
 
     # Show individual trace
