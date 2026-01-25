@@ -213,31 +213,39 @@ print(session.status())
 
 ## Cost Tracking
 
-Every session tracks LLM calls, costs, and timing per pipeline phase:
+Every session tracks LLM calls, costs, and timing - including all HITL refinement calls:
 
 ```python
 # Quick summary
 print(session.show_cost_summary())
-# Cost: $0.4265 | Calls: 75 | Time: 1m 34s
+# Cost: $0.1795 | Calls: 21 | Time: 1m 59s
 
-# Detailed breakdown
+# Detailed breakdown (includes HITL)
 print(session.show_cost())
 # Phase Breakdown:
 # --------------------------------------------------
 # Phase             Cost      Calls       Time
 # --------------------------------------------------
-# extraction       $0.0120        1      18.7s
-# scenarios        $0.0082        3       6.1s
-# traces           $0.2341       30      45.2s
-# verification     $0.1823       30      38.1s
+# extraction       $0.0173        1      24.3s
+# hitl             $0.0190        3       0.0s  <-- refine_* calls
+# scenarios        $0.0083        3       6.4s
+# traces           $0.0861        7      28.1s
+# verification     $0.0488        7      1m 0s
 # --------------------------------------------------
-# Total            $0.4265       75
+# Total            $0.1795       21
 
 # Programmatic access
-print(session.metrics.total_cost)      # 0.4265
-print(session.metrics.total_calls)     # 75
-print(session.metrics.breakdown)       # {'extraction': 0.012, 'scenarios': 0.008, ...}
+print(session.metrics.total_cost)      # 0.1795
+print(session.metrics.total_calls)     # 21
+print(session.metrics.breakdown)       # {'extraction': 0.017, 'hitl': 0.019, ...}
 ```
+
+All operations are tracked:
+- `extract_rules()` → extraction phase
+- `generate_scenarios()` → scenarios phase
+- `refine_rules()`, `refine_scenarios()`, `refine_taxonomy()`, `refine_trace()` → hitl phase
+- `synthesize_traces()` → traces phase
+- `verify_traces()` → verification phase
 
 Cost data persists with the session and is restored on reload.
 
