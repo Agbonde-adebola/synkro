@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synkro"
-version = "0.5.21"
-description = "Framework for turning unstructured policies into training data for LLMs"
+version = "0.5.22"
+description = "Curate, evaluate, and ship LLM datasets from any document"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"

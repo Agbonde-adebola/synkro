@@ -8,7 +8,7 @@
 [![Documentation](https://img.shields.io/badge/docs-synkro.sh-purple.svg)](https://synkro.sh/docs)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Framework for turning unstructured policies, handbooks, and documentation into high-quality conversation, tool calling or evaluation traces for LLMs.
+Curate, evaluate, and ship LLM datasets from any document.
 
 ## Features
 
