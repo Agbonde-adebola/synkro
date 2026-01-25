@@ -20,6 +20,7 @@ pip install synkro
 ```python
 from synkro import create_pipeline, DatasetType
 from synkro.models import Google
+from synkro.examples import EXPENSE_POLICY
 
 pipeline = create_pipeline(
     model=Google.GEMINI_25_FLASH,
@@ -27,14 +28,14 @@ pipeline = create_pipeline(
     dataset_type=DatasetType.CONVERSATION,
 )
 
-dataset = pipeline.generate("path/to/policy.pdf", traces=50)
+dataset = pipeline.generate(EXPENSE_POLICY, traces=50)
 dataset.save("training.jsonl")
 ```
 
-Or use the CLI:
+Or try the demo:
 
 ```bash
-synkro generate policy.pdf --traces 50
+synkro demo
 ```
 
 ## Features
