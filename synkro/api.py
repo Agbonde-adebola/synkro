@@ -415,9 +415,7 @@ async def verify_traces_async(
 
             for iteration in range(max_iterations):
                 # Refine the trace
-                refined_trace = await refiner.refine(
-                    current_trace, result, logic_map, scenario, policy.text
-                )
+                refined_trace = await refiner.refine(current_trace, logic_map, scenario, result)
 
                 # Re-verify
                 result = await verifier.verify(refined_trace, logic_map, scenario, policy.text)
@@ -942,9 +940,7 @@ async def verify_traces_stream(
                 refined = False
 
                 for iteration in range(max_iterations):
-                    refined_trace = await refiner.refine(
-                        current_trace, result, logic_map, scenario, policy.text
-                    )
+                    refined_trace = await refiner.refine(current_trace, logic_map, scenario, result)
                     result = await verifier.verify(refined_trace, logic_map, scenario, policy.text)
 
                     if result.passed:

@@ -152,7 +152,10 @@ class TraceVerifier:
         """Format reasoning chain for verification prompt."""
         lines = []
         for i, step in enumerate(reasoning_chain, 1):
-            if hasattr(step, "rule_id"):
+            if isinstance(step, str):
+                # Handle string format (raw LLM output)
+                lines.append(f"Step {i}: {step}")
+            elif hasattr(step, "rule_id"):
                 applies = "APPLIES" if step.applies else "DOES NOT APPLY"
                 lines.append(f"Step {i}: {step.rule_id} - {applies}")
                 lines.append(f"  Rule: {step.rule_text}")
