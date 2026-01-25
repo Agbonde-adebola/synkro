@@ -40,6 +40,7 @@ async def edit_rules_async(
     model: Model,
     base_url: str | None = None,
     conversation_history: str = "No previous feedback in this session.",
+    llm: LLM | None = None,
 ) -> tuple["LogicMap", str]:
     """
     Edit a Logic Map using natural language instructions.
@@ -91,8 +92,9 @@ async def edit_rules_async(
     """
     from synkro.interactive.logic_map_editor import LogicMapEditor
 
-    # Create editor with specified model
-    llm = LLM(model=model, base_url=base_url, temperature=0.3)
+    # Use provided LLM or create one
+    if llm is None:
+        llm = LLM(model=model, base_url=base_url, temperature=0.3)
     editor = LogicMapEditor(llm=llm)
 
     # Apply the edit
@@ -133,6 +135,7 @@ async def edit_scenarios_async(
     distribution: dict[str, int] | None = None,
     base_url: str | None = None,
     conversation_history: str = "No previous feedback in this session.",
+    llm: LLM | None = None,
 ) -> tuple[list["GoldenScenario"], dict[str, int], str]:
     """
     Edit scenarios using natural language instructions.
@@ -198,8 +201,9 @@ async def edit_scenarios_async(
             )
             distribution[stype] = distribution.get(stype, 0) + 1
 
-    # Create editor with specified model
-    llm = LLM(model=model, base_url=base_url, temperature=0.3)
+    # Use provided LLM or create one
+    if llm is None:
+        llm = LLM(model=model, base_url=base_url, temperature=0.3)
     editor = ScenarioEditor(llm=llm)
 
     # Apply the edit

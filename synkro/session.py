@@ -215,6 +215,7 @@ class Session:
             ValueError: If no Logic Map is available
         """
         from synkro.interactive.standalone import edit_rules_async
+        from synkro.llm.client import LLM
 
         if self.logic_map is None:
             raise ValueError("No Logic Map available. Call extract_rules first.")
@@ -223,13 +224,21 @@ class Session:
 
         self._save_snapshot(f"Before edit: {instruction[:30]}...")
 
+        # Create LLM and track costs
+        llm = LLM(model=self.grading_model, base_url=self.base_url, temperature=0.3)
+        initial_cost = llm.total_cost
+
         new_logic_map, summary = await edit_rules_async(
             self.logic_map,
             instruction,
             self.policy.text,
             model=self.grading_model,
             base_url=self.base_url,
+            llm=llm,
         )
+
+        # Track HITL costs
+        self.metrics.add_call("hitl", llm.total_cost - initial_cost, str(self.grading_model))
 
         self.logic_map = new_logic_map
         await self._persist()
@@ -358,6 +367,7 @@ class Session:
             ValueError: If no scenarios are available
         """
         from synkro.interactive.standalone import edit_scenarios_async
+        from synkro.llm.client import LLM
 
         if self.scenarios is None:
             raise ValueError("No scenarios available. Call generate_scenarios first.")
@@ -368,6 +378,10 @@ class Session:
 
         self._save_snapshot(f"Before edit: {instruction[:30]}...")
 
+        # Create LLM and track costs
+        llm = LLM(model=self.grading_model, base_url=self.base_url, temperature=0.3)
+        initial_cost = llm.total_cost
+
         new_scenarios, new_dist, summary = await edit_scenarios_async(
             self.scenarios,
             instruction,
@@ -376,7 +390,11 @@ class Session:
             distribution=self.distribution,
             model=self.grading_model,
             base_url=self.base_url,
+            llm=llm,
         )
+
+        # Track HITL costs
+        self.metrics.add_call("hitl", llm.total_cost - initial_cost, str(self.grading_model))
 
         self.scenarios = new_scenarios
         self.distribution = new_dist
@@ -1435,13 +1453,23 @@ class Session:
             {"passed": False, "issues": [feedback], "feedback": feedback},
         )()
 
+        # Create LLMs and track costs
+        refiner_llm = LLM(model=self.grading_model or self.model, temperature=0.5)
+        verifier_llm = LLM(model=self.grading_model or self.model, temperature=0.3)
+        initial_cost = 0.0
+
         # Refine
-        refiner = GoldenRefiner(llm=LLM(model=self.grading_model or self.model, temperature=0.5))
+        refiner = GoldenRefiner(llm=refiner_llm)
         refined = await refiner.refine(trace, self.logic_map, scenario, mock_result)
+        initial_cost += refiner_llm.total_cost
 
         # Re-verify
-        verifier = GoldenVerifier(llm=LLM(model=self.grading_model or self.model, temperature=0.3))
+        verifier = GoldenVerifier(llm=verifier_llm)
         result = await verifier.verify(refined, self.logic_map, scenario, self.policy.text)
+        initial_cost += verifier_llm.total_cost
+
+        # Track HITL costs
+        self.metrics.add_call("hitl", initial_cost, str(self.grading_model or self.model))
 
         # Update grade
         refined.grade = GradeResult(
@@ -1580,13 +1608,21 @@ class Session:
         if not hasattr(self, "_taxonomy") or getattr(self, "_taxonomy", None) is None:
             raise ValueError("No taxonomy. Call generate_scenarios with coverage first.")
 
-        editor = TaxonomyEditor(llm=LLM(model=self.grading_model, temperature=0.1))
+        # Create LLM and track costs
+        llm = LLM(model=self.grading_model, temperature=0.1)
+        initial_cost = llm.total_cost
+
+        editor = TaxonomyEditor(llm=llm)
         new_taxonomy, summary = await editor.refine(
             self._taxonomy,  # type: ignore[attr-defined]
             feedback,
             self.policy.text,
             self.logic_map,
         )
+
+        # Track HITL costs
+        self.metrics.add_call("hitl", llm.total_cost - initial_cost, str(self.grading_model))
+
         self._taxonomy = new_taxonomy  # type: ignore[attr-defined]
         await self._persist()
         return summary
