@@ -17,22 +17,66 @@ Cost:        $0.1234
 LLM Calls:   20 scenario + 100 response + 50 grading
 ```
 
-## Programmatic Access
+## Session API Cost Tracking
 
-For programmatic access to costs, use the `LLM` class directly:
+The Session API provides the cleanest way to track costs with persistent storage:
+
+```python
+from synkro import Session
+
+session = await Session.create(policy="...", session_id="my-run")
+await session.extract_rules(session.policy)
+await session.generate_scenarios(count=30)
+await session.done()
+
+# One-liner summary
+print(session.show_cost_summary())
+# Cost: $0.4265 | Calls: 75 | Time: 1m 34s
+
+# Detailed breakdown by phase
+print(session.show_cost())
+# Phase Breakdown:
+# --------------------------------------------------
+# Phase             Cost      Calls       Time
+# --------------------------------------------------
+# extraction       $0.0120        1      18.7s
+# scenarios        $0.0082        3       6.1s
+# traces           $0.2341       30      45.2s
+# verification     $0.1823       30      38.1s
+# --------------------------------------------------
+# Total            $0.4265       75
+
+# Status includes cost
+print(session.status())
+# Rules: ✓ (18) | Scenarios: ✓ (30) | Traces: ✓ (30) | Verified: ✓ (28/30) | Cost: $0.4265
+
+# Programmatic access
+print(session.metrics.total_cost)       # 0.4265
+print(session.metrics.total_calls)      # 75
+print(session.metrics.breakdown)        # {'extraction': 0.012, ...}
+print(session.metrics.calls_breakdown)  # {'extraction': 1, ...}
+```
+
+Cost data persists with the session - reload anytime to check costs:
+
+```python
+session = await Session.load_from_db("my-run")
+print(session.show_cost())  # Still available
+```
+
+## Pipeline Cost Tracking
+
+For pipeline-based generation, costs are displayed by the reporter:
 
 ```python
 from synkro import create_pipeline
-from synkro.llm import LLM
 
-# Create pipeline
 pipeline = create_pipeline()
-
-# Generate
 result = pipeline.generate(policy, traces=100, return_logic_map=True)
 
-# Access LLM stats from factory
-# Note: Costs are calculated based on token usage and model pricing
+# Access metrics from result
+print(result.metrics.total_cost)
+print(result.metrics.format_table())
 ```
 
 ## Cost Breakdown by Phase
