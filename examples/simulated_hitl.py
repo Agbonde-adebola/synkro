@@ -134,6 +134,16 @@ async def main():
     print()
 
     # =========================================================================
+    # Get dataset from DB (no file needed)
+    # =========================================================================
+    print("Getting dataset from DB...")
+    dataset = reloaded.to_dataset()
+    print(f"  Dataset traces: {len(dataset.traces)}")
+    print(f"  Pass rate: {dataset.passing_rate:.1%}")
+    print(f"  First trace messages: {len(dataset.traces[0].messages)}")
+    print()
+
+    # =========================================================================
     # Test new session management methods
     # =========================================================================
     print("Testing session management...")
