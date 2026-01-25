@@ -102,9 +102,46 @@ Added 2 scenarios.
 Generating traces...
 ```
 
-## Programmatic HITL
+## Programmatic HITL with Session API
 
-For custom HITL flows, use the lower-level components:
+The Session API provides the cleanest way to do programmatic HITL with database persistence:
+
+```python
+from synkro import Session
+from synkro.models import Google
+
+# Create persistent session
+session = await Session.create(
+    policy="Expenses over $50 need manager approval...",
+    session_id="my-session"
+)
+session.model = Google.GEMINI_25_FLASH
+
+# Extract rules and refine with natural language
+await session.extract_rules(session.policy)
+await session.refine_rules("add rule: meals capped at $75/day")
+await session.refine_rules("remove R005")
+
+# Generate scenarios and refine
+await session.generate_scenarios(count=30)
+await session.refine_scenarios("add 5 edge cases for meal limits")
+
+# Inspect state
+print(session.show_rules())
+print(session.show_distribution())
+
+# Complete pipeline
+dataset = await session.done(output="training.jsonl")
+
+# Resume later
+session = await Session.load_from_db("my-session")
+```
+
+See the [Session API reference](/api-reference/session) for full documentation.
+
+## Low-Level Programmatic HITL
+
+For custom HITL flows without persistence, use the lower-level components:
 
 ```python
 from synkro.advanced import LogicExtractor, ScenarioGenerator

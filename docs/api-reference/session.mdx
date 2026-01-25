@@ -1,0 +1,267 @@
+---
+title: Session
+description: "Database-backed sessions with HITL methods"
+---
+
+The Session API provides persistent, database-backed sessions with natural language HITL (Human-in-the-Loop) methods. Ideal for agent-driven workflows where state needs to persist across interactions.
+
+## Creating Sessions
+
+```python
+from synkro import Session
+from synkro.models import Google
+
+# Create a persistent session (SQLite by default)
+session = await Session.create(
+    policy="Expenses over $50 need manager approval...",
+    session_id="exp001"  # Optional - auto-generated if not provided
+)
+
+# Configure models
+session.model = Google.GEMINI_25_FLASH
+session.grading_model = Google.GEMINI_25_PRO
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `policy` | `str` | Policy text to extract rules from |
+| `session_id` | `str` | Optional session identifier (auto-generated if not provided) |
+| `db_url` | `str` | Optional database URL (defaults to SQLite at `~/.synkro/sessions.db`) |
+
+## Loading Sessions
+
+Resume a previously saved session:
+
+```python
+session = await Session.load_from_db("exp001")
+
+# With custom database
+session = await Session.load_from_db("exp001", db_url="postgresql://...")
+```
+
+## Pipeline Methods
+
+Run pipeline steps with automatic persistence:
+
+```python
+# Extract rules from policy
+await session.extract_rules(session.policy)
+
+# Generate taxonomy (optional)
+await session.generate_taxonomy()
+
+# Generate scenarios
+await session.generate_scenarios(count=30)
+
+# Synthesize traces
+await session.synthesize_traces()
+
+# Verify traces
+await session.verify_traces()
+```
+
+## HITL Refinement Methods
+
+Refine rules, scenarios, and taxonomy with natural language commands:
+
+### refine_rules()
+
+```python
+# Add rules
+await session.refine_rules("add rule: meals capped at $75/day")
+
+# Remove rules
+await session.refine_rules("remove R005")
+
+# Merge rules
+await session.refine_rules("merge R002 and R003")
+
+# Modify rules
+await session.refine_rules("change R001 threshold from $50 to $100")
+```
+
+### refine_scenarios()
+
+```python
+# Add scenarios
+await session.refine_scenarios("add 5 edge cases for meal limits")
+
+# Remove scenarios
+await session.refine_scenarios("delete S3")
+
+# Target specific rules
+await session.refine_scenarios("add more negative cases for R002")
+```
+
+### refine_taxonomy()
+
+```python
+# Add categories
+await session.refine_taxonomy("add category for travel expenses")
+
+# Rename categories
+await session.refine_taxonomy("rename SC001 to Approval Thresholds")
+```
+
+### refine_trace()
+
+```python
+# Refine individual trace
+result = await session.refine_trace(0, "make the response more concise")
+print(result)  # "Trace #0 refined - now passes"
+```
+
+## Show Commands
+
+Inspect session state at any time:
+
+```python
+# Show extracted rules
+print(session.show_rules(limit=5))
+
+# Show generated scenarios
+print(session.show_scenarios(limit=10))
+
+# Filter scenarios by type
+print(session.show_scenarios(filter="edge_case"))
+
+# Show scenario distribution
+print(session.show_distribution())
+
+# Show taxonomy categories
+print(session.show_taxonomy())
+
+# Show passing traces
+print(session.show_passed())
+
+# Show failed traces
+print(session.show_failed())
+
+# Show individual trace
+print(session.show_trace(0))
+
+# One-liner status summary
+print(session.status())
+# Output: Rules: ✓ (18) | Taxonomy: ✓ (12) | Scenarios: ✓ (30) | Traces: ✓ (30) | Verified: ✓ (28/30)
+```
+
+## done()
+
+Complete the pipeline in one call - synthesizes traces, verifies them, and optionally exports:
+
+```python
+dataset = await session.done(output="training.jsonl")
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `output` | `str` | Optional output file path |
+| `count` | `int` | Optional number of traces to generate |
+
+## Session Management
+
+### list_sessions()
+
+```python
+sessions = await Session.list_sessions()
+for s in sessions:
+    print(f"{s['session_id']} - updated: {s['updated_at']}")
+```
+
+### delete()
+
+```python
+deleted = await session.delete()
+print(deleted)  # True
+```
+
+### undo()
+
+```python
+result = await session.undo()
+print(result)  # "Restored: Before edit: add rule..."
+```
+
+### status()
+
+```python
+print(session.status())
+# Rules: ✓ (18) | Taxonomy: ✓ (12) | Scenarios: ✓ (30) | Traces: ✓ (30) | Verified: ✓ (28/30)
+```
+
+## Remote Database (Postgres)
+
+Use Postgres instead of SQLite for multi-user or production deployments:
+
+```python
+import os
+
+# Create with Postgres
+session = await Session.create(
+    policy="...",
+    db_url=os.environ["DATABASE_URL"]  # postgresql://user:pass@host/db
+)
+
+# Load from Postgres
+session = await Session.load_from_db("exp001", db_url=os.environ["DATABASE_URL"])
+
+# List sessions from Postgres
+sessions = await Session.list_sessions(db_url=os.environ["DATABASE_URL"])
+```
+
+Supports:
+- Neon
+- Supabase
+- AWS RDS
+- Self-hosted Postgres
+
+## Complete Example
+
+```python
+from synkro import Session
+from synkro.models import Google
+
+async def main():
+    # Create session
+    session = await Session.create(
+        policy="Expenses over $50 need manager approval...",
+        session_id="demo"
+    )
+    session.model = Google.GEMINI_25_FLASH
+
+    # Extract and refine rules
+    await session.extract_rules(session.policy)
+    await session.refine_rules("add rule: receipts required over $25")
+    print(session.show_rules())
+
+    # Generate and refine scenarios
+    await session.generate_scenarios(count=20)
+    await session.refine_scenarios("add 3 edge cases")
+    print(session.show_distribution())
+
+    # Complete pipeline
+    dataset = await session.done(output="training.jsonl")
+    print(session.show_passed())
+
+    # Later: resume session
+    session = await Session.load_from_db("demo")
+    print(session.status())
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `session_id` | `str` | Session identifier |
+| `policy` | `Policy` | Policy document |
+| `logic_map` | `LogicMap` | Extracted rules |
+| `scenarios` | `list[GoldenScenario]` | Generated scenarios |
+| `traces` | `list[Trace]` | Generated traces |
+| `verified_traces` | `list[Trace]` | Verified traces |
+| `model` | `Model` | Generation model |
+| `grading_model` | `Model` | Grading model |
+| `dataset_type` | `DatasetType` | Output dataset type |

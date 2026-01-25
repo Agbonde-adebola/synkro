@@ -72,6 +72,7 @@
         "group": "API Reference",
         "pages": [
           "api-reference/overview",
+          "api-reference/session",
           "api-reference/generate",
           "api-reference/generate-scenarios",
           "api-reference/grade",
