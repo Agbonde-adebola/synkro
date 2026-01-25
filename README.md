@@ -214,6 +214,99 @@ ChatML with XML tags (`format="chatml"`):
 ]}
 ```
 
+## Session API (Persistence + HITL)
+
+The Session API provides database-backed persistence and natural language HITL (Human-in-the-Loop) methods for agent-driven workflows.
+
+### Create & Load Sessions
+
+```python
+from synkro import Session
+from synkro.models import Google
+
+# Create a persistent session (SQLite by default)
+session = await Session.create(
+    policy="Expenses over $50 need manager approval...",
+    session_id="exp001"
+)
+session.model = Google.GEMINI_25_FLASH
+
+# Run pipeline steps
+await session.extract_rules(session.policy)
+await session.generate_scenarios(count=30)
+
+# Resume later
+session = await Session.load_from_db("exp001")
+```
+
+### HITL Refinement Methods
+
+Refine rules, scenarios, and taxonomy with natural language:
+
+```python
+# Refine rules
+await session.refine_rules("add rule: meals capped at $75/day")
+await session.refine_rules("remove R005")
+await session.refine_rules("merge R002 and R003")
+
+# Refine scenarios
+await session.refine_scenarios("add 5 edge cases for meal limits")
+await session.refine_scenarios("delete S3")
+
+# Refine taxonomy
+await session.refine_taxonomy("add category for travel expenses")
+```
+
+### Show Commands
+
+Inspect session state at any time:
+
+```python
+print(session.show_rules(limit=5))       # Show extracted rules
+print(session.show_scenarios(limit=10))  # Show generated scenarios
+print(session.show_distribution())       # Show scenario type distribution
+print(session.show_taxonomy())           # Show taxonomy categories
+print(session.show_passed())             # Show passing traces
+print(session.show_failed())             # Show failed traces
+print(session.show_trace(0))             # Show individual trace
+print(session.status())                  # One-liner status summary
+```
+
+### Complete Pipeline with done()
+
+Synthesize, verify, and export in one call:
+
+```python
+dataset = await session.done(output="training.jsonl")
+# Runs: synthesize_traces → verify_traces → export
+```
+
+### Session Management
+
+```python
+# List all sessions
+sessions = await Session.list_sessions()
+for s in sessions:
+    print(f"{s['session_id']} - {s['updated_at']}")
+
+# Delete a session
+await session.delete()
+
+# Undo last change
+result = await session.undo()
+print(result)  # "Restored: Before edit: add rule..."
+```
+
+### Remote Database (Postgres)
+
+```python
+# Use Postgres instead of SQLite
+session = await Session.create(
+    policy="...",
+    db_url="postgresql://user:pass@host/db"
+)
+```
+
 ## Evaluation & Grading
 
 Every response is graded on policy compliance, citations, and reasoning. Failed responses are automatically refined (up to N iterations).
