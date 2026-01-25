@@ -7,8 +7,6 @@
 [![Documentation](https://img.shields.io/badge/docs-synkro.sh-purple.svg)](https://synkro.sh/docs)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Curate, evaluate, and ship LLM datasets from any document.
-
 ## Installation
 
 ```bash
