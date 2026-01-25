@@ -32,10 +32,10 @@ dataset = pipeline.generate(EXPENSE_POLICY, traces=50)
 dataset.save("training.jsonl")
 ```
 
-Or try the demo:
+Or use the CLI:
 
 ```bash
-synkro demo
+synkro generate policy.pdf --traces 50
 ```
 
 ## Features
