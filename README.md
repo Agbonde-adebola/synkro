@@ -36,6 +36,9 @@ Or use the CLI:
 
 ```bash
 synkro generate policy.pdf --traces 50
+
+# Quick demo with built-in policy
+synkro demo
 ```
 
 ## Features
