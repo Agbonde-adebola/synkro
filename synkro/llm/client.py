@@ -1,5 +1,6 @@
 """Type-safe LLM wrapper using LiteLLM."""
 
+import asyncio
 import warnings
 from typing import TYPE_CHECKING, Type, TypeVar, overload
 
@@ -8,6 +9,46 @@ from litellm import acompletion, completion_cost, supports_response_schema
 from pydantic import BaseModel
 
 from synkro.models import LocalModel, Model, OpenAI, get_model_string
+
+# Retry configuration for rate limits
+MAX_RETRIES = 5
+INITIAL_BACKOFF = 1.0  # seconds
+MAX_BACKOFF = 60.0  # seconds
+
+
+async def _retry_with_backoff(coro_func, *args, **kwargs):
+    """Execute async function with exponential backoff on rate limit errors."""
+    backoff = INITIAL_BACKOFF
+    last_exception = None
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            return await coro_func(*args, **kwargs)
+        except Exception as e:
+            error_str = str(e).lower()
+            # Check for rate limit errors (429, resource exhausted, rate limit)
+            is_rate_limit = (
+                "429" in error_str
+                or "rate" in error_str
+                or "resource exhausted" in error_str
+                or "ratelimit" in error_str
+            )
+            if not is_rate_limit:
+                raise  # Not a rate limit error, don't retry
+
+            last_exception = e
+            if attempt < MAX_RETRIES - 1:
+                # Exponential backoff with jitter
+                import random
+
+                jitter = random.uniform(0, backoff * 0.1)
+                sleep_time = min(backoff + jitter, MAX_BACKOFF)
+                await asyncio.sleep(sleep_time)
+                backoff *= 2  # Exponential increase
+
+    # All retries exhausted
+    raise last_exception
+
 
 if TYPE_CHECKING:
     from synkro.types.metrics import Metrics, TrackedLLM
@@ -134,7 +175,7 @@ class LLM:
         if self._base_url:
             kwargs["api_base"] = self._base_url
 
-        response = await acompletion(**kwargs)
+        response = await _retry_with_backoff(acompletion, **kwargs)
         self._track_cost(response)
         return response.choices[0].message.content
 
@@ -229,7 +270,7 @@ class LLM:
         if self._base_url:
             kwargs["api_base"] = self._base_url
 
-        response = await acompletion(**kwargs)
+        response = await _retry_with_backoff(acompletion, **kwargs)
         self._track_cost(response)
         return response_model.model_validate_json(response.choices[0].message.content)
 
@@ -267,7 +308,7 @@ class LLM:
             if self._base_url:
                 kwargs["api_base"] = self._base_url
 
-            response = await acompletion(**kwargs)
+            response = await _retry_with_backoff(acompletion, **kwargs)
             self._track_cost(response)
             return response_model.model_validate_json(response.choices[0].message.content)
 
@@ -282,7 +323,7 @@ class LLM:
         if self._base_url:
             kwargs["api_base"] = self._base_url
 
-        response = await acompletion(**kwargs)
+        response = await _retry_with_backoff(acompletion, **kwargs)
         self._track_cost(response)
         return response.choices[0].message.content
 
