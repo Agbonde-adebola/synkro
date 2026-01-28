@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synkro"
-version = "0.5.24"
+version = "0.5.25"
 description = "Curate, evaluate, and ship LLM datasets from any document"
 readme = "README.md"
 license = "Apache-2.0"

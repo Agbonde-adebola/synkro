@@ -73,7 +73,9 @@ class Trace(BaseModel):
     """A complete training trace with messages and metadata."""
 
     messages: list[Message] = Field(description="The conversation messages")
-    scenario: Scenario = Field(description="The scenario this trace was generated from")
+    scenario: Scenario | None = Field(
+        default=None, description="The scenario this trace was generated from"
+    )
     grade: GradeResult | None = Field(default=None, description="Grading result if graded")
 
     # Golden Trace metadata (for verification)
