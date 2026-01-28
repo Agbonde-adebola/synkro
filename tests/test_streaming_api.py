@@ -9,7 +9,19 @@ These tests cover:
 Integration tests (requiring API keys) are marked with @pytest.mark.integration
 """
 
+import os
+
 import pytest
+
+_HAS_LLM_API_KEY = any(
+    os.getenv(k)
+    for k in (
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
+    )
+)
 
 # =============================================================================
 # EVENT TYPE TESTS (No API calls needed)
@@ -108,7 +120,7 @@ def test_metrics_aggregation():
     metrics.add_call("scenarios", 0.005)
     metrics.end_phase("scenarios", cost=0.005, calls=1)
 
-    assert metrics.total_cost == 0.035
+    assert metrics.total_cost == pytest.approx(0.035)
     assert metrics.total_calls == 3
     assert metrics.breakdown == {"extraction": 0.03, "scenarios": 0.005}
 
@@ -360,6 +372,10 @@ def test_get_tool_by_name():
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not _HAS_LLM_API_KEY,
+    reason="Integration test requires an LLM API key (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY / GEMINI_API_KEY)",
+)
 @pytest.mark.asyncio
 async def test_extract_rules_stream():
     """Test streaming rule extraction.
@@ -390,6 +406,10 @@ async def test_extract_rules_stream():
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not _HAS_LLM_API_KEY,
+    reason="Integration test requires an LLM API key (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY / GEMINI_API_KEY)",
+)
 @pytest.mark.asyncio
 async def test_session_full_workflow():
     """Test Session full workflow.
@@ -419,6 +439,10 @@ async def test_session_full_workflow():
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not _HAS_LLM_API_KEY,
+    reason="Integration test requires an LLM API key (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY / GEMINI_API_KEY)",
+)
 @pytest.mark.asyncio
 async def test_streaming_scenario_generation():
     """Test streaming scenario generation."""

@@ -4,11 +4,28 @@ import asyncio
 import warnings
 from typing import TYPE_CHECKING, Type, TypeVar, overload
 
-import litellm
-from litellm import acompletion, completion_cost, supports_response_schema
 from pydantic import BaseModel
 
 from synkro.models import LocalModel, Model, OpenAI, get_model_string
+
+# Lazy LiteLLM import to avoid import-time side effects (important for CLIs/tests)
+_LITELLM_CONFIGURED = False
+
+
+def _get_litellm():
+    global _LITELLM_CONFIGURED
+
+    import litellm
+    from litellm import acompletion, completion_cost, supports_response_schema
+
+    if not _LITELLM_CONFIGURED:
+        litellm.suppress_debug_info = True
+        litellm.enable_json_schema_validation = True
+        litellm.drop_params = True  # Drop unsupported params (e.g., temperature for gpt-5)
+        _LITELLM_CONFIGURED = True
+
+    return litellm, acompletion, completion_cost, supports_response_schema
+
 
 # Retry configuration for rate limits
 MAX_RETRIES = 5
@@ -52,11 +69,6 @@ async def _retry_with_backoff(coro_func, *args, **kwargs):
 
 if TYPE_CHECKING:
     from synkro.types.metrics import Metrics, TrackedLLM
-
-# Configure litellm
-litellm.suppress_debug_info = True
-litellm.enable_json_schema_validation = True
-litellm.drop_params = True  # Drop unsupported params (e.g., temperature for gpt-5)
 
 # Suppress Pydantic serialization warnings from litellm response types
 warnings.filterwarnings(
@@ -175,6 +187,7 @@ class LLM:
         if self._base_url:
             kwargs["api_base"] = self._base_url
 
+        _, acompletion, _, _ = _get_litellm()
         response = await _retry_with_backoff(acompletion, **kwargs)
         self._track_cost(response)
         return response.choices[0].message.content
@@ -246,6 +259,7 @@ class LLM:
             'positive'
         """
         # Check if model supports structured outputs
+        _, _, _, supports_response_schema = _get_litellm()
         if not supports_response_schema(model=self.model, custom_llm_provider=None):
             raise ValueError(
                 f"Model '{self.model}' does not support structured outputs (response_format). "
@@ -270,6 +284,7 @@ class LLM:
         if self._base_url:
             kwargs["api_base"] = self._base_url
 
+        _, acompletion, _, _ = _get_litellm()
         response = await _retry_with_backoff(acompletion, **kwargs)
         self._track_cost(response)
         return response_model.model_validate_json(response.choices[0].message.content)
@@ -289,6 +304,7 @@ class LLM:
         """
         if response_model:
             # Check if model supports structured outputs
+            _, _, _, supports_response_schema = _get_litellm()
             if not supports_response_schema(model=self.model, custom_llm_provider=None):
                 raise ValueError(
                     f"Model '{self.model}' does not support structured outputs (response_format). "
@@ -308,6 +324,7 @@ class LLM:
             if self._base_url:
                 kwargs["api_base"] = self._base_url
 
+            _, acompletion, _, _ = _get_litellm()
             response = await _retry_with_backoff(acompletion, **kwargs)
             self._track_cost(response)
             return response_model.model_validate_json(response.choices[0].message.content)
@@ -323,6 +340,7 @@ class LLM:
         if self._base_url:
             kwargs["api_base"] = self._base_url
 
+        _, acompletion, _, _ = _get_litellm()
         response = await _retry_with_backoff(acompletion, **kwargs)
         self._track_cost(response)
         return response.choices[0].message.content
@@ -331,6 +349,7 @@ class LLM:
         """Track cost and call count from a response."""
         self._call_count += 1
         try:
+            _, _, completion_cost, _ = _get_litellm()
             cost = completion_cost(completion_response=response)
             self._total_cost += cost
         except Exception:
