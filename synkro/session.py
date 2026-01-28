@@ -705,6 +705,7 @@ class Session:
         Convert session state to a Dataset.
 
         Uses verified traces if available, otherwise uses traces.
+        Note: If session was lazily loaded, call ensure_loaded() first.
 
         Returns:
             Dataset containing the traces
@@ -714,6 +715,13 @@ class Session:
         """
         traces = self.verified_traces or self.traces
         if traces is None:
+            # Check if lazy loading might help
+            if hasattr(self, "_lazy_loaded") and not self._lazy_loaded:  # type: ignore[attr-defined]
+                raise ValueError(
+                    "No traces available. Session was lazily loaded - "
+                    "call 'await session.ensure_loaded()' first, or use "
+                    "'Session.load_from_db(id, full=True)'."
+                )
             raise ValueError("No traces available. Run the pipeline first.")
 
         return Dataset(traces=traces)
@@ -930,7 +938,10 @@ class Session:
         from synkro.storage import Storage
 
         store = Storage(db_url)
-        sid = await store.create(session_id)
+        sid = await store.create_session(
+            session_id=session_id,
+            policy_text=policy or "",
+        )
 
         session = cls()
         session._storage = store  # type: ignore[attr-defined]
@@ -948,12 +959,15 @@ class Session:
         cls,
         session_id: str,
         db_url: str | None = None,
+        full: bool = False,
     ) -> "Session":
-        """Load a session from the database.
+        """Load a session from the database (lazy loading by default).
 
         Args:
             session_id: The session ID to load.
             db_url: Database URL. Defaults to SQLite at ~/.synkro/sessions.db.
+            full: If True, load all data immediately. If False (default), load
+                  rules/scenarios/traces lazily on first access.
 
         Returns:
             The loaded Session instance.
@@ -962,20 +976,176 @@ class Session:
             ValueError: If session not found.
 
         Examples:
-            >>> session = await Session.load_from_db("exp001")
-            >>> session = await Session.load_from_db("exp001", db_url="postgresql://...")
+            >>> session = await Session.load_from_db("exp001")  # Fast, lazy
+            >>> session = await Session.load_from_db("exp001", full=True)  # Load all
         """
         from synkro.storage import Storage
 
         store = Storage(db_url)
-        data = await store.load(session_id)
-        if not data:
-            raise ValueError(f"Session not found: {session_id}")
 
-        session = cls._from_data(data)
+        if full:
+            # Load everything at once
+            data = await store.load_session_full(session_id)
+            if not data:
+                raise ValueError(f"Session not found: {session_id}")
+            session = cls._from_data(data)
+        else:
+            # Lazy loading - just metadata
+            data = await store.load_session(session_id)
+            if not data:
+                raise ValueError(f"Session not found: {session_id}")
+            session = cls._from_metadata(data)
+            session._lazy_loaded = False  # type: ignore[attr-defined]
+
         session._storage = store  # type: ignore[attr-defined]
         session._session_id = session_id  # type: ignore[attr-defined]
         return session
+
+    async def ensure_loaded(self) -> "Session":
+        """Load all data from DB if using lazy loading.
+
+        Call this before using show_*() methods or accessing data on a
+        lazily-loaded session.
+
+        Returns:
+            Self for chaining.
+
+        Examples:
+            >>> session = await Session.load_from_db("my-session")
+            >>> await session.ensure_loaded()
+            >>> print(session.show_rules())
+        """
+        if not hasattr(self, "_lazy_loaded") or self._lazy_loaded:  # type: ignore[attr-defined]
+            return self
+        if not hasattr(self, "_storage") or not hasattr(self, "_session_id"):
+            return self
+
+        # Load rules if needed
+        if self.logic_map is None:
+            rules_data = await self._storage.get_rules(self._session_id)  # type: ignore[attr-defined]
+            if rules_data:
+                self._load_rules(rules_data)
+
+        # Load scenarios if needed
+        if self.scenarios is None:
+            scenarios_data = await self._storage.get_scenarios(self._session_id)  # type: ignore[attr-defined]
+            if scenarios_data:
+                self._load_scenarios(scenarios_data)
+
+        # Load traces if needed
+        if self.traces is None and self.verified_traces is None:
+            traces_data = await self._storage.get_traces(self._session_id)  # type: ignore[attr-defined]
+            if traces_data:
+                self._load_traces(traces_data)
+
+        self._lazy_loaded = True  # type: ignore[attr-defined]
+        return self
+
+    @classmethod
+    def _from_metadata(cls, data: dict) -> "Session":
+        """Create session from metadata only (for lazy loading)."""
+        session = cls()
+
+        if data.get("policy_text"):
+            session.policy = Policy(text=data["policy_text"])
+
+        session.model = data.get("model")
+        session.grading_model = data.get("grading_model")
+        session.base_url = data.get("base_url")
+        session.dataset_type = data.get("dataset_type", "conversation")
+
+        return session
+
+    def _load_rules(self, rules_data: list[dict]) -> None:
+        """Load rules into logic_map from data."""
+        from synkro.types.logic_map import LogicMap, Rule, RuleCategory
+
+        rules = []
+        for r in rules_data:
+            category = r.get("category")
+            if category and isinstance(category, str):
+                try:
+                    category = RuleCategory(category)
+                except ValueError:
+                    category = RuleCategory.CORE
+            rules.append(
+                Rule(
+                    rule_id=r["rule_id"],
+                    text=r["text"],
+                    condition=r.get("condition", ""),
+                    action=r.get("action", ""),
+                    category=category or RuleCategory.CORE,
+                    dependencies=r.get("dependencies", []),
+                )
+            )
+        all_rule_ids = {r.rule_id for r in rules}
+        root_rules = [
+            r.rule_id
+            for r in rules
+            if not r.dependencies or not any(d in all_rule_ids for d in r.dependencies)
+        ]
+        self.logic_map = LogicMap(rules=rules, root_rules=root_rules)
+
+    def _load_scenarios(self, scenarios_data: list[dict]) -> None:
+        """Load scenarios from data."""
+        from synkro.types.logic_map import GoldenScenario, ScenarioType
+
+        scenarios = []
+        for s in scenarios_data:
+            scenario_type = s.get("type", "positive")
+            if isinstance(scenario_type, str):
+                try:
+                    scenario_type = ScenarioType(scenario_type)
+                except ValueError:
+                    scenario_type = ScenarioType.POSITIVE
+            scenarios.append(
+                GoldenScenario(
+                    description=s.get("description", ""),
+                    context=s.get("context", ""),
+                    category=s.get("category", ""),
+                    scenario_type=scenario_type,
+                    target_rule_ids=s.get("rules_tested", []),
+                    expected_outcome=s.get("expected_outcome", ""),
+                )
+            )
+        self.scenarios = scenarios
+
+        # Compute distribution
+        dist: dict[str, int] = {}
+        for s in scenarios:
+            t = s.scenario_type.value if hasattr(s.scenario_type, "value") else str(s.scenario_type)
+            dist[t] = dist.get(t, 0) + 1
+        self.distribution = dist
+
+    def _load_traces(self, traces_data: list[dict]) -> None:
+        """Load traces from data."""
+        from synkro.types.core import GradeResult, Message, Trace
+
+        traces = []
+        for t in traces_data:
+            messages = [
+                Message(role=m["role"], content=m["content"]) for m in t.get("messages", [])
+            ]
+            grade = None
+            if t.get("grade_passed") is not None:
+                grade = GradeResult(
+                    passed=t["grade_passed"],
+                    feedback=t.get("grade_feedback", ""),
+                )
+            traces.append(
+                Trace(
+                    messages=messages,
+                    grade=grade,
+                    rules_applied=t.get("rules_applied", []),
+                    rules_excluded=t.get("rules_violated", []),
+                    reasoning_chain=t.get("reasoning_chain"),
+                )
+            )
+        # If any are graded, put them in verified_traces
+        if any(t.grade for t in traces):
+            self.verified_traces = traces
+        else:
+            self.traces = traces
 
     @classmethod
     async def list_sessions(cls, db_url: str | None = None, limit: int = 50) -> list[dict]:
@@ -996,7 +1166,7 @@ class Session:
         from synkro.storage import Storage
 
         store = Storage(db_url)
-        return await store.list(limit=limit)
+        return await store.list_sessions(limit=limit)
 
     async def delete(self) -> bool:
         """Delete this session from the database.
@@ -1010,7 +1180,7 @@ class Session:
         """
         if not hasattr(self, "_storage") or not hasattr(self, "_session_id"):
             return False
-        return await self._storage.delete(self._session_id)
+        return await self._storage.delete_session(self._session_id)
 
     @property
     def session_id(self) -> str | None:
@@ -1021,10 +1191,81 @@ class Session:
         """Save current state to database (if using database storage)."""
         if not hasattr(self, "_storage"):
             return
-        await self._storage.save(self._session_id, self._to_data())  # type: ignore[attr-defined]
+
+        sid = self._session_id  # type: ignore[attr-defined]
+
+        # Update session metadata
+        await self._storage.update_session(
+            sid,
+            model=self.model,
+            grading_model=self.grading_model,
+        )
+
+        # Save rules if we have a logic map
+        if self.logic_map:
+            rules = [
+                {
+                    "rule_id": r.rule_id,
+                    "text": r.text,
+                    "condition": r.condition,
+                    "action": r.action,
+                    "category": r.category.value if r.category else None,
+                    "dependencies": r.dependencies,
+                }
+                for r in self.logic_map.rules
+            ]
+            await self._storage.save_rules(sid, rules)
+
+        # Save scenarios
+        if self.scenarios:
+            scenarios = [
+                {
+                    "scenario_id": f"S{i+1:03d}",
+                    "type": s.scenario_type.value
+                    if hasattr(s.scenario_type, "value")
+                    else s.scenario_type,
+                    "category": s.category,
+                    "description": s.description,
+                    "context": s.context,
+                    "expected_outcome": s.expected_outcome,
+                    "rules_tested": s.target_rule_ids,
+                }
+                for i, s in enumerate(self.scenarios)
+            ]
+            await self._storage.save_scenarios(sid, scenarios)
+
+        # Save traces (verified traces take priority)
+        traces_to_save = self.verified_traces if self.verified_traces else self.traces
+        if traces_to_save:
+            traces = [
+                {
+                    "messages": [{"role": m.role, "content": m.content} for m in t.messages],
+                    "grade_passed": t.grade.passed if t.grade else None,
+                    "grade_feedback": t.grade.feedback if t.grade else None,
+                    "rules_applied": t.rules_applied or [],
+                    "rules_violated": t.rules_excluded or [],
+                    "reasoning_chain": t.reasoning_chain,
+                }
+                for t in traces_to_save
+            ]
+            await self._storage.save_traces(sid, traces)
+
+        # Save taxonomy
+        taxonomy = getattr(self, "_taxonomy", None)
+        if taxonomy and taxonomy.sub_categories:
+            tax_list = [
+                {
+                    "category": sc.parent_category,
+                    "subcategory": sc.name,
+                    "description": sc.description,
+                    "scenario_count": 0,  # Will be computed from scenarios
+                }
+                for sc in taxonomy.sub_categories
+            ]
+            await self._storage.save_taxonomy(sid, tax_list)
 
     def _to_data(self) -> dict:
-        """Serialize session state to dict for storage."""
+        """Serialize session state to dict for storage (legacy, used by _from_data)."""
         taxonomy = getattr(self, "_taxonomy", None)
         return {
             "policy_text": self.policy.text if self.policy else None,
@@ -1046,32 +1287,17 @@ class Session:
 
     @classmethod
     def _from_data(cls, data: dict) -> "Session":
-        """Deserialize session state from dict."""
-        from synkro.types.core import Trace
-        from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
-        from synkro.types.logic_map import GoldenScenario, LogicMap
+        """Deserialize session state from normalized storage format (full load)."""
+        session = cls._from_metadata(data)
 
-        session = cls()
-        if data.get("policy_text"):
-            session.policy = Policy(text=data["policy_text"])
-        if data.get("logic_map"):
-            session.logic_map = LogicMap.model_validate(data["logic_map"])
+        # Load rules/scenarios/traces using helper methods
+        if data.get("rules"):
+            session._load_rules(data["rules"])
         if data.get("scenarios"):
-            session.scenarios = [GoldenScenario.model_validate(s) for s in data["scenarios"]]
-        session.distribution = data.get("distribution")
-        if data.get("coverage"):
-            session.coverage_report = CoverageReport.model_validate(data["coverage"])
-        if data.get("taxonomy"):
-            session._taxonomy = SubCategoryTaxonomy.model_validate(data["taxonomy"])
+            session._load_scenarios(data["scenarios"])
         if data.get("traces"):
-            session.traces = [Trace.model_validate(_fix_trace_grade(t)) for t in data["traces"]]
-        if data.get("verified_traces"):
-            session.verified_traces = [
-                Trace.model_validate(_fix_trace_grade(t)) for t in data["verified_traces"]
-            ]
-        session.model = data.get("model")
-        session.grading_model = data.get("grading_model")
-        session.dataset_type = data.get("dataset_type", "conversation")
+            session._load_traces(data["traces"])
+
         return session
 
     # =========================================================================

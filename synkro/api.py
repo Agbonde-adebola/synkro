@@ -394,69 +394,59 @@ async def verify_traces_async(
     verifier = TraceVerifier(llm=verify_llm)
     refiner = GoldenRefiner(llm=refine_llm)
 
-    # Verify traces
-    asyncio.Semaphore(10)
-    verified_traces = []
-    refinement_count = 0
-    refinement_history = []
+    # Verify traces in parallel
+    semaphore = asyncio.Semaphore(10)  # Limit concurrent API calls
 
-    for i, (trace, scenario) in enumerate(zip(trace_list, scenarios)):
-        # Verify the trace
-        result = await verifier.verify(trace, logic_map, scenario, policy.text)
+    async def verify_single(i: int, trace, scenario):
+        """Verify and refine a single trace."""
+        async with semaphore:
+            result = await verifier.verify(trace, logic_map, scenario, policy.text)
 
-        if result.passed:
-            # Mark as passed
-            trace.grade = type("GradeResult", (), {"passed": True, "issues": [], "feedback": ""})()
-            verified_traces.append(trace)
-        else:
+            if result.passed:
+                trace.grade = type(
+                    "GradeResult", (), {"passed": True, "issues": [], "feedback": ""}
+                )()
+                return (i, trace, None)  # (index, trace, history)
+
             # Attempt refinement
             current_trace = trace
-            refined = False
-
             for iteration in range(max_iterations):
-                # Refine the trace
-                refined_trace = await refiner.refine(current_trace, logic_map, scenario, result)
-
-                # Re-verify
-                result = await verifier.verify(refined_trace, logic_map, scenario, policy.text)
+                async with semaphore:
+                    refined_trace = await refiner.refine(current_trace, logic_map, scenario, result)
+                    result = await verifier.verify(refined_trace, logic_map, scenario, policy.text)
 
                 if result.passed:
                     refined_trace.grade = type(
                         "GradeResult", (), {"passed": True, "issues": [], "feedback": ""}
                     )()
-                    verified_traces.append(refined_trace)
-                    refinement_count += 1
-                    refinement_history.append(
-                        {
-                            "trace_index": i,
-                            "iteration": iteration + 1,
-                            "success": True,
-                        }
+                    return (
+                        i,
+                        refined_trace,
+                        {"trace_index": i, "iteration": iteration + 1, "success": True},
                     )
-                    refined = True
-                    break
-                else:
-                    current_trace = refined_trace
+                current_trace = refined_trace
 
-            if not refined:
-                # Keep last version with failure info
-                current_trace.grade = type(
-                    "GradeResult",
-                    (),
-                    {
-                        "passed": False,
-                        "issues": result.issues,
-                        "feedback": "; ".join(result.issues),
-                    },
-                )()
-                verified_traces.append(current_trace)
-                refinement_history.append(
-                    {
-                        "trace_index": i,
-                        "iteration": max_iterations,
-                        "success": False,
-                    }
-                )
+            # Failed after all iterations
+            current_trace.grade = type(
+                "GradeResult",
+                (),
+                {"passed": False, "issues": result.issues, "feedback": "; ".join(result.issues)},
+            )()
+            return (
+                i,
+                current_trace,
+                {"trace_index": i, "iteration": max_iterations, "success": False},
+            )
+
+    # Run all verifications in parallel
+    tasks = [verify_single(i, t, s) for i, (t, s) in enumerate(zip(trace_list, scenarios))]
+    results = await asyncio.gather(*tasks)
+
+    # Sort by index to maintain order, collect results
+    results.sort(key=lambda x: x[0])
+    verified_traces = [r[1] for r in results]
+    refinement_history = [r[2] for r in results if r[2] is not None]
+    refinement_count = sum(1 for r in results if r[2] and r[2]["success"])
 
     # Calculate pass rate
     passed = sum(1 for t in verified_traces if t.grade and t.grade.passed)

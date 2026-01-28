@@ -118,6 +118,7 @@ async def main():
     # =========================================================================
     print("Verifying persistence...")
     reloaded = await Session.load_from_db("clean-api-demo")
+    await reloaded.ensure_loaded()  # Load data for inspection
     print(f"  Reloaded: {reloaded.session_id}")
     print(f"  Rules: {len(reloaded.logic_map.rules)}")
     print(f"  Scenarios: {len(reloaded.scenarios)}")
