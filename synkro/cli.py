@@ -105,6 +105,11 @@ def generate(
         "--fast",
         help="Skip coverage tracking for faster generation",
     ),
+    pretty: bool = typer.Option(
+        False,
+        "--pretty",
+        help="Pretty-print JSON output (multi-line). Easier to read, but larger files.",
+    ),
 ):
     """
     Generate training data from a policy document.
@@ -203,9 +208,9 @@ def generate(
 
     # Save
     if output:
-        dataset.save(output, format=format)
+        dataset.save(output, format=format, pretty_print=pretty)
     else:
-        dataset.save(format=format)
+        dataset.save(format=format, pretty_print=pretty)
 
 
 @app.command()
