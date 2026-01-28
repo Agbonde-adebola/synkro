@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from synkro.types.core import Trace
     from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
     from synkro.types.logic_map import GoldenScenario, LogicMap
+    from synkro.types.tool import ToolDefinition
 
 
 def _fix_trace_grade(trace_dict: dict) -> dict:
@@ -145,6 +146,7 @@ class Session:
     grading_model: str | None = None
     base_url: str | None = None
     dataset_type: str = "conversation"  # conversation, instruction, evaluation, tool_call
+    tools: list["ToolDefinition"] | None = None  # Required for TOOL_CALL dataset type
 
     def __post_init__(self):
         """Auto-detect models if not specified."""
@@ -403,14 +405,14 @@ class Session:
 
     async def synthesize_traces(
         self,
-        turns: int = 1,
+        turns: int | None = None,
         model: str | None = None,
     ) -> TracesResult:
         """
         Synthesize traces from the stored scenarios.
 
         Args:
-            turns: Number of conversation turns
+            turns: Number of conversation turns (forced to 1 for instruction/evaluation)
             model: Optional model override
 
         Returns:
@@ -428,6 +430,12 @@ class Session:
         if self.policy is None:
             raise ValueError("No policy available.")
 
+        # Force turns=1 for instruction and evaluation (matching Generator behavior)
+        if self.dataset_type in ("instruction", "evaluation"):
+            turns = 1
+        elif turns is None:
+            turns = 1  # Default
+
         self._save_snapshot("Before trace synthesis")
 
         result = await synthesize_traces_async(
@@ -437,6 +445,8 @@ class Session:
             turns=turns,
             model=model or self.model,
             base_url=self.base_url,
+            dataset_type=self.dataset_type,
+            tools=self.tools,
         )
 
         self.traces = result.traces
@@ -487,6 +497,8 @@ class Session:
             max_iterations=max_iterations,
             model=model or self.grading_model,
             base_url=self.base_url,
+            dataset_type=self.dataset_type,
+            tools=self.tools,
         )
 
         self.verified_traces = result.verified_traces
@@ -913,6 +925,7 @@ class Session:
         session_id: str | None = None,
         db_url: str | None = None,
         dataset_type: str = "conversation",
+        tools: list["ToolDefinition"] | None = None,
     ) -> "Session":
         """Create a database-backed session.
 
@@ -925,6 +938,7 @@ class Session:
             db_url: Database URL. Defaults to SQLite at ~/.synkro/sessions.db.
                     For Postgres: "postgresql://user:pass@host/db"
             dataset_type: Type of dataset (conversation, instruction, evaluation, tool_call)
+            tools: List of ToolDefinition for TOOL_CALL dataset type (required for tool_call)
 
         Returns:
             A new Session instance with database persistence enabled.
@@ -933,8 +947,19 @@ class Session:
             >>> session = await Session.create(policy="Expenses over $50 need approval")
             >>> session = await Session.create(policy="...", session_id="exp001")
             >>> session = await Session.create(db_url="postgresql://localhost/synkro")
-            >>> session = await Session.create(policy="...", dataset_type="tool_call")
+            >>> session = await Session.create(policy="...", dataset_type="tool_call", tools=[...])
         """
+        # Validate dataset_type
+        valid_types = {"conversation", "instruction", "evaluation", "tool_call"}
+        if dataset_type not in valid_types:
+            raise ValueError(
+                f"Invalid dataset_type: {dataset_type}. Must be one of: {', '.join(valid_types)}"
+            )
+
+        # TOOL_CALL requires tools (matching Generator validation)
+        if dataset_type == "tool_call" and not tools:
+            raise ValueError("TOOL_CALL dataset type requires tools parameter")
+
         from synkro.storage import Storage
 
         store = Storage(db_url)
@@ -947,6 +972,7 @@ class Session:
         session._storage = store  # type: ignore[attr-defined]
         session._session_id = sid  # type: ignore[attr-defined]
         session.dataset_type = dataset_type
+        session.tools = tools
 
         if policy:
             session.policy = Policy(text=policy)

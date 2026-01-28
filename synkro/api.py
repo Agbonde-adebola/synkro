@@ -57,6 +57,7 @@ from synkro.utils.model_detection import (
 if TYPE_CHECKING:
     from synkro.types.core import Trace
     from synkro.types.logic_map import GoldenScenario, LogicMap
+    from synkro.types.tool import ToolDefinition
 
 
 async def extract_rules_async(
@@ -230,6 +231,8 @@ async def synthesize_traces_async(
     model: str | None = None,
     base_url: str | None = None,
     temperature: float = 0.7,
+    dataset_type: str = "conversation",
+    tools: list["ToolDefinition"] | None = None,
 ) -> TracesResult:
     """
     Synthesize conversation traces from scenarios.
@@ -241,10 +244,12 @@ async def synthesize_traces_async(
         policy: Policy text or Policy object
         scenarios: ScenariosResult or list of GoldenScenario objects
         logic_map: Logic Map (will extract from scenarios if ScenariosResult provided)
-        turns: Number of conversation turns (default: 1)
+        turns: Number of conversation turns (default: 1, forced to 1 for instruction/evaluation)
         model: Model to use for generation (default: gpt-4o-mini)
         base_url: Optional API base URL for local providers
         temperature: Sampling temperature (default: 0.7)
+        dataset_type: Type of dataset (conversation, instruction, evaluation, tool_call)
+        tools: List of ToolDefinition for TOOL_CALL dataset type
 
     Returns:
         TracesResult containing traces and metrics
@@ -256,7 +261,13 @@ async def synthesize_traces_async(
         >>> for trace in traces:
         ...     print(trace.assistant_message[:50])
     """
-    from synkro.generation.golden_responses import GoldenResponseGenerator
+    # Validate TOOL_CALL requires tools (matching Generator validation)
+    if dataset_type == "tool_call" and not tools:
+        raise ValueError("TOOL_CALL dataset type requires tools parameter")
+
+    # Force turns=1 for instruction and evaluation (matching Generator behavior)
+    if dataset_type in ("instruction", "evaluation"):
+        turns = 1
 
     if isinstance(policy, str):
         policy = Policy(text=policy)
@@ -279,9 +290,24 @@ async def synthesize_traces_async(
     metrics = PhaseMetrics(phase="traces", model=model)
     metrics.start()
 
-    # Create response generator
+    # Create LLM client
     llm = LLM(model=model, base_url=base_url, temperature=temperature)
-    generator = GoldenResponseGenerator(llm=llm)
+
+    # Route to correct generator based on dataset_type (matching factory.py pattern)
+    if dataset_type == "tool_call":
+        from synkro.generation.golden_tool_responses import GoldenToolCallResponseGenerator
+        from synkro.generation.tool_simulator import ToolSimulator
+
+        simulator = ToolSimulator(tools=tools, llm=llm)
+        generator = GoldenToolCallResponseGenerator(
+            tools=tools,
+            llm=llm,
+            simulator=simulator,
+        )
+    else:
+        from synkro.generation.golden_responses import GoldenResponseGenerator
+
+        generator = GoldenResponseGenerator(llm=llm)
 
     # Generate traces
     traces = await generator.generate(policy.text, logic_map, scenario_list, turns)
@@ -307,6 +333,8 @@ def synthesize_traces(
     model: str | None = None,
     base_url: str | None = None,
     temperature: float = 0.7,
+    dataset_type: str = "conversation",
+    tools: list["ToolDefinition"] | None = None,
 ) -> TracesResult:
     """
     Synthesize conversation traces (sync wrapper).
@@ -314,7 +342,9 @@ def synthesize_traces(
     See synthesize_traces_async for full documentation.
     """
     return asyncio.run(
-        synthesize_traces_async(policy, scenarios, logic_map, turns, model, base_url, temperature)
+        synthesize_traces_async(
+            policy, scenarios, logic_map, turns, model, base_url, temperature, dataset_type, tools
+        )
     )
 
 
@@ -327,6 +357,8 @@ async def verify_traces_async(
     model: str | None = None,
     refine_model: str | None = None,
     base_url: str | None = None,
+    dataset_type: str = "conversation",
+    tools: list["ToolDefinition"] | None = None,
 ) -> VerificationResult:
     """
     Verify and refine traces against the Logic Map.
@@ -347,6 +379,8 @@ async def verify_traces_async(
         model: Model for verification (default: gpt-4o, stronger is better)
         refine_model: Model for refinement (default: gpt-4o-mini)
         base_url: Optional API base URL for local providers
+        dataset_type: Type of dataset (conversation, instruction, evaluation, tool_call)
+        tools: List of ToolDefinition for TOOL_CALL dataset type
 
     Returns:
         VerificationResult with verified traces, pass rate, and refinement history
@@ -388,11 +422,19 @@ async def verify_traces_async(
     metrics = PhaseMetrics(phase="verification", model=model)
     metrics.start()
 
-    # Create verifier and refiner
+    # Create verifier and refiner - route based on dataset_type
     verify_llm = LLM(model=model, base_url=base_url, temperature=0.1)
     refine_llm = LLM(model=refine_model, base_url=base_url, temperature=0.5)
-    verifier = TraceVerifier(llm=verify_llm)
-    refiner = GoldenRefiner(llm=refine_llm)
+
+    if dataset_type == "tool_call" and tools:
+        from synkro.quality.tool_grader import ToolCallGrader
+        from synkro.quality.tool_refiner import ToolCallRefiner
+
+        verifier = ToolCallGrader(llm=verify_llm, tools=tools)
+        refiner = ToolCallRefiner(llm=refine_llm, tools=tools)
+    else:
+        verifier = TraceVerifier(llm=verify_llm)
+        refiner = GoldenRefiner(llm=refine_llm)
 
     # Verify traces in parallel
     semaphore = asyncio.Semaphore(10)  # Limit concurrent API calls
@@ -475,6 +517,8 @@ def verify_traces(
     model: str | None = None,
     refine_model: str | None = None,
     base_url: str | None = None,
+    dataset_type: str = "conversation",
+    tools: list["ToolDefinition"] | None = None,
 ) -> VerificationResult:
     """
     Verify and refine traces (sync wrapper).
@@ -483,7 +527,16 @@ def verify_traces(
     """
     return asyncio.run(
         verify_traces_async(
-            policy, traces, logic_map, scenarios, max_iterations, model, refine_model, base_url
+            policy,
+            traces,
+            logic_map,
+            scenarios,
+            max_iterations,
+            model,
+            refine_model,
+            base_url,
+            dataset_type,
+            tools,
         )
     )
 

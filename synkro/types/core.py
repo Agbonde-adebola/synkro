@@ -41,6 +41,16 @@ class Message(BaseModel):
         if self.role in ("system", "user") and self.content is None:
             self.content = ""
 
+    def model_dump(self, **kwargs) -> dict:
+        """Exclude None tool fields for clean output."""
+        data = super().model_dump(**kwargs)
+        # Remove null tool fields for non-tool messages
+        if data.get("tool_calls") is None:
+            del data["tool_calls"]
+        if data.get("tool_call_id") is None:
+            del data["tool_call_id"]
+        return data
+
 
 class Scenario(BaseModel):
     """A test scenario for trace generation."""
