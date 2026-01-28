@@ -147,6 +147,7 @@ class Session:
     base_url: str | None = None
     dataset_type: str = "conversation"  # conversation, instruction, evaluation, tool_call
     tools: list["ToolDefinition"] | None = None  # Required for TOOL_CALL dataset type
+    skip_grading: bool = False  # Skip verification phase for faster generation
 
     def __post_init__(self):
         """Auto-detect models if not specified."""
@@ -926,6 +927,7 @@ class Session:
         db_url: str | None = None,
         dataset_type: str = "conversation",
         tools: list["ToolDefinition"] | None = None,
+        skip_grading: bool = False,
     ) -> "Session":
         """Create a database-backed session.
 
@@ -939,6 +941,7 @@ class Session:
                     For Postgres: "postgresql://user:pass@host/db"
             dataset_type: Type of dataset (conversation, instruction, evaluation, tool_call)
             tools: List of ToolDefinition for TOOL_CALL dataset type (required for tool_call)
+            skip_grading: Skip verification phase for faster generation (default: False)
 
         Returns:
             A new Session instance with database persistence enabled.
@@ -948,6 +951,7 @@ class Session:
             >>> session = await Session.create(policy="...", session_id="exp001")
             >>> session = await Session.create(db_url="postgresql://localhost/synkro")
             >>> session = await Session.create(policy="...", dataset_type="tool_call", tools=[...])
+            >>> session = await Session.create(policy="...", skip_grading=True)
         """
         # Validate dataset_type
         valid_types = {"conversation", "instruction", "evaluation", "tool_call"}
@@ -973,6 +977,7 @@ class Session:
         session._session_id = sid  # type: ignore[attr-defined]
         session.dataset_type = dataset_type
         session.tools = tools
+        session.skip_grading = skip_grading
 
         if policy:
             session.policy = Policy(text=policy)
@@ -1753,6 +1758,7 @@ class Session:
         """Complete the pipeline: synthesize, verify, and optionally export.
 
         One-liner to finish everything after rules/scenarios are ready.
+        Respects skip_grading setting from Session.create().
 
         Args:
             output: Optional output file path (e.g., "traces.jsonl")
@@ -1777,8 +1783,8 @@ class Session:
         if not self.traces:
             await self.synthesize_traces()
 
-        # Verify traces
-        if not self.verified_traces:
+        # Verify traces (skip if skip_grading=True, matching Generator behavior)
+        if not self.skip_grading and not self.verified_traces:
             await self.verify_traces()
 
         # Create dataset
