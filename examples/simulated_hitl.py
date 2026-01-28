@@ -5,6 +5,11 @@ Simulated HITL with Database Persistence
 Demonstrates the clean Session API with show commands and done().
 Simulates what an agent would do - step by step with inspection.
 
+Tests all Session API features:
+- dataset_type (conversation, instruction, evaluation, tool_call)
+- skip_grading (skip verification phase)
+- turns (conversation turns)
+
 No interactive prompts - everything is programmatic.
 """
 
@@ -29,16 +34,18 @@ async def main():
     print()
 
     # =========================================================================
-    # Create session
+    # Create session with dataset_type (default: conversation)
     # =========================================================================
-    print("Creating session...")
+    print("Creating session (dataset_type=conversation)...")
     session = await Session.create(
         policy=EXPENSE_POLICY,
         session_id="clean-api-demo",
+        dataset_type="conversation",  # Explicit dataset type
     )
     session.model = Google.GEMINI_25_FLASH
     session.grading_model = Google.GEMINI_25_FLASH
     print(f"Session: {session.session_id}")
+    print(f"Dataset type: {session.dataset_type}")
     print()
 
     # =========================================================================
@@ -190,8 +197,93 @@ async def main():
     print(f"  → Deleted temp session: {deleted}")
     print()
 
+    # =========================================================================
+    # Test dataset_type="instruction" with skip_grading=True
+    # =========================================================================
     print("=" * 70)
-    print("Done! All abstractions tested.")
+    print("Testing dataset_type='instruction' with skip_grading=True")
+    print("=" * 70)
+    print()
+
+    instruction_session = await Session.create(
+        policy=EXPENSE_POLICY,
+        session_id="instruction-test",
+        dataset_type="instruction",  # Single-turn forced
+        skip_grading=True,  # Skip verification for speed
+    )
+    instruction_session.model = Google.GEMINI_25_FLASH
+    instruction_session.grading_model = Google.GEMINI_25_FLASH
+    print(f"Session: {instruction_session.session_id}")
+    print(f"Dataset type: {instruction_session.dataset_type}")
+    print(f"Skip grading: {instruction_session.skip_grading}")
+    print()
+
+    # Quick flow - extract, generate, done (no verify)
+    await instruction_session.extract_rules(instruction_session.policy)
+    print(f"Rules extracted: {len(instruction_session.logic_map.rules)}")
+
+    await instruction_session.generate_scenarios(count=3)
+    print(f"Scenarios generated: {len(instruction_session.scenarios)}")
+
+    # Synthesize with explicit turns (will be forced to 1 for instruction)
+    await instruction_session.synthesize_traces(turns=5)  # Should be forced to 1
+    print(f"Traces synthesized: {len(instruction_session.traces)}")
+
+    # Check message count (should be 2-3 for single-turn: system + user + assistant)
+    first_trace = instruction_session.traces[0]
+    print(f"Messages in first trace: {len(first_trace.messages)} (should be 2-3 for single-turn)")
+
+    # done() should skip verification
+    dataset = await instruction_session.done(output="instruction_output.jsonl")
+    print(f"Dataset traces: {len(dataset.traces)}")
+    print(f"Verified traces: {instruction_session.verified_traces}")  # Should be None
+    print()
+
+    # Cleanup
+    await instruction_session.delete()
+    print("Instruction session deleted.")
+    print()
+
+    # =========================================================================
+    # Test custom turns with conversation type
+    # =========================================================================
+    print("=" * 70)
+    print("Testing custom turns (turns=3)")
+    print("=" * 70)
+    print()
+
+    turns_session = await Session.create(
+        policy=EXPENSE_POLICY,
+        session_id="turns-test",
+        dataset_type="conversation",
+        skip_grading=True,
+    )
+    turns_session.model = Google.GEMINI_25_FLASH
+    turns_session.grading_model = Google.GEMINI_25_FLASH
+
+    await turns_session.extract_rules(turns_session.policy)
+    await turns_session.generate_scenarios(count=2)
+
+    # Synthesize with 3 turns
+    await turns_session.synthesize_traces(turns=3)
+    print(f"Traces synthesized: {len(turns_session.traces)}")
+
+    # Check message count (should be more than single-turn)
+    first_trace = turns_session.traces[0]
+    print(f"Messages in first trace: {len(first_trace.messages)} (multi-turn)")
+
+    await turns_session.done(output="turns_output.jsonl")
+
+    # Cleanup
+    await turns_session.delete()
+    print("Turns session deleted.")
+    print()
+
+    print("=" * 70)
+    print("Done! All Session API features tested:")
+    print("  - dataset_type: conversation, instruction")
+    print("  - skip_grading: True/False")
+    print("  - turns: custom turn count")
     print("=" * 70)
 
 
