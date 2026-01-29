@@ -20,7 +20,9 @@ from dotenv import load_dotenv
 
 from synkro import Session
 from synkro.examples import EXPENSE_POLICY
-from synkro.models.google import Google
+
+# from synkro.models.google import Google
+from synkro.models import Cerebras
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / ".env"
@@ -42,8 +44,8 @@ async def main():
         session_id="clean-api-demo",
         dataset_type="conversation",  # Explicit dataset type
     )
-    session.model = Google.GEMINI_25_FLASH
-    session.grading_model = Google.GEMINI_25_FLASH
+    session.model = Cerebras.LLAMA_33_70B
+    session.grading_model = Cerebras.LLAMA_33_70B
     print(f"Session: {session.session_id}")
     print(f"Dataset type: {session.dataset_type}")
     print()
@@ -211,8 +213,8 @@ async def main():
         dataset_type="instruction",  # Single-turn forced
         skip_grading=True,  # Skip verification for speed
     )
-    instruction_session.model = Google.GEMINI_25_FLASH
-    instruction_session.grading_model = Google.GEMINI_25_FLASH
+    instruction_session.model = Cerebras.LLAMA_33_70B
+    instruction_session.grading_model = Cerebras.LLAMA_33_70B
     print(f"Session: {instruction_session.session_id}")
     print(f"Dataset type: {instruction_session.dataset_type}")
     print(f"Skip grading: {instruction_session.skip_grading}")
@@ -258,8 +260,8 @@ async def main():
         dataset_type="conversation",
         skip_grading=True,
     )
-    turns_session.model = Google.GEMINI_25_FLASH
-    turns_session.grading_model = Google.GEMINI_25_FLASH
+    turns_session.model = Cerebras.LLAMA_33_70B
+    turns_session.grading_model = Cerebras.LLAMA_33_70B
 
     await turns_session.extract_rules(turns_session.policy)
     await turns_session.generate_scenarios(count=2)

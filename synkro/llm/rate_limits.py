@@ -6,6 +6,7 @@ PROVIDER_RATE_LIMITS = {
     "anthropic": 60,  # Standard limit
     "google": 60,  # Gemini API
     "gemini": 60,  # Gemini API (alternative prefix)
+    "cerebras": 60,  # Cerebras API
     "ollama": 1000,  # Local - no real limit
     "vllm": 1000,  # Local - no real limit
 }
@@ -26,6 +27,7 @@ DEFAULT_WORKERS = {
     "anthropic": 10,  # ~60 RPM, more conservative
     "google": 15,  # Gemini
     "gemini": 15,  # Gemini
+    "cerebras": 15,  # Cerebras
     "ollama": 50,  # Local - high parallelism
     "vllm": 50,  # Local - high parallelism
 }

@@ -26,6 +26,8 @@ def detect_available_provider() -> str | None:
         return "openai"
     if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
         return "google"
+    if os.getenv("CEREBRAS_API_KEY"):
+        return "cerebras"
     return None
 
 
@@ -39,7 +41,7 @@ def get_default_models() -> Tuple[str, str]:
     Raises:
         EnvironmentError: If no API key is found
     """
-    from synkro.models import Anthropic, Google, OpenAI
+    from synkro.models import Anthropic, Cerebras, Google, OpenAI
 
     provider = detect_available_provider()
 
@@ -49,12 +51,15 @@ def get_default_models() -> Tuple[str, str]:
         return (OpenAI.GPT_4O_MINI, OpenAI.GPT_4O)
     elif provider == "google":
         return (Google.GEMINI_2_FLASH, Google.GEMINI_2_FLASH)
+    elif provider == "cerebras":
+        return (Cerebras.LLAMA_33_70B, Cerebras.GPT_OSS_120B)
     else:
         raise EnvironmentError(
             "No LLM API key found. Please set one of:\n"
             "  - ANTHROPIC_API_KEY (for Claude)\n"
             "  - OPENAI_API_KEY (for GPT)\n"
-            "  - GOOGLE_API_KEY or GEMINI_API_KEY (for Gemini)"
+            "  - GOOGLE_API_KEY or GEMINI_API_KEY (for Gemini)\n"
+            "  - CEREBRAS_API_KEY (for Cerebras)"
         )
 
 
@@ -77,7 +82,7 @@ def get_provider_info() -> dict:
     Returns:
         Dict with provider status and recommended models
     """
-    from synkro.models import Anthropic, Google, OpenAI
+    from synkro.models import Anthropic, Cerebras, Google, OpenAI
 
     info = {
         "anthropic": {
@@ -97,6 +102,12 @@ def get_provider_info() -> dict:
             "env_var": "GOOGLE_API_KEY or GEMINI_API_KEY",
             "generation_model": Google.GEMINI_2_FLASH,
             "grading_model": Google.GEMINI_2_FLASH,
+        },
+        "cerebras": {
+            "available": bool(os.getenv("CEREBRAS_API_KEY")),
+            "env_var": "CEREBRAS_API_KEY",
+            "generation_model": Cerebras.LLAMA_33_70B,
+            "grading_model": Cerebras.GPT_OSS_120B,
         },
     }
 

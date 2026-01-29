@@ -4,6 +4,7 @@ Supported providers:
 - OpenAI (GPT-4o, GPT-4o-mini)
 - Anthropic (Claude 3.5 Sonnet/Haiku)
 - Google (Gemini 2.5 Flash/Pro)
+- Cerebras (Llama 3.3, GPT-OSS, Qwen)
 - Local (Ollama, vLLM, custom)
 
 Usage:
@@ -11,22 +12,24 @@ Usage:
     from synkro.models.openai import OpenAI
     from synkro.models.anthropic import Anthropic
     from synkro.models.google import Google
+    from synkro.models.cerebras import Cerebras
     from synkro.models.local import Local
 
     # Convenience import (all at once)
-    from synkro.models import OpenAI, Anthropic, Google, Local
+    from synkro.models import OpenAI, Anthropic, Google, Cerebras, Local
 """
 
 from enum import Enum
 from typing import Union
 
 from synkro.models.anthropic import Anthropic
+from synkro.models.cerebras import Cerebras
 from synkro.models.google import Google
 from synkro.models.local import Local, LocalModel
 from synkro.models.openai import OpenAI
 
 # Union type for any model
-Model = Union[OpenAI, Anthropic, Google, LocalModel, str]
+Model = Union[OpenAI, Anthropic, Google, Cerebras, LocalModel, str]
 
 
 def get_model_string(model: Model) -> str:
@@ -42,6 +45,7 @@ __all__ = [
     "OpenAI",
     "Anthropic",
     "Google",
+    "Cerebras",
     "Local",
     "LocalModel",
     "Model",
