@@ -52,7 +52,7 @@ def get_default_models() -> Tuple[str, str]:
     elif provider == "google":
         return (Google.GEMINI_2_FLASH, Google.GEMINI_2_FLASH)
     elif provider == "cerebras":
-        return (Cerebras.LLAMA_33_70B, Cerebras.GPT_OSS_120B)
+        return (Cerebras.GPT_OSS_120B, Cerebras.GPT_OSS_120B)
     else:
         raise EnvironmentError(
             "No LLM API key found. Please set one of:\n"
@@ -106,7 +106,7 @@ def get_provider_info() -> dict:
         "cerebras": {
             "available": bool(os.getenv("CEREBRAS_API_KEY")),
             "env_var": "CEREBRAS_API_KEY",
-            "generation_model": Cerebras.LLAMA_33_70B,
+            "generation_model": Cerebras.GPT_OSS_120B,
             "grading_model": Cerebras.GPT_OSS_120B,
         },
     }

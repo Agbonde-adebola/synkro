@@ -44,8 +44,8 @@ async def main():
         session_id="clean-api-demo",
         dataset_type="conversation",  # Explicit dataset type
     )
-    session.model = Cerebras.LLAMA_33_70B
-    session.grading_model = Cerebras.LLAMA_33_70B
+    session.model = Cerebras.GPT_OSS_120B
+    session.grading_model = Cerebras.GPT_OSS_120B
     print(f"Session: {session.session_id}")
     print(f"Dataset type: {session.dataset_type}")
     print()
@@ -213,8 +213,8 @@ async def main():
         dataset_type="instruction",  # Single-turn forced
         skip_grading=True,  # Skip verification for speed
     )
-    instruction_session.model = Cerebras.LLAMA_33_70B
-    instruction_session.grading_model = Cerebras.LLAMA_33_70B
+    instruction_session.model = Cerebras.GPT_OSS_120B
+    instruction_session.grading_model = Cerebras.GPT_OSS_120B
     print(f"Session: {instruction_session.session_id}")
     print(f"Dataset type: {instruction_session.dataset_type}")
     print(f"Skip grading: {instruction_session.skip_grading}")
@@ -260,8 +260,8 @@ async def main():
         dataset_type="conversation",
         skip_grading=True,
     )
-    turns_session.model = Cerebras.LLAMA_33_70B
-    turns_session.grading_model = Cerebras.LLAMA_33_70B
+    turns_session.model = Cerebras.GPT_OSS_120B
+    turns_session.grading_model = Cerebras.GPT_OSS_120B
 
     await turns_session.extract_rules(turns_session.policy)
     await turns_session.generate_scenarios(count=2)

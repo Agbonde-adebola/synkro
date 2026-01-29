@@ -26,7 +26,7 @@ def _get_default_model() -> str:
     elif os.getenv("OPENAI_API_KEY"):
         return "gpt-4o-mini"
     elif os.getenv("CEREBRAS_API_KEY"):
-        return "cerebras/llama-3.3-70b"
+        return "cerebras/gpt-oss-120b"
     else:
         # Default to OpenAI, will fail with clear error if no key
         return "gpt-4o-mini"
@@ -45,7 +45,7 @@ def _get_ingestion_model() -> str:
     elif os.getenv("OPENAI_API_KEY"):
         return "gpt-4o-mini"  # Fast OpenAI model
     elif os.getenv("CEREBRAS_API_KEY"):
-        return "cerebras/llama-3.3-70b"  # Fast Cerebras model
+        return "cerebras/gpt-oss-120b"  # Fast Cerebras model
     else:
         return "gpt-4o-mini"
 
