@@ -148,6 +148,7 @@ class Session:
     dataset_type: str = "conversation"  # conversation, instruction, evaluation, tool_call
     tools: list["ToolDefinition"] | None = None  # Required for TOOL_CALL dataset type
     skip_grading: bool = False  # Skip verification phase for faster generation
+    concurrency: int = 50  # Max concurrent LLM calls for I/O parallelism
 
     def __post_init__(self):
         """Auto-detect models if not specified."""
@@ -408,6 +409,7 @@ class Session:
         self,
         turns: int | None = None,
         model: str | None = None,
+        concurrency: int | None = None,
     ) -> TracesResult:
         """
         Synthesize traces from the stored scenarios.
@@ -415,6 +417,7 @@ class Session:
         Args:
             turns: Number of conversation turns (forced to 1 for instruction/evaluation)
             model: Optional model override
+            concurrency: Max concurrent LLM calls (default: session.concurrency or 50)
 
         Returns:
             TracesResult with generated traces
@@ -448,6 +451,7 @@ class Session:
             base_url=self.base_url,
             dataset_type=self.dataset_type,
             tools=self.tools,
+            concurrency=concurrency or self.concurrency,
         )
 
         self.traces = result.traces
@@ -463,6 +467,7 @@ class Session:
         self,
         max_iterations: int = 3,
         model: str | None = None,
+        concurrency: int | None = None,
     ) -> VerificationResult:
         """
         Verify and refine traces.
@@ -470,6 +475,7 @@ class Session:
         Args:
             max_iterations: Maximum refinement attempts
             model: Optional model override
+            concurrency: Max concurrent LLM calls (default: session.concurrency or 50)
 
         Returns:
             VerificationResult with verified traces and pass rate
@@ -500,6 +506,7 @@ class Session:
             base_url=self.base_url,
             dataset_type=self.dataset_type,
             tools=self.tools,
+            concurrency=concurrency or self.concurrency,
         )
 
         self.verified_traces = result.verified_traces
@@ -928,6 +935,7 @@ class Session:
         dataset_type: str = "conversation",
         tools: list["ToolDefinition"] | None = None,
         skip_grading: bool = False,
+        concurrency: int = 50,
     ) -> "Session":
         """Create a database-backed session.
 
@@ -942,6 +950,7 @@ class Session:
             dataset_type: Type of dataset (conversation, instruction, evaluation, tool_call)
             tools: List of ToolDefinition for TOOL_CALL dataset type (required for tool_call)
             skip_grading: Skip verification phase for faster generation (default: False)
+            concurrency: Max concurrent LLM calls for I/O parallelism (default: 50)
 
         Returns:
             A new Session instance with database persistence enabled.
@@ -952,6 +961,7 @@ class Session:
             >>> session = await Session.create(db_url="postgresql://localhost/synkro")
             >>> session = await Session.create(policy="...", dataset_type="tool_call", tools=[...])
             >>> session = await Session.create(policy="...", skip_grading=True)
+            >>> session = await Session.create(policy="...", concurrency=100)  # Higher parallelism
         """
         # Validate dataset_type
         valid_types = {"conversation", "instruction", "evaluation", "tool_call"}
@@ -978,6 +988,7 @@ class Session:
         session.dataset_type = dataset_type
         session.tools = tools
         session.skip_grading = skip_grading
+        session.concurrency = concurrency
 
         if policy:
             session.policy = Policy(text=policy)
@@ -1754,6 +1765,7 @@ class Session:
         self,
         output: str | None = None,
         count: int | None = None,
+        concurrency: int | None = None,
     ) -> "Dataset":
         """Complete the pipeline: synthesize, verify, and optionally export.
 
@@ -1763,6 +1775,7 @@ class Session:
         Args:
             output: Optional output file path (e.g., "traces.jsonl")
             count: Optional scenario count if scenarios not yet generated
+            concurrency: Max concurrent LLM calls (default: session.concurrency or 50)
 
         Returns:
             The final Dataset
@@ -1771,7 +1784,10 @@ class Session:
             >>> dataset = await session.done()
             >>> dataset = await session.done(output="my_traces.jsonl")
             >>> dataset = await session.done(count=50, output="traces.jsonl")
+            >>> dataset = await session.done(concurrency=100)  # Higher parallelism
         """
+        # Use provided concurrency or session default
+        effective_concurrency = concurrency or self.concurrency
 
         # Generate scenarios if needed
         if not self.scenarios and count:
@@ -1781,11 +1797,11 @@ class Session:
 
         # Synthesize traces
         if not self.traces:
-            await self.synthesize_traces()
+            await self.synthesize_traces(concurrency=effective_concurrency)
 
         # Verify traces (skip if skip_grading=True, matching Generator behavior)
         if not self.skip_grading and not self.verified_traces:
-            await self.verify_traces()
+            await self.verify_traces(concurrency=effective_concurrency)
 
         # Create dataset
         dataset = self.to_dataset()

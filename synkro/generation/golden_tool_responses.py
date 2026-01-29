@@ -723,6 +723,7 @@ applying the relevant rules from the Logic Map."""
         logic_map: LogicMap,
         scenarios: list[GoldenScenario],
         target_turns: int = 1,
+        concurrency: int = 50,
     ) -> list[Trace]:
         """
         Generate traces for multiple scenarios.
@@ -732,11 +733,18 @@ applying the relevant rules from the Logic Map."""
             logic_map: The extracted Logic Map
             scenarios: List of golden scenarios
             target_turns: Number of conversation turns
+            concurrency: Maximum concurrent LLM calls (default: 50)
 
         Returns:
             List of traces with tool calling format
         """
-        tasks = [self.generate_single(policy_text, logic_map, s, target_turns) for s in scenarios]
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def generate_with_limit(scenario):
+            async with semaphore:
+                return await self.generate_single(policy_text, logic_map, scenario, target_turns)
+
+        tasks = [generate_with_limit(s) for s in scenarios]
         return await asyncio.gather(*tasks)
 
 
