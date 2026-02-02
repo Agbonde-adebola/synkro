@@ -1,0 +1,6 @@
+name: funding_verification
+intent: "Verify company funding claims (amount, round type, investor)"
+sql_file: ./funding.sql
+params: [company_name]
+dsn: ${DATABASE_URL}
+on_no_results: skip

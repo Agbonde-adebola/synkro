@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synkro"
-version = "0.5.31"
+version = "0.5.32"
 description = "Curate, evaluate, and ship LLM datasets from any document"
 readme = "README.md"
 license = "Apache-2.0"
@@ -53,6 +53,11 @@ dev = [
 ]
 postgres = [
     "asyncpg>=0.29",
+]
+verify = [
+    "asyncpg>=0.29",
+    "pyyaml>=6.0",
+    "openai>=1.0",
 ]
 
 [project.scripts]

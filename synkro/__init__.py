@@ -148,6 +148,10 @@ from synkro.utils.model_detection import (
     get_provider_info,
 )
 
+# SQL Verification
+from synkro.verify import Report, Result, SQLRefiner, Verdict, Verifier, verify_batch
+from synkro.verify import verify as verify_sql
+
 __all__ = [
     # Primary API
     "create_pipeline",
@@ -181,6 +185,14 @@ __all__ = [
     "verify_traces_stream",
     # Session class
     "Session",
+    # SQL Verification
+    "verify_sql",
+    "verify_batch",
+    "Verifier",
+    "SQLRefiner",
+    "Report",
+    "Result",
+    "Verdict",
     # Tool definitions
     "TOOL_DEFINITIONS",
     # Model detection
