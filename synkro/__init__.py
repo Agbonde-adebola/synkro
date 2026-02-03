@@ -96,6 +96,14 @@ from synkro.models import Anthropic, Google, Local, LocalModel, OpenAI
 # GenerationResult for return_logic_map=True (backward compatibility)
 from synkro.pipeline.runner import GenerationResult, ScenariosResult
 from synkro.pipelines import create_pipeline
+
+# Policy Remediation
+from synkro.remediation import (
+    PolicyDetector,
+    PolicyRefiner,
+    Violation,
+    ViolationStore,
+)
 from synkro.reporting import (
     CallbackReporter,
     FileLoggingReporter,
@@ -193,6 +201,11 @@ __all__ = [
     "Report",
     "Result",
     "Verdict",
+    # Policy Remediation
+    "PolicyDetector",
+    "PolicyRefiner",
+    "Violation",
+    "ViolationStore",
     # Tool definitions
     "TOOL_DEFINITIONS",
     # Model detection

@@ -37,6 +37,8 @@ from synkro.types.results import (
 from synkro.utils.model_detection import get_default_models
 
 if TYPE_CHECKING:
+    from synkro.remediation.store import ViolationStore
+    from synkro.remediation.types import Violation
     from synkro.types.core import Trace
     from synkro.types.coverage import CoverageReport, SubCategoryTaxonomy
     from synkro.types.logic_map import GoldenScenario, LogicMap
@@ -134,6 +136,11 @@ class Session:
     traces: list["Trace"] | None = None
     verified_traces: list["Trace"] | None = None
     coverage_report: "CoverageReport | None" = None
+
+    # Detection & Remediation state
+    violations: list["Violation"] | None = None
+    violation_store: "ViolationStore | None" = None
+    remediated_traces: Dataset | None = None
 
     # Accumulated metrics
     metrics: Metrics = field(default_factory=Metrics)
@@ -519,6 +526,170 @@ class Session:
         return result
 
     # =========================================================================
+    # DETECTION & REMEDIATION
+    # =========================================================================
+
+    async def detect_violations(
+        self,
+        traces: list[list[dict]] | None = None,
+        model: str | None = None,
+        concurrency: int | None = None,
+    ) -> list["Violation"]:
+        """
+        Detect policy violations in traces.
+
+        Uses the stored Logic Map to identify violations in provided traces
+        or internal verified/unverified traces.
+
+        Args:
+            traces: External traces to analyze. If None, uses self.verified_traces
+                    or self.traces.
+            model: Optional model override for detection
+            concurrency: Max parallel detection calls (default: session.concurrency or 50)
+
+        Returns:
+            List of Violation objects
+
+        Raises:
+            ValueError: If no Logic Map is available or no traces to analyze
+
+        Examples:
+            >>> # Detect violations in external bad traces
+            >>> await session.detect_violations(traces=bad_traces)
+            >>> print(f"Found {len(session.violations)} violations")
+
+            >>> # Detect violations in session's own traces
+            >>> await session.detect_violations()
+        """
+        from synkro.remediation.detector import PolicyDetector
+        from synkro.remediation.store import ViolationStore
+
+        if self.logic_map is None:
+            raise ValueError("No Logic Map available. Call extract_rules first.")
+
+        # Get traces to analyze
+        traces_to_analyze = traces
+        if traces_to_analyze is None:
+            # Use internal traces
+            if self.verified_traces:
+                traces_to_analyze = [
+                    [{"role": m.role, "content": m.content} for m in t.messages]
+                    for t in self.verified_traces
+                ]
+            elif self.traces:
+                traces_to_analyze = [
+                    [{"role": m.role, "content": m.content} for m in t.messages]
+                    for t in self.traces
+                ]
+
+        if not traces_to_analyze:
+            raise ValueError("No traces to analyze. Provide traces or run synthesize_traces first.")
+
+        self._save_snapshot("Before violation detection")
+
+        # Create detector
+        detector = PolicyDetector(self.logic_map, model=model or self.grading_model)
+
+        # Run detection
+        effective_concurrency = concurrency or self.concurrency
+        violations = await detector.detect(traces_to_analyze, concurrency=effective_concurrency)
+
+        # Store results
+        self.violations = violations
+        self.violation_store = ViolationStore()
+        self.violation_store.add_batch(violations)
+
+        await self._persist()
+
+        return violations
+
+    async def remediate(
+        self,
+        traces_per_violation: int = 1,
+        turns: int = 1,
+        model: str | None = None,
+        concurrency: int | None = None,
+    ) -> Dataset:
+        """
+        Generate golden traces from detected violations.
+
+        Takes stored violations and generates compliant traces that demonstrate
+        correct policy adherence. Output is ready for SFT finetuning.
+
+        Args:
+            traces_per_violation: Number of golden traces per violation (default: 1)
+            turns: Conversation turns per trace (default: 1)
+            model: Optional model override for generation
+            concurrency: Max parallel generation calls (default: session.concurrency or 50)
+
+        Returns:
+            Dataset containing golden traces in OpenAI chat format
+
+        Raises:
+            ValueError: If no violations available or no Logic Map
+
+        Examples:
+            >>> await session.detect_violations(traces=bad_traces)
+            >>> golden = await session.remediate(traces_per_violation=3)
+            >>> golden.save("./golden_traces.jsonl")  # Ready for SFT
+        """
+        from synkro.remediation.refiner import PolicyRefiner
+
+        if not self.violations:
+            raise ValueError("No violations to remediate. Call detect_violations first.")
+        if self.logic_map is None:
+            raise ValueError("No Logic Map available.")
+        if self.violation_store is None:
+            raise ValueError("No violation store available.")
+
+        self._save_snapshot("Before remediation")
+
+        # Create refiner
+        refiner = PolicyRefiner(self.logic_map, model=model or self.model)
+
+        # Run remediation
+        effective_concurrency = concurrency or self.concurrency
+        golden = await refiner.refine(
+            self.violation_store,
+            traces_per_violation=traces_per_violation,
+            turns=turns,
+            concurrency=effective_concurrency,
+        )
+
+        # Store results
+        self.remediated_traces = golden
+
+        await self._persist()
+
+        return golden
+
+    def save_violations(self, path: str | Path) -> None:
+        """Save violations to JSONL (LangSmith/Langfuse/Datadog compatible).
+
+        Args:
+            path: Output file path
+
+        Examples:
+            >>> session.save_violations("./violations.jsonl")
+        """
+        if not self.violation_store:
+            raise ValueError("No violations to save. Call detect_violations first.")
+        self.violation_store.save(path)
+
+    def save_remediation(self, path: str | Path) -> None:
+        """Save remediated golden traces to JSONL (SFT ready).
+
+        Args:
+            path: Output file path
+
+        Examples:
+            >>> session.save_remediation("./golden_traces.jsonl")
+        """
+        if not self.remediated_traces:
+            raise ValueError("No remediated traces. Call remediate first.")
+        self.remediated_traces.save(path)
+
+    # =========================================================================
     # STREAMING METHODS
     # =========================================================================
 
@@ -717,6 +888,9 @@ class Session:
         self.traces = None
         self.verified_traces = None
         self.coverage_report = None
+        self.violations = None
+        self.violation_store = None
+        self.remediated_traces = None
         self.metrics = Metrics()
         self.history = []
 
@@ -1306,6 +1480,22 @@ class Session:
             ]
             await self._storage.save_taxonomy(sid, tax_list)
 
+        # Save violations
+        if self.violations:
+            violations_data = [v.to_dict() for v in self.violations]
+            await self._storage.save_violations(sid, violations_data)
+
+        # Save remediated traces
+        if self.remediated_traces:
+            remediated_data = [
+                {
+                    "messages": [{"role": m.role, "content": m.content} for m in t.messages],
+                    "rules_applied": t.rules_applied or [],
+                }
+                for t in self.remediated_traces
+            ]
+            await self._storage.save_remediated_traces(sid, remediated_data)
+
     def _to_data(self) -> dict:
         """Serialize session state to dict for storage (legacy, used by _from_data)."""
         taxonomy = getattr(self, "_taxonomy", None)
@@ -1496,6 +1686,68 @@ class Session:
                 count += 1
         return "\n".join(lines)
 
+    def show_violations(self, limit: int | None = None) -> str:
+        """Show detected violations.
+
+        Args:
+            limit: Max violations to show (None = all)
+
+        Returns:
+            Formatted string of violations
+
+        Examples:
+            >>> print(session.show_violations())
+            >>> print(session.show_violations(limit=5))
+        """
+        if not self.violations:
+            return "No violations detected yet. Call detect_violations() first."
+
+        lines = [f"Violations ({len(self.violations)} total):", ""]
+        violations = self.violations[:limit] if limit else self.violations
+        for v in violations:
+            rules = ", ".join(v.rules_violated[:3]) if v.rules_violated else "none"
+            if len(v.rules_violated) > 3:
+                rules += f" +{len(v.rules_violated) - 3}"
+            lines.append(f"  [{v.severity.upper()}] {v.id[:12]}... Rules: {rules}")
+            if v.user_intent:
+                lines.append(f"    Intent: {v.user_intent[:60]}...")
+            if v.issues:
+                lines.append(f"    Issue: {v.issues[0][:60]}...")
+        if limit and len(self.violations) > limit:
+            lines.append(f"  ... and {len(self.violations) - limit} more")
+        return "\n".join(lines)
+
+    def show_remediation(self, limit: int | None = None) -> str:
+        """Show remediated golden traces.
+
+        Args:
+            limit: Max traces to show (None = all)
+
+        Returns:
+            Formatted string of golden traces
+
+        Examples:
+            >>> print(session.show_remediation())
+            >>> print(session.show_remediation(limit=5))
+        """
+        if not self.remediated_traces:
+            return "No remediated traces yet. Call remediate() first."
+
+        traces = list(self.remediated_traces)
+        lines = [f"Remediated Traces ({len(traces)} total):", ""]
+        display = traces[:limit] if limit else traces
+        for i, t in enumerate(display, 1):
+            user_msg = t.user_message[:50] if t.user_message else "N/A"
+            asst_msg = t.assistant_message[:50] if t.assistant_message else "N/A"
+            lines.append(f"  {i}. User: {user_msg}...")
+            lines.append(f"     Asst: {asst_msg}...")
+            if t.rules_applied:
+                lines.append(f"     Rules: {', '.join(t.rules_applied[:3])}")
+            lines.append("")
+        if limit and len(traces) > limit:
+            lines.append(f"  ... and {len(traces) - limit} more")
+        return "\n".join(lines)
+
     def show_failed(self) -> str:
         """Show failed traces with issues.
 
@@ -1583,6 +1835,18 @@ class Session:
             parts.append(f"Verified: ✓ ({passed}/{len(self.verified_traces)})")
         else:
             parts.append("Verified: ✗")
+
+        # Violations
+        if self.violations:
+            parts.append(f"Violations: ✓ ({len(self.violations)})")
+        else:
+            parts.append("Violations: ✗")
+
+        # Remediation
+        if self.remediated_traces:
+            parts.append(f"Remediated: ✓ ({len(self.remediated_traces)})")
+        else:
+            parts.append("Remediated: ✗")
 
         # Cost (if any)
         if self.metrics.total_cost > 0:

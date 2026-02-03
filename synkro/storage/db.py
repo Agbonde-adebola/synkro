@@ -143,6 +143,12 @@ class SessionRecord(Base):
     taxonomy = relationship(
         "TaxonomyRecord", back_populates="session", cascade="all, delete-orphan"
     )
+    violations = relationship(
+        "ViolationRecord", back_populates="session", cascade="all, delete-orphan"
+    )
+    remediated_traces = relationship(
+        "RemediatedTraceRecord", back_populates="session", cascade="all, delete-orphan"
+    )
     stats = relationship(
         "SessionStatsRecord",
         back_populates="session",
@@ -253,6 +259,54 @@ class TaxonomyRecord(Base):
     __table_args__ = (Index("idx_taxonomy_session", "session_id"),)
 
 
+class ViolationRecord(Base):
+    """Detected policy violations - same format as ViolationStore hashmap."""
+
+    __tablename__ = "violations"
+
+    id = Column(String(36), primary_key=True)  # Same as Violation.id
+    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
+
+    # Store entire violation as JSON (same format as hashmap)
+    # This includes: trace_id, name, score, value, data_type, comment,
+    # rules_violated, issues, severity, trace, user_intent, context,
+    # expected_outcome, metadata, timestamp
+    data = Column(JSONType(), nullable=False)
+
+    # Indexed fields for querying (extracted from JSON for fast lookups)
+    trace_id = Column(String(50))
+    severity = Column(String(20))
+    score = Column(Float)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    session = relationship("SessionRecord", back_populates="violations")
+
+    __table_args__ = (
+        Index("idx_violations_session", "session_id"),
+        Index("idx_violations_severity", "session_id", "severity"),
+    )
+
+
+class RemediatedTraceRecord(Base):
+    """Golden traces generated from violations - SFT ready format."""
+
+    __tablename__ = "remediated_traces"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
+    violation_id = Column(String(36))  # Source violation
+
+    # Store as JSON - same format as golden_traces.jsonl
+    messages = Column(JSONType(), nullable=False)
+    rules_applied = Column(StringArray(), default=list)
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    session = relationship("SessionRecord", back_populates="remediated_traces")
+
+    __table_args__ = (Index("idx_remediated_session", "session_id"),)
+
+
 class SessionStatsRecord(Base):
     """Pre-computed statistics to avoid aggregating many rows."""
 
@@ -266,6 +320,8 @@ class SessionStatsRecord(Base):
     failed_count = Column(Integer, default=0)
     pass_rate = Column(Float, default=0.0)
     total_cost = Column(Float, default=0.0)
+    violation_count = Column(Integer, default=0)
+    remediated_count = Column(Integer, default=0)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     session = relationship("SessionRecord", back_populates="stats")
@@ -896,6 +952,105 @@ class Storage:
             ]
 
     # -----------------------------------------------------------------------
+    # Violations CRUD
+    # -----------------------------------------------------------------------
+
+    async def save_violations(self, session_id: str, violations: list[dict]) -> None:
+        """Replace all violations for a session. Data is stored as-is (same as hashmap)."""
+        await self._ensure_init()
+        async with self._session_factory() as db:
+            await db.execute(
+                ViolationRecord.__table__.delete().where(ViolationRecord.session_id == session_id)
+            )
+            if violations:
+                db.add_all(
+                    [
+                        ViolationRecord(
+                            id=v["id"],
+                            session_id=session_id,
+                            data=v,  # Store entire violation JSON as-is
+                            trace_id=v.get("trace_id"),
+                            severity=v.get("severity"),
+                            score=v.get("score"),
+                        )
+                        for v in violations
+                    ]
+                )
+            await db.commit()
+        await self._update_stats(session_id)
+
+    async def get_violations(self, session_id: str) -> list[dict]:
+        """Get violations for a session. Returns same format as hashmap."""
+        await self._ensure_init()
+        async with self._session_factory() as db:
+            result = await db.execute(
+                select(ViolationRecord)
+                .where(ViolationRecord.session_id == session_id)
+                .order_by(ViolationRecord.created_at)
+            )
+            # Return the JSON data directly - same format as hashmap
+            return [v.data for v in result.scalars()]
+
+    async def get_violations_by_severity(self, session_id: str, severity: str) -> list[dict]:
+        """Get violations filtered by severity."""
+        await self._ensure_init()
+        async with self._session_factory() as db:
+            result = await db.execute(
+                select(ViolationRecord).where(
+                    ViolationRecord.session_id == session_id,
+                    ViolationRecord.severity == severity,
+                )
+            )
+            return [v.data for v in result.scalars()]
+
+    # -----------------------------------------------------------------------
+    # Remediated Traces CRUD
+    # -----------------------------------------------------------------------
+
+    async def save_remediated_traces(self, session_id: str, traces: list[dict]) -> None:
+        """Replace all remediated traces for a session."""
+        await self._ensure_init()
+        async with self._session_factory() as db:
+            await db.execute(
+                RemediatedTraceRecord.__table__.delete().where(
+                    RemediatedTraceRecord.session_id == session_id
+                )
+            )
+            if traces:
+                db.add_all(
+                    [
+                        RemediatedTraceRecord(
+                            session_id=session_id,
+                            violation_id=t.get("violation_id"),
+                            messages=t.get("messages", []),
+                            rules_applied=t.get("rules_applied", []),
+                        )
+                        for t in traces
+                    ]
+                )
+            await db.commit()
+        await self._update_stats(session_id)
+
+    async def get_remediated_traces(self, session_id: str) -> list[dict]:
+        """Get remediated traces for a session."""
+        await self._ensure_init()
+        async with self._session_factory() as db:
+            result = await db.execute(
+                select(RemediatedTraceRecord)
+                .where(RemediatedTraceRecord.session_id == session_id)
+                .order_by(RemediatedTraceRecord.created_at)
+            )
+            return [
+                {
+                    "id": t.id,
+                    "violation_id": t.violation_id,
+                    "messages": t.messages,
+                    "rules_applied": t.rules_applied or [],
+                }
+                for t in result.scalars()
+            ]
+
+    # -----------------------------------------------------------------------
     # Stats
     # -----------------------------------------------------------------------
 
@@ -940,6 +1095,20 @@ class Storage:
 
             pass_rate = passed_count / trace_count if trace_count > 0 else 0.0
 
+            # Count violations
+            violation_count = (
+                await db.execute(
+                    select(func.count()).where(ViolationRecord.session_id == session_id)
+                )
+            ).scalar() or 0
+
+            # Count remediated traces
+            remediated_count = (
+                await db.execute(
+                    select(func.count()).where(RemediatedTraceRecord.session_id == session_id)
+                )
+            ).scalar() or 0
+
             # Update or insert stats
             stats = await db.get(SessionStatsRecord, session_id)
             if stats:
@@ -949,6 +1118,8 @@ class Storage:
                 stats.passed_count = passed_count
                 stats.failed_count = failed_count
                 stats.pass_rate = pass_rate
+                stats.violation_count = violation_count
+                stats.remediated_count = remediated_count
                 stats.updated_at = datetime.now(timezone.utc)
             else:
                 db.add(
@@ -960,6 +1131,8 @@ class Storage:
                         passed_count=passed_count,
                         failed_count=failed_count,
                         pass_rate=pass_rate,
+                        violation_count=violation_count,
+                        remediated_count=remediated_count,
                     )
                 )
             await db.commit()
@@ -989,4 +1162,6 @@ class Storage:
                 "failed_count": stats.failed_count,
                 "pass_rate": stats.pass_rate,
                 "total_cost": stats.total_cost,
+                "violation_count": stats.violation_count,
+                "remediated_count": stats.remediated_count,
             }
