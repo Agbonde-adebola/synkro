@@ -1,0 +1,23 @@
+name: "Snyk Security Automation"
+
+on:
+  push:
+    branches: [ "master", "main" ] # Triggers on either branch name
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  snyk-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Step 1: Checkout code"
+        uses: actions/checkout@v4
+
+      - name: "Step 2: Run Snyk Security Scan"
+        # Change 'python' to 'node' or 'maven' depending on your project language
+        uses: snyk/actions/python@master 
+        continue-on-error: true # Allows the workflow to finish so you can see results
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high # Only alerts you on High/Critical bugs
