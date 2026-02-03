@@ -25,6 +25,10 @@ class DetectionResult(BaseModel):
     )
     issues: list[str] = Field(default_factory=list, description="Description of each issue")
     severity: str = Field(default="high", description="Severity: critical, high, medium, low")
+    severity_score: float = Field(
+        default=0.0,
+        description="Severity score from 0.0 to 1.0 where 1.0 is most severe violation",
+    )
     user_intent: str = Field(default="", description="What the user was trying to accomplish")
     context: str = Field(default="", description="Relevant context from the trace")
     expected_outcome: str = Field(default="", description="What a correct response should do")
@@ -45,6 +49,11 @@ For each violation found:
 1. Identify which specific rule(s) were violated (use rule IDs like R001, R002)
 2. Explain the issue clearly
 3. Determine severity (critical/high/medium/low)
+4. Assign a severity_score from 0.0 to 1.0:
+   - 0.0-0.3: Minor violation (slightly off policy, easy to fix)
+   - 0.3-0.6: Moderate violation (clear policy breach)
+   - 0.6-0.8: Serious violation (significant harm potential)
+   - 0.8-1.0: Critical violation (severe breach, immediate action needed)
 
 Also extract:
 - user_intent: What the user was trying to accomplish
@@ -191,7 +200,7 @@ class PolicyDetector:
             id=Violation.generate_id(trace),
             trace_id=trace_id,
             name="policy_compliance",
-            score=0.0,
+            score=result.severity_score,
             value="violation",
             data_type="categorical",
             comment=result.explanation,

@@ -63,7 +63,10 @@ BAD_TRACES = [
     ],
     # Violation: Approved refund for used item
     [
-        {"role": "user", "content": "I'd like to return these headphones. I used them a few times."},
+        {
+            "role": "user",
+            "content": "I'd like to return these headphones. I used them a few times.",
+        },
         {
             "role": "assistant",
             "content": "No problem! I'll process a full refund for the headphones. "
@@ -137,7 +140,7 @@ async def run_detection_and_remediation(logic_map, model: str):
     store.save(violations_file)
     golden.save(golden_file)
 
-    print(f"\n7. Saved outputs:")
+    print("\n7. Saved outputs:")
     print(f"   Violations: {violations_file}")
     print(f"   Golden traces: {golden_file}")
 
@@ -173,7 +176,7 @@ def main():
     print(f"Bad traces analyzed: {len(BAD_TRACES)}")
     print(f"Violations detected: {len(violations)}")
     print(f"Golden traces generated: {len(golden)}")
-    print(f"Traces per violation: 2")
+    print("Traces per violation: 2")
     print("\nViolation storage is compatible with:")
     print("  - LangSmith (use violation.to_langsmith())")
     print("  - Langfuse (use violation.to_langfuse())")

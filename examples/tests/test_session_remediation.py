@@ -63,7 +63,10 @@ BAD_TRACES = [
     ],
     # Violation: Approved refund for used item
     [
-        {"role": "user", "content": "I'd like to return these headphones. I used them a few times."},
+        {
+            "role": "user",
+            "content": "I'd like to return these headphones. I used them a few times.",
+        },
         {
             "role": "assistant",
             "content": "No problem! I'll process a full refund for the headphones. "
@@ -118,7 +121,7 @@ async def main():
     session.save_violations(violations_file)
     session.save_remediation(golden_file)
 
-    print(f"\n5. Saved outputs:")
+    print("\n5. Saved outputs:")
     print(f"   Violations: {violations_file}")
     print(f"   Golden traces: {golden_file}")
 
@@ -133,7 +136,7 @@ async def main():
     print(f"Bad traces analyzed: {len(BAD_TRACES)}")
     print(f"Violations detected: {len(violations)}")
     print(f"Golden traces generated: {len(golden)}")
-    print(f"Traces per violation: 2")
+    print("Traces per violation: 2")
     print("\nSession API methods used:")
     print("  - await session.extract_rules(policy)")
     print("  - await session.detect_violations(traces=bad_traces)")

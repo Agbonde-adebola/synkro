@@ -93,7 +93,9 @@ async def main():
     # Check violations in DB
     db_violations = await store.get_violations(TEST_SESSION_ID)
     print(f"   DB violations: {len(db_violations)}")
-    assert len(db_violations) == len(violations), f"Expected {len(violations)}, got {len(db_violations)}"
+    assert len(db_violations) == len(
+        violations
+    ), f"Expected {len(violations)}, got {len(db_violations)}"
 
     # Check remediated traces in DB
     db_remediated = await store.get_remediated_traces(TEST_SESSION_ID)
@@ -102,7 +104,9 @@ async def main():
 
     # Check stats
     stats = await store.get_stats(TEST_SESSION_ID)
-    print(f"   DB stats: violation_count={stats.get('violation_count', 0)}, remediated_count={stats.get('remediated_count', 0)}")
+    print(
+        f"   DB stats: violation_count={stats.get('violation_count', 0)}, remediated_count={stats.get('remediated_count', 0)}"
+    )
     assert stats.get("violation_count") == len(violations), "Violation count mismatch"
     assert stats.get("remediated_count") == len(golden), "Remediated count mismatch"
 

@@ -1708,7 +1708,8 @@ class Session:
             rules = ", ".join(v.rules_violated[:3]) if v.rules_violated else "none"
             if len(v.rules_violated) > 3:
                 rules += f" +{len(v.rules_violated) - 3}"
-            lines.append(f"  [{v.severity.upper()}] {v.id[:12]}... Rules: {rules}")
+            score_str = f" Score: {v.score:.2f}" if v.score > 0 else ""
+            lines.append(f"  [{v.severity.upper()}]{score_str} {v.id[:12]}... Rules: {rules}")
             if v.user_intent:
                 lines.append(f"    Intent: {v.user_intent[:60]}...")
             if v.issues:
