@@ -534,6 +534,7 @@ class Session:
         traces: list[list[dict]] | None = None,
         model: str | None = None,
         concurrency: int | None = None,
+        min_score: float = 0.0,
     ) -> list["Violation"]:
         """
         Detect policy violations in traces.
@@ -546,20 +547,24 @@ class Session:
                     or self.traces.
             model: Optional model override for detection
             concurrency: Max parallel detection calls (default: session.concurrency or 50)
+            min_score: Minimum severity score threshold (0.0-1.0). Violations below
+                       this score are filtered out. Default 0.0 (report all).
 
         Returns:
-            List of Violation objects
+            List of Violation objects with score >= min_score
 
         Raises:
             ValueError: If no Logic Map is available or no traces to analyze
 
         Examples:
-            >>> # Detect violations in external bad traces
+            >>> # Detect all violations
             >>> await session.detect_violations(traces=bad_traces)
-            >>> print(f"Found {len(session.violations)} violations")
 
-            >>> # Detect violations in session's own traces
-            >>> await session.detect_violations()
+            >>> # Only report serious violations (score >= 0.6)
+            >>> await session.detect_violations(traces=bad_traces, min_score=0.6)
+
+            >>> # Only report critical violations (score >= 0.8)
+            >>> await session.detect_violations(traces=bad_traces, min_score=0.8)
         """
         from synkro.remediation.detector import PolicyDetector
         from synkro.remediation.store import ViolationStore
@@ -592,7 +597,13 @@ class Session:
 
         # Run detection
         effective_concurrency = concurrency or self.concurrency
-        violations = await detector.detect(traces_to_analyze, concurrency=effective_concurrency)
+        all_violations = await detector.detect(traces_to_analyze, concurrency=effective_concurrency)
+
+        # Filter by min_score threshold
+        if min_score > 0.0:
+            violations = [v for v in all_violations if v.score >= min_score]
+        else:
+            violations = all_violations
 
         # Store results
         self.violations = violations
@@ -1686,11 +1697,12 @@ class Session:
                 count += 1
         return "\n".join(lines)
 
-    def show_violations(self, limit: int | None = None) -> str:
+    def show_violations(self, limit: int | None = None, min_score: float = 0.0) -> str:
         """Show detected violations.
 
         Args:
             limit: Max violations to show (None = all)
+            min_score: Only show violations with score >= this threshold (0.0-1.0)
 
         Returns:
             Formatted string of violations
@@ -1698,12 +1710,22 @@ class Session:
         Examples:
             >>> print(session.show_violations())
             >>> print(session.show_violations(limit=5))
+            >>> print(session.show_violations(min_score=0.7))  # Only serious+
         """
         if not self.violations:
             return "No violations detected yet. Call detect_violations() first."
 
-        lines = [f"Violations ({len(self.violations)} total):", ""]
-        violations = self.violations[:limit] if limit else self.violations
+        # Filter by min_score
+        filtered = [v for v in self.violations if v.score >= min_score]
+
+        if not filtered:
+            return f"No violations with score >= {min_score:.2f}"
+
+        total_str = (
+            f"{len(filtered)} of {len(self.violations)}" if min_score > 0 else str(len(filtered))
+        )
+        lines = [f"Violations ({total_str} total):", ""]
+        violations = filtered[:limit] if limit else filtered
         for v in violations:
             rules = ", ".join(v.rules_violated[:3]) if v.rules_violated else "none"
             if len(v.rules_violated) > 3:
@@ -1714,8 +1736,8 @@ class Session:
                 lines.append(f"    Intent: {v.user_intent[:60]}...")
             if v.issues:
                 lines.append(f"    Issue: {v.issues[0][:60]}...")
-        if limit and len(self.violations) > limit:
-            lines.append(f"  ... and {len(self.violations) - limit} more")
+        if limit and len(filtered) > limit:
+            lines.append(f"  ... and {len(filtered) - limit} more")
         return "\n".join(lines)
 
     def show_remediation(self, limit: int | None = None) -> str:
