@@ -11,7 +11,6 @@ Run: python examples/test_session_db_persistence.py
 """
 
 import asyncio
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -151,16 +150,10 @@ async def main():
 
 
 if __name__ == "__main__":
-    # Check for API key
-    has_key = any(
-        [
-            os.environ.get("OPENAI_API_KEY"),
-            os.environ.get("ANTHROPIC_API_KEY"),
-            os.environ.get("GOOGLE_API_KEY"),
-            os.environ.get("CEREBRAS_API_KEY"),
-        ]
-    )
-    if not has_key:
+    # Trigger auto-loading of .env files before checking
+    from synkro.utils.model_detection import detect_available_provider
+
+    if not detect_available_provider():
         print("WARNING: No LLM API key found in environment.")
         print()
 
