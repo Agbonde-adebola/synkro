@@ -160,15 +160,11 @@ class Session:
     def __post_init__(self):
         """Auto-detect models if not specified."""
         if self.model is None or self.grading_model is None:
-            try:
-                gen_model, grade_model = get_default_models()
-                if self.model is None:
-                    self.model = gen_model
-                if self.grading_model is None:
-                    self.grading_model = grade_model
-            except EnvironmentError:
-                # No API keys found, will fail later when used
-                pass
+            gen_model, grade_model = get_default_models()
+            if self.model is None:
+                self.model = gen_model
+            if self.grading_model is None:
+                self.grading_model = grade_model
 
     async def extract_rules(
         self,

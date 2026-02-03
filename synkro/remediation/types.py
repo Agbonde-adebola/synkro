@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -165,7 +166,17 @@ class Violation:
         )
 
     @staticmethod
-    def generate_id(trace: list[dict[str, Any]]) -> str:
-        """Generate a unique ID from trace content."""
+    def generate_id(trace: list[dict[str, Any]], session_id: str | None = None) -> str:
+        """Generate a unique ID for a violation.
+
+        Args:
+            trace: The trace content
+            session_id: Optional session ID for session-scoped uniqueness
+
+        Returns:
+            Unique violation ID in format v_{hash}_{uuid4_suffix}
+        """
         content = json.dumps(trace, sort_keys=True)
-        return f"v_{hashlib.sha256(content.encode()).hexdigest()[:12]}"
+        trace_hash = hashlib.sha256(content.encode()).hexdigest()[:8]
+        unique_suffix = uuid.uuid4().hex[:4]
+        return f"v_{trace_hash}_{unique_suffix}"
